@@ -1,0 +1,101 @@
+# =========================
+# Java / SpringBoot
+# =========================
+target/
+*.jar
+*.war
+*.ear
+*.class
+
+.mvn/
+*.log
+
+# SpringBoot config (敏感)
+application-local.yml
+application-dev.yml
+
+# =========================
+# Python / Flask / AI
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+venv/
+env/
+.venv/
+
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Conda
+*.conda
+
+# AI模型文件（非常重要：太大不提交）
+*.h5
+*.pt
+*.pth
+*.onnx
+*.weights
+*.engine
+
+# dlib模型（必须忽略）
+shape_predictor_68_face_landmarks.dat
+dlib_face_recognition_resnet_model_v1.dat
+
+# 数据文件（人脸库/日志）
+backend-ai/data/
+*.json
+*.sqlite3
+*.db
+
+# =========================
+# Node / Vue
+# =========================
+node_modules/
+dist/
+dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Logs
+# =========================
+logs/
+*.log
+
+# Flask logs
+backend-ai/*.log
+backend-system/*.log
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Video / Media (非常关键)
+# =========================
+*.mp4
+*.avi
+*.flv
+*.mkv
+*.jpg
+*.png
+*.jpeg
+
+# =========================
+# Docker（如果用）
+# =========================
+docker-compose.override.yml
