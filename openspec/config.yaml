@@ -1,0 +1,15 @@
+schema: spec-driven
+
+context: |
+  Project: 智慧教室实时行为分析与安全监测系统
+  Tech stack: Python 3.7+, Flask, OpenCV, dlib, Vue 3, Element Plus, nginx-rtmp, MySQL, YOLO
+  Team: 6人小组, BJTU 小学期
+  Code at: E:\2026_summer\smart-class-monitor-system
+
+rules:
+  proposal:
+    - 每个功能独立一个 proposal
+    - 包含：功能名称、做什么、不做什么
+  spec:
+    - 使用 Given/When/Then 格式
+    - 包含正常流程和异常流程
