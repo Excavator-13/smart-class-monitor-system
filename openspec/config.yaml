@@ -4,12 +4,19 @@ context: |
   Project: 智慧教室实时行为分析与安全监测系统
   Tech stack: Python 3.7+, Flask, OpenCV, dlib, Vue 3, Element Plus, nginx-rtmp, MySQL, YOLO
   Team: 6人小组, BJTU 小学期
-  Code at: E:\2026_summer\smart-class-monitor-system
 
 rules:
   proposal:
-    - 每个功能独立一个 proposal
-    - 包含：功能名称、做什么、不做什么
+    - 必须有 Why 和 What Changes 两节
+    - 说明 Capabilities（新增/修改哪些能力）
+    - 说明 Impact（影响哪些代码、API）
+  design:
+    - 包含 Goals / Non-Goals
+    - 列出关键 Decisions（技术决策）
+    - 说明 Risks / Trade-offs
+  tasks:
+    - 分阶段列出，checkbox 格式
+    - 每项有编号（1.1, 1.2, ...）
   spec:
     - 使用 Given/When/Then 格式
     - 包含正常流程和异常流程
