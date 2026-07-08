@@ -1,0 +1,21 @@
+models:
+  face:
+    enabled: true
+    provider: insightface
+    name: buffalo_l
+    feature_dim: 512
+    similarity_threshold: 0.45
+  behavior:
+    enabled: true
+    provider: ultralytics
+    weights: models/yolo/behavior.pt
+    confidence_threshold: 0.6
+  zone:
+    enabled: true
+    provider: rule
+    safe_distance: 0.05
+  fire:
+    enabled: false
+    provider: reserved
+    reason: not_in_current_scope
+

@@ -1,44 +1,23 @@
-project:
-  name: smart-class-monitor-system
-  displayName: 智慧教室实时行为分析与安全监测系统
-  specRoot: openspec
+schema: spec-driven
 
-sdd:
-  changeDir: openspec/changes
-  stableSpecDir: openspec/specs
-  archiveDir: openspec/changes/archive
-  idStyle: kebab-case
-  requireProposal: true
-  requireDesign: true
-  requireTasks: true
-  requireSpec: true
-  scenarioStyle: GIVEN_WHEN_THEN
+context: |
+  Project: 智慧教室实时行为分析与安全监测系统
+  Tech stack: Vue3, Element Plus, Axios, SpringBoot, MyBatis, MySQL, Swagger/OpenAPI, Python Flask, OpenCV, YOLO, dlib, nginx-rtmp
+  Team: 6人小组, BJTU 小学期
+  Code at: D:\team-homework\smart-class-monitor-system
 
-modules:
-  frontend:
-    stack:
-      - Vue 3
-      - Vite
-      - Element Plus
-      - Axios
-    root: frontend
-    buildCommand: npm.cmd run build
-    devCommand: npm.cmd run dev:open
-  backend_system:
-    role: SpringBoot 业务管理服务
-  backend_ai:
-    role: Flask AI 分析服务
-  nginx:
-    role: RTMP 流媒体与静态资源服务
-  local_runtime:
-    role: 本地非静态接口网关
-
-frontendRuntime:
-  env:
-    apiBase: VITE_API_BASE
-    aiBase: VITE_AI_BASE
-    nginxBase: VITE_NGINX_BASE
-  rules:
-    - Do not hardcode server IPs in frontend components.
-    - Prefer smartClassApi service methods over direct component requests.
-    - Provide mock fallback when backend services are unavailable.
+rules:
+  proposal:
+    - 必须有 Why 和 What Changes 两节
+    - 说明 Capabilities（新增/修改哪些能力）
+    - 说明 Impact（影响哪些代码、API）
+  design:
+    - 包含 Goals / Non-Goals
+    - 列出关键 Decisions（技术决策）
+    - 说明 Risks / Trade-offs
+  tasks:
+    - 分阶段列出，checkbox 格式
+    - 每项有编号（1.1, 1.2, ...）
+  spec:
+    - 使用 Given/When/Then 格式
+    - 包含正常流程和异常流程
