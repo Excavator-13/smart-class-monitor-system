@@ -1,0 +1,23 @@
+package com.smartclass.monitor.vo;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "视频源播放地址")
+public class StreamPreviewVO {
+
+    @Schema(description = "MJPEG 流地址", example = "http://39.106.209.208:5000/video_feed/classroom_01")
+    private String mjpegUrl;
+
+    @Schema(description = "RTMP 拉流地址", example = "rtmp://39.106.209.208:9090/live/classroom_01")
+    private String rtmpUrl;
+
+    @Schema(description = "HLS 播放地址")
+    private String hlsUrl;
+
+    public String getMjpegUrl() { return mjpegUrl; }
+    public void setMjpegUrl(String v) { this.mjpegUrl = v; }
+    public String getRtmpUrl() { return rtmpUrl; }
+    public void setRtmpUrl(String v) { this.rtmpUrl = v; }
+    public String getHlsUrl() { return hlsUrl; }
+    public void setHlsUrl(String v) { this.hlsUrl = v; }
+}
