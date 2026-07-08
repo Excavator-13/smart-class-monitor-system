@@ -1,0 +1,44 @@
+project:
+  name: smart-class-monitor-system
+  displayName: 智慧教室实时行为分析与安全监测系统
+  specRoot: openspec
+
+sdd:
+  changeDir: openspec/changes
+  stableSpecDir: openspec/specs
+  archiveDir: openspec/changes/archive
+  idStyle: kebab-case
+  requireProposal: true
+  requireDesign: true
+  requireTasks: true
+  requireSpec: true
+  scenarioStyle: GIVEN_WHEN_THEN
+
+modules:
+  frontend:
+    stack:
+      - Vue 3
+      - Vite
+      - Element Plus
+      - Axios
+    root: frontend
+    buildCommand: npm.cmd run build
+    devCommand: npm.cmd run dev:open
+  backend_system:
+    role: SpringBoot 业务管理服务
+  backend_ai:
+    role: Flask AI 分析服务
+  nginx:
+    role: RTMP 流媒体与静态资源服务
+  local_runtime:
+    role: 本地非静态接口网关
+
+frontendRuntime:
+  env:
+    apiBase: VITE_API_BASE
+    aiBase: VITE_AI_BASE
+    nginxBase: VITE_NGINX_BASE
+  rules:
+    - Do not hardcode server IPs in frontend components.
+    - Prefer smartClassApi service methods over direct component requests.
+    - Provide mock fallback when backend services are unavailable.
