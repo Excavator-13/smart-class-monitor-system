@@ -2,9 +2,9 @@ schema: spec-driven
 
 context: |
   Project: 智慧教室实时行为分析与安全监测系统
-  Tech stack: Python 3.7+, Flask, OpenCV, dlib, Vue 3, Element Plus, nginx-rtmp, MySQL, YOLO
+  Tech stack: Vue3, Element Plus, Axios, SpringBoot, MyBatis, MySQL, Swagger/OpenAPI, Python Flask, OpenCV, YOLO, dlib, nginx-rtmp
   Team: 6人小组, BJTU 小学期
-  Code at: E:\2026_summer\smart-class-monitor-system
+  Code at: D:\team-homework\smart-class-monitor-system
 
 rules:
   proposal:
