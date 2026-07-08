@@ -6,7 +6,7 @@ pipeline {
         stage('Python 语法检查') {
             steps {
                 sh '''
-                    pip install flake8 -q 2>/dev/null
+                    pip install flake8 --break-system-packages
                     flake8 backend_ai/ --max-line-length=120 || true
                 '''
             }
@@ -16,8 +16,8 @@ pipeline {
             steps {
                 sh '''
                     cd frontend
-                    npm install --silent 2>/dev/null
-                    npm run build 2>/dev/null || echo "前端项目尚未初始化"
+                    npm install
+                    npm run build || echo "前端项目尚未初始化"
                 '''
             }
         }
@@ -36,7 +36,7 @@ pipeline {
                     echo "前端部署完成"
                     # 后端：复制并重启 Flask
                     cp -r ../backend_ai/* /app/ 2>/dev/null
-                    pip install -r ../backend_ai/requirements.txt 2>/dev/null
+                    pip install -r /app/requirements.txt --break-system-packages
                     systemctl restart flask 2>/dev/null
                     echo "=== 部署完成 ==="
                 '''
