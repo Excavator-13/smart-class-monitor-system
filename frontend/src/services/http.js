@@ -2,17 +2,26 @@ import axios from "axios";
 
 const timeout = 4500;
 
+function getRuntimeConfig() {
+  return window.__SMART_CLASS_CONFIG__ || {};
+}
+
+function getBaseUrl(runtimeKey, envKey, fallback) {
+  const runtimeValue = getRuntimeConfig()[runtimeKey];
+  return runtimeValue || import.meta.env[envKey] || fallback;
+}
+
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || "/api",
+  baseURL: getBaseUrl("API_BASE", "VITE_API_BASE", "/api"),
   timeout
 });
 
 export const aiClient = axios.create({
-  baseURL: import.meta.env.VITE_AI_BASE || "/ai",
+  baseURL: getBaseUrl("AI_BASE", "VITE_AI_BASE", "/ai"),
   timeout
 });
 
-export const nginxBase = import.meta.env.VITE_NGINX_BASE || "/media";
+export const nginxBase = getBaseUrl("NGINX_BASE", "VITE_NGINX_BASE", "/media");
 
 export function joinResourceUrl(path) {
   if (!path) return "";
@@ -21,7 +30,7 @@ export function joinResourceUrl(path) {
 }
 
 export function joinAiUrl(path) {
-  const base = import.meta.env.VITE_AI_BASE || "/ai";
+  const base = getBaseUrl("AI_BASE", "VITE_AI_BASE", "/ai");
   return `${base.replace(/\/$/, "")}/${String(path).replace(/^\//, "")}`;
 }
 

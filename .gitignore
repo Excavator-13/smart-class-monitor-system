@@ -102,3 +102,8 @@ Thumbs.db
 # Docker（如果用）
 # =========================
 docker-compose.override.yml
+
+# =========================
+# Local runtime
+# =========================
+local-runtime/.env

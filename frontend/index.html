@@ -54,11 +54,12 @@
         var app = document.getElementById("app");
         if (!app) return;
         app.innerHTML =
-          '<div class="boot-fallback"><div class="boot-card"><h1>页面加载遇到问题</h1><p>请在 VS Code 终端运行 <code>npm.cmd run dev:open</code>，不要只双击构建文件。</p><p>错误信息：' +
+          '<div class="boot-fallback"><div class="boot-card"><h1>页面加载遇到问题</h1><p>请在 VS Code 终端运行 <code>npm.cmd run dev:open</code>。</p><p>错误信息：' +
           escapeBootMessage(event.message) +
           "</p></div></div>";
       });
     </script>
+    <script src="./runtime-config.js"></script>
   </head>
   <body>
     <div id="app">
@@ -67,7 +68,7 @@
           <h1>智慧教室系统正在加载</h1>
           <p>如果长时间停留在这里，请在 VS Code 终端运行：</p>
           <p><code>npm.cmd run dev:open</code></p>
-          <p>不要直接双击 <code>dist/index.html</code> 作为主要运行方式。</p>
+          <p>云端静态部署时，请同时部署 <code>runtime-config.js</code>。</p>
         </div>
       </div>
     </div>

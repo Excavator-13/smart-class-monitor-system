@@ -1,6 +1,0 @@
-- [x] 阅读 OpenSpec 文档和项目专用 skill
-- [x] 检查前端入口、Vite 配置、接口服务层和主界面
-- [x] 补齐 proposal/design/spec/tasks 变更文档
-- [x] 同步正式 spec 到 `openspec/specs/frontend-monitor-ui/spec.md`
-- [x] 修正白屏兜底提示的错误信息渲染方式
-- [x] 运行 `npm.cmd run build` 验证前端构建

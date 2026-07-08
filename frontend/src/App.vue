@@ -7,11 +7,9 @@ import {
   Clock,
   Connection,
   FullScreen,
-  Moon,
   Refresh,
   Search,
   Setting,
-  Sunny,
   Switch,
   User,
   VideoCamera
@@ -35,7 +33,9 @@ const activeStreamId = ref("A101");
 const activeAlertStatus = ref("全部");
 const isVideoLive = ref(false);
 const videoError = ref(false);
-const now = ref(new Date());
+const isDay = ref(true);
+const planterWaterLevel = ref(0);
+const isWateringPlanter = ref(false);
 
 const streams = ref([]);
 const alerts = ref([]);
@@ -47,8 +47,8 @@ const summary = ref({});
 const modelStatus = ref({});
 const analysisEvents = ref([]);
 
-let timerId;
 let refreshId;
+let wateringTimerId;
 
 const navItems = [
   { key: "monitor", label: "实时监控", icon: VideoCamera },
@@ -66,18 +66,12 @@ const currentStream = computed(() => {
 
 const videoFeedUrl = computed(() => getVideoFeedUrl(activeStreamId.value));
 
-const isDay = computed(() => {
-  const hour = now.value.getHours();
-  return hour >= 6 && hour < 18;
-});
-
 const dayTitle = computed(() => (isDay.value ? "白天模式" : "夜间模式"));
-const dayHint = computed(() => (isDay.value ? "课堂状态清晰可见" : "值守视图保持低亮"));
+const dayHint = computed(() => (isDay.value ? "点击切换到护眼黑夜" : "点击切换到明亮白天"));
 
 const pendingAlertCount = computed(() => {
   return alerts.value.filter((item) => ["未处理", "待确认"].includes(item.status)).length;
 });
-
 const criticalAlertCount = computed(() => alerts.value.filter((item) => item.level === "critical").length);
 const confirmedAlertCount = computed(() => alerts.value.filter((item) => item.status === "已处理").length);
 const enabledRuleCount = computed(() => rules.value.filter((item) => item.enabled).length);
@@ -153,9 +147,7 @@ const activeModules = [
   { title: "实时视频与 AI 标注", text: "单路画面、身份标签、目标框、行为标注。" },
   { title: "异常行为与安全告警", text: "承接 AI 候选事件，展示等级、位置与处置状态。" },
   { title: "区域与规则配置", text: "ROI 区域、禁用手机区、危险区和阈值开关。" },
-  { title: "告警追溯与处置", text: "告警列表、截图片段、备注和状态闭环。" },
-  { title: "人脸与人员身份库", text: "人员资料、人脸注册、陌生人核验。" },
-  { title: "系统运行概览", text: "视频源、延迟、AI 服务和数据库状态。" }
+  { title: "告警追溯与处置", text: "告警列表、截图片段、备注和状态闭环。" }
 ];
 
 const handlingGuides = [
@@ -283,11 +275,24 @@ function resourceUrl(path) {
   return joinResourceUrl(path);
 }
 
+function toggleThemeMode() {
+  isDay.value = !isDay.value;
+}
+
+function waterPlanter() {
+  planterWaterLevel.value = Math.min(planterWaterLevel.value + 1, 4);
+  isWateringPlanter.value = false;
+  window.clearTimeout(wateringTimerId);
+  window.requestAnimationFrame(() => {
+    isWateringPlanter.value = true;
+    wateringTimerId = window.setTimeout(() => {
+      isWateringPlanter.value = false;
+    }, 900);
+  });
+}
+
 onMounted(async () => {
   await loadDashboard();
-  timerId = window.setInterval(() => {
-    now.value = new Date();
-  }, 1000);
   refreshId = window.setInterval(() => {
     fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }).then((payload) => {
       alerts.value = normalizeList(payload);
@@ -296,13 +301,13 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  window.clearInterval(timerId);
   window.clearInterval(refreshId);
+  window.clearTimeout(wateringTimerId);
 });
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'eye-care-theme': !isDay }">
     <aside class="side-nav">
       <div class="brand-block">
         <div class="brand-mark">AI</div>
@@ -334,13 +339,19 @@ onBeforeUnmount(() => {
           <p>聚焦单路实时画面，优先呈现视频流、AI 标注、实时告警和事件追溯。</p>
         </div>
         <div class="header-actions">
-          <div class="sky-widget" :class="{ night: !isDay }">
-            <el-icon><Sunny v-if="isDay" /><Moon v-else /></el-icon>
+          <button class="sky-widget" :class="{ night: !isDay }" :title="dayHint" type="button" @click="toggleThemeMode">
+            <div class="sky-avatar" :class="isDay ? 'sun-face' : 'moon-face'" aria-hidden="true">
+              <span class="sky-eye left"></span>
+              <span class="sky-eye right"></span>
+              <span class="sky-mouth"></span>
+              <span v-if="!isDay" class="sleep-note z1">z</span>
+              <span v-if="!isDay" class="sleep-note z2">z</span>
+            </div>
             <div>
               <b>{{ dayTitle }}</b>
               <span>{{ dayHint }}</span>
             </div>
-          </div>
+          </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
           <el-button :icon="Setting" @click="activePage = 'rules'">规则配置</el-button>
           <el-select v-model="activeStreamId" class="stream-select" @change="switchStream">
@@ -372,11 +383,17 @@ onBeforeUnmount(() => {
                 <h2>{{ currentStream.stream_name || activeStreamId }} 实时画面</h2>
                 <span>{{ currentStream.location || "单路实时监控" }}</span>
               </div>
-              <div class="segment-group">
-                <button class="segment active">实时画面</button>
-                <button class="segment">AI 标注</button>
-                <button class="segment">区域规则</button>
-                <button class="segment" title="全屏查看">
+              <div class="video-toolbar" aria-label="实时监控工具">
+                <button class="tool-button active" title="实时画面">
+                  <el-icon><VideoCamera /></el-icon>
+                </button>
+                <button class="tool-button" title="AI 标注">
+                  <el-icon><Search /></el-icon>
+                </button>
+                <button class="tool-button" title="区域规则">
+                  <el-icon><Setting /></el-icon>
+                </button>
+                <button class="tool-button" title="全屏查看">
                   <el-icon><FullScreen /></el-icon>
                 </button>
               </div>
@@ -428,7 +445,7 @@ onBeforeUnmount(() => {
                 </article>
                 <article>
                   <span>自动动作</span>
-                  <b>{{ summary.actions?.[0] || "已抓拍并写入事件" }}</b>
+                  <b>{{ actionItems[0] }}</b>
                 </article>
               </div>
             </div>
@@ -465,7 +482,7 @@ onBeforeUnmount(() => {
                 <el-button size="small" :icon="User" @click="activePage = 'people'">注册人脸</el-button>
               </div>
               <div class="module-grid">
-                <article v-for="module in activeModules.slice(0, 4)" :key="module.title">
+                <article v-for="module in activeModules" :key="module.title">
                   <b>{{ module.title }}</b>
                   <span>{{ module.text }}</span>
                 </article>
@@ -543,10 +560,31 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
+
+          <button
+            class="monitor-planter"
+            :class="[`growth-${planterWaterLevel}`, { watering: isWateringPlanter }]"
+            type="button"
+            title="点击给植物浇水"
+            @click="waterPlanter"
+          >
+            <span class="water-drop drop-a"></span>
+            <span class="water-drop drop-b"></span>
+            <span class="water-drop drop-c"></span>
+            <span class="plant-leaf leaf-a"></span>
+            <span class="plant-leaf leaf-b"></span>
+            <span class="plant-leaf leaf-c"></span>
+            <span class="plant-leaf leaf-d"></span>
+            <span class="plant-leaf leaf-e"></span>
+            <span class="plant-stem stem-a"></span>
+            <span class="plant-stem stem-b"></span>
+            <span class="plant-pot"></span>
+            <span class="plant-saucer"></span>
+          </button>
         </aside>
       </section>
 
-      <section v-else-if="activePage === 'alerts'" class="page-grid">
+      <section v-else-if="activePage === 'alerts'" class="page-grid module-page">
         <div class="page-kpis">
           <article v-for="item in alertPageCards" :key="item.label" class="kpi-card" :class="item.tone">
             <span>{{ item.label }}</span>
@@ -554,36 +592,36 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
-        <div class="panel wide-panel">
-          <div class="panel-head">
-            <div>
-              <h2>告警管理</h2>
-              <span>来自 SpringBoot `/alerts`，截图和录像路径由 Nginx 静态服务访问。</span>
+        <div class="module-board">
+          <section class="panel span-8">
+            <div class="panel-head">
+              <div>
+                <h2>告警管理</h2>
+                <span>来自 SpringBoot `/alerts`，截图和录像路径由 Nginx 静态服务访问。</span>
+              </div>
+              <el-input class="search-box" :prefix-icon="Search" placeholder="搜索类型、位置或视频源" />
             </div>
-            <el-input class="search-box" :prefix-icon="Search" placeholder="搜索类型、位置或视频源" />
-          </div>
-          <el-table :data="filteredAlerts" class="clean-table">
-            <el-table-column prop="time" label="时间" width="110" />
-            <el-table-column prop="alert_type" label="告警类型" width="130" />
-            <el-table-column prop="stream_id" label="视频源" width="100" />
-            <el-table-column prop="location" label="位置" width="130" />
-            <el-table-column prop="description" label="说明" min-width="240" />
-            <el-table-column label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="证据" width="170">
-              <template #default="{ row }">
-                <el-button size="small" text :href="resourceUrl(row.snapshot_path)">截图</el-button>
-                <el-button size="small" text :href="resourceUrl(row.video_path)">片段</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
+            <el-table :data="filteredAlerts" height="360" class="clean-table">
+              <el-table-column prop="time" label="时间" width="110" />
+              <el-table-column prop="alert_type" label="告警类型" width="130" />
+              <el-table-column prop="stream_id" label="视频源" width="100" />
+              <el-table-column prop="location" label="位置" width="130" />
+              <el-table-column prop="description" label="说明" min-width="240" />
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="证据" width="150">
+                <template #default="{ row }">
+                  <el-button size="small" text :href="resourceUrl(row.snapshot_path)">截图</el-button>
+                  <el-button size="small" text :href="resourceUrl(row.video_path)">片段</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </section>
 
-        <div class="detail-grid">
-          <section class="panel">
+          <section class="panel span-4">
             <div class="panel-head compact">
               <h2>处置建议</h2>
             </div>
@@ -594,7 +632,8 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
-          <section class="panel">
+
+          <section class="panel span-6">
             <div class="panel-head compact">
               <h2>证据链概览</h2>
             </div>
@@ -613,10 +652,30 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
+
+          <section class="panel span-6">
+            <div class="panel-head compact">
+              <h2>处理节奏</h2>
+            </div>
+            <div class="flow-steps compact-flow">
+              <article>
+                <b>接收</b>
+                <span>AI 候选事件入队</span>
+              </article>
+              <article>
+                <b>确认</b>
+                <span>人工复核证据</span>
+              </article>
+              <article>
+                <b>闭环</b>
+                <span>状态和备注入库</span>
+              </article>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section v-else-if="activePage === 'rules'" class="page-grid">
+      <section v-else-if="activePage === 'rules'" class="page-grid module-page">
         <div class="page-kpis">
           <article v-for="item in rulePageCards" :key="item.label" class="kpi-card" :class="item.tone">
             <span>{{ item.label }}</span>
@@ -624,8 +683,8 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
-        <div class="two-columns">
-          <div class="panel">
+        <div class="module-board">
+          <section class="panel span-6">
             <div class="panel-head">
               <div>
                 <h2>区域规则配置</h2>
@@ -643,22 +702,21 @@ onBeforeUnmount(() => {
                 <el-switch v-model="rule.enabled" />
               </article>
             </div>
-          </div>
-          <div class="panel zone-panel">
+          </section>
+
+          <section class="panel zone-panel span-6">
             <div class="panel-head compact">
               <h2>A101 区域示意</h2>
             </div>
-            <div class="zone-canvas">
+            <div class="zone-canvas compact-zone">
               <div class="canvas-board">讲台 / 黑板</div>
               <div class="seat-zone s1">座位区</div>
               <div class="seat-zone s2">禁用手机区</div>
               <div class="seat-zone s3">危险区</div>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div class="detail-grid">
-          <section class="panel">
+          <section class="panel span-6">
             <div class="panel-head compact">
               <h2>推荐模板</h2>
             </div>
@@ -669,7 +727,8 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
-          <section class="panel">
+
+          <section class="panel span-6">
             <div class="panel-head compact">
               <h2>规则联动</h2>
             </div>
@@ -691,7 +750,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-else-if="activePage === 'people'" class="page-grid">
+      <section v-else-if="activePage === 'people'" class="page-grid module-page">
         <div class="page-kpis">
           <article v-for="item in peoplePageCards" :key="item.label" class="kpi-card" :class="item.tone">
             <span>{{ item.label }}</span>
@@ -699,8 +758,8 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
-        <div class="two-columns">
-          <div class="panel">
+        <div class="module-board">
+          <section class="panel span-8">
             <div class="panel-head">
               <div>
                 <h2>人员与人脸库</h2>
@@ -708,7 +767,7 @@ onBeforeUnmount(() => {
               </div>
               <el-button type="primary" :icon="User">新增人员</el-button>
             </div>
-            <el-table :data="students" class="clean-table">
+            <el-table :data="students" height="320" class="clean-table">
               <el-table-column prop="student_no" label="编号" width="110" />
               <el-table-column prop="name" label="姓名" width="120" />
               <el-table-column prop="class_name" label="班级/身份" min-width="130" />
@@ -721,8 +780,9 @@ onBeforeUnmount(() => {
               </el-table-column>
               <el-table-column prop="last_seen" label="最近出现" width="110" />
             </el-table>
-          </div>
-          <div class="panel">
+          </section>
+
+          <section class="panel span-4">
             <div class="panel-head compact">
               <h2>陌生人核验</h2>
             </div>
@@ -733,11 +793,9 @@ onBeforeUnmount(() => {
               <b>发现未登记人员</b>
               <p>系统保留最近一次截图与视频片段，等待管理员确认身份或加入访客名单。</p>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div class="detail-grid">
-          <section class="panel">
+          <section class="panel span-6">
             <div class="panel-head compact">
               <h2>注册进度</h2>
             </div>
@@ -748,11 +806,12 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
-          <section class="panel">
+
+          <section class="panel span-6">
             <div class="panel-head compact">
               <h2>身份策略</h2>
             </div>
-            <div class="info-list">
+            <div class="info-list two-info">
               <article class="info-item">
                 <b>学生档案</b>
                 <span>用于课堂识别、到场记录和行为关联。</span>
@@ -766,7 +825,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-else class="page-grid">
+      <section v-else class="page-grid module-page">
         <div class="page-kpis">
           <article v-for="item in systemPageCards" :key="item.label" class="kpi-card" :class="item.tone">
             <span>{{ item.label }}</span>
@@ -774,8 +833,8 @@ onBeforeUnmount(() => {
           </article>
         </div>
 
-        <div class="two-columns">
-          <div class="panel">
+        <div class="module-board">
+          <section class="panel span-7">
             <div class="panel-head">
               <div>
                 <h2>视频源与服务状态</h2>
@@ -792,8 +851,9 @@ onBeforeUnmount(() => {
                 <el-tag :type="statusType(stream.status)">{{ stream.status }}</el-tag>
               </article>
             </div>
-          </div>
-          <div class="panel">
+          </section>
+
+          <section class="panel span-5">
             <div class="panel-head compact">
               <h2>运行概览</h2>
             </div>
@@ -811,11 +871,9 @@ onBeforeUnmount(() => {
                 <b>{{ modelStatus.inference_ms || 42 }} ms</b>
               </article>
             </div>
-          </div>
-        </div>
+          </section>
 
-        <div class="detail-grid">
-          <section class="panel">
+          <section class="panel span-8">
             <div class="panel-head compact">
               <h2>依赖调用链路</h2>
             </div>
@@ -826,7 +884,8 @@ onBeforeUnmount(() => {
               </article>
             </div>
           </section>
-          <section class="panel">
+
+          <section class="panel span-4">
             <div class="panel-head compact">
               <h2>运行提示</h2>
             </div>
