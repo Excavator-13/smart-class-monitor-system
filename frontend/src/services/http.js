@@ -23,6 +23,47 @@ export const aiClient = axios.create({
 
 export const nginxBase = getBaseUrl("NGINX_BASE", "VITE_NGINX_BASE", "/media");
 
+const AUTH_TOKEN_KEY = "smart_class_auth_token";
+const AUTH_USER_KEY = "smart_class_auth_user";
+
+export function getStoredToken() {
+  return window.localStorage.getItem(AUTH_TOKEN_KEY) || window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "";
+}
+
+export function getStoredUser() {
+  const rawUser = window.localStorage.getItem(AUTH_USER_KEY) || window.sessionStorage.getItem(AUTH_USER_KEY);
+  if (!rawUser) return null;
+  try {
+    return JSON.parse(rawUser);
+  } catch {
+    return null;
+  }
+}
+
+export function storeAuthSession(token, user, remember = true) {
+  const persistentStore = remember ? window.localStorage : window.sessionStorage;
+  const transientStore = remember ? window.sessionStorage : window.localStorage;
+  transientStore.removeItem(AUTH_TOKEN_KEY);
+  transientStore.removeItem(AUTH_USER_KEY);
+  persistentStore.setItem(AUTH_TOKEN_KEY, token || "");
+  persistentStore.setItem(AUTH_USER_KEY, JSON.stringify(user || {}));
+}
+
+export function clearAuthSession() {
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_USER_KEY);
+  window.sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  window.sessionStorage.removeItem(AUTH_USER_KEY);
+}
+
+apiClient.interceptors.request.use((config) => {
+  const token = getStoredToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export function joinResourceUrl(path) {
   if (!path) return "";
   if (/^https?:\/\//i.test(path)) return path;

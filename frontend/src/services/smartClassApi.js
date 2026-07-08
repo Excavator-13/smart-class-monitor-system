@@ -8,6 +8,32 @@ import {
   mockSummary
 } from "../data/mockData";
 
+function unwrapResponse(data) {
+  return data?.data ?? data;
+}
+
+export async function login(payload) {
+  const { data } = await apiClient.post("/auth/login", {
+    username: payload.username,
+    password: payload.password
+  });
+  return unwrapResponse(data);
+}
+
+export async function fetchCurrentUser() {
+  const { data } = await apiClient.get("/auth/info");
+  return unwrapResponse(data);
+}
+
+export async function logout() {
+  try {
+    const { data } = await apiClient.post("/auth/logout");
+    return unwrapResponse(data);
+  } catch {
+    return { success: true, local_only: true };
+  }
+}
+
 export function getVideoFeedUrl(streamId) {
   return joinAiUrl(`/video_feed/${streamId}`);
 }

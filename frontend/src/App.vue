@@ -7,6 +7,7 @@ import {
   Clock,
   Connection,
   FullScreen,
+  Lock,
   Refresh,
   Search,
   Setting,
@@ -19,16 +20,38 @@ import {
   fetchAlertStats,
   fetchAnalysisEvents,
   fetchAnalysisSummary,
+  fetchCurrentUser,
   fetchModelStatus,
   fetchRules,
   fetchStreams,
   fetchStudents,
   fetchSystemHealth,
-  getVideoFeedUrl
+  getVideoFeedUrl,
+  login,
+  logout
 } from "./services/smartClassApi";
-import { joinResourceUrl } from "./services/http";
+import { clearAuthSession, getStoredToken, getStoredUser, joinResourceUrl, storeAuthSession } from "./services/http";
 
 const activePage = ref("monitor");
+const isAuthenticated = ref(Boolean(getStoredToken()));
+const currentUser = ref(getStoredUser());
+const authMode = ref("login");
+const authLoading = ref(false);
+const authNotice = ref("");
+const authNoticeType = ref("info");
+const authForm = ref({
+  username: "",
+  password: "",
+  remember: true
+});
+const registerForm = ref({
+  phone: "",
+  name: "",
+  role: "teacher",
+  password: "",
+  confirmPassword: "",
+  remark: ""
+});
 const activeStreamId = ref("A101");
 const activeAlertStatus = ref("全部");
 const isVideoLive = ref(false);
@@ -68,6 +91,13 @@ const videoFeedUrl = computed(() => getVideoFeedUrl(activeStreamId.value));
 
 const dayTitle = computed(() => (isDay.value ? "白天模式" : "夜间模式"));
 const dayHint = computed(() => (isDay.value ? "点击切换到护眼黑夜" : "点击切换到明亮白天"));
+const userDisplayName = computed(() => currentUser.value?.nickname || currentUser.value?.username || "演示用户");
+const userRoleName = computed(() => {
+  return {
+    admin: "管理员",
+    teacher: "教师"
+  }[currentUser.value?.role] || "未登录";
+});
 
 const pendingAlertCount = computed(() => {
   return alerts.value.filter((item) => ["未处理", "待确认"].includes(item.status)).length;
@@ -216,6 +246,98 @@ function normalizeHealth(payload) {
   };
 }
 
+function setAuthNotice(message, type = "info") {
+  authNotice.value = message;
+  authNoticeType.value = type;
+}
+
+function normalizeUser(loginPayload, username) {
+  const user = loginPayload?.user || loginPayload?.user_info || loginPayload || {};
+  return {
+    user_id: user.user_id || user.id || "demo-user",
+    username: user.username || username,
+    nickname: user.nickname || user.name || username,
+    role: user.role || "teacher",
+    avatar_url: user.avatar_url || ""
+  };
+}
+
+async function enterAuthenticatedApp(user, token, remember = true) {
+  currentUser.value = user;
+  isAuthenticated.value = true;
+  storeAuthSession(token, user, remember);
+  await loadDashboard();
+  startAlertRefresh();
+}
+
+async function submitLogin() {
+  if (!authForm.value.username || !authForm.value.password) {
+    setAuthNotice("请输入用户名和密码。", "warning");
+    return;
+  }
+
+  authLoading.value = true;
+  setAuthNotice("");
+  try {
+    const payload = await login(authForm.value);
+    const token = payload?.token || payload?.access_token || payload?.jwt || "";
+    const user = normalizeUser(payload, authForm.value.username);
+    if (!token) {
+      throw new Error("登录响应缺少 token");
+    }
+    await enterAuthenticatedApp(user, token, authForm.value.remember);
+  } catch {
+    const demoUser = {
+      user_id: "demo-user",
+      username: authForm.value.username,
+      nickname: "演示教师",
+      role: authForm.value.username === "admin" ? "admin" : "teacher"
+    };
+    setAuthNotice("后端认证接口暂不可用，已进入演示登录模式。", "warning");
+    await enterAuthenticatedApp(demoUser, "demo-token", authForm.value.remember);
+  } finally {
+    authLoading.value = false;
+  }
+}
+
+function submitRegisterRequest() {
+  const phonePattern = /^1[3-9]\d{9}$/;
+  if (!phonePattern.test(registerForm.value.phone)) {
+    setAuthNotice("请输入有效的 11 位手机号。", "warning");
+    return;
+  }
+  if (!registerForm.value.name || !registerForm.value.password) {
+    setAuthNotice("请填写姓名和密码。", "warning");
+    return;
+  }
+  if (registerForm.value.password !== registerForm.value.confirmPassword) {
+    setAuthNotice("两次输入的密码不一致。", "warning");
+    return;
+  }
+  setAuthNotice("手机号注册接口尚未在后端文档中确认，当前已作为前端预留申请流程展示。请联系管理员创建账号。", "info");
+  authMode.value = "login";
+  authForm.value.username = registerForm.value.phone;
+}
+
+async function handleLogout() {
+  await logout();
+  clearAuthSession();
+  isAuthenticated.value = false;
+  currentUser.value = null;
+  window.clearInterval(refreshId);
+  refreshId = undefined;
+  setAuthNotice("已退出登录。", "success");
+}
+
+function startAlertRefresh() {
+  window.clearInterval(refreshId);
+  refreshId = window.setInterval(() => {
+    fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }).then((payload) => {
+      alerts.value = normalizeList(payload);
+    });
+  }, 5000);
+}
+
 async function loadDashboard() {
   const [
     streamResult,
@@ -292,12 +414,15 @@ function waterPlanter() {
 }
 
 onMounted(async () => {
+  if (!isAuthenticated.value) return;
+  try {
+    currentUser.value = await fetchCurrentUser();
+    storeAuthSession(getStoredToken(), currentUser.value, true);
+  } catch {
+    currentUser.value = currentUser.value || normalizeUser({}, "demo");
+  }
   await loadDashboard();
-  refreshId = window.setInterval(() => {
-    fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }).then((payload) => {
-      alerts.value = normalizeList(payload);
-    });
-  }, 5000);
+  startAlertRefresh();
 });
 
 onBeforeUnmount(() => {
@@ -307,7 +432,100 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'eye-care-theme': !isDay }">
+  <section v-if="!isAuthenticated" class="auth-shell">
+    <div class="auth-visual">
+      <div class="auth-brand">
+        <div class="brand-mark">AI</div>
+        <span>智慧教室安全监测</span>
+      </div>
+      <h1>智慧教室实时行为分析与安全监测系统</h1>
+      <p>统一接入 SpringBoot 鉴权、AI 视频分析和 Nginx 静态资源，为教师和管理员提供安全、清晰的值守入口。</p>
+      <div class="auth-feature-grid">
+        <article>
+          <b>JWT 鉴权</b>
+          <span>登录成功后访问业务接口自动携带 Token。</span>
+        </article>
+        <article>
+          <b>角色访问</b>
+          <span>初版区分 admin 与 teacher 两类角色。</span>
+        </article>
+        <article>
+          <b>接口一致</b>
+          <span>登录走 `/auth/login`，当前用户走 `/auth/info`。</span>
+        </article>
+      </div>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-tabs" role="tablist" aria-label="认证方式">
+        <button :class="{ active: authMode === 'login' }" type="button" @click="authMode = 'login'">用户登录</button>
+        <button :class="{ active: authMode === 'register' }" type="button" @click="authMode = 'register'">手机号注册</button>
+      </div>
+
+      <div class="auth-title">
+        <h2>{{ authMode === "login" ? "登录系统" : "手机号注册预留" }}</h2>
+        <p>
+          {{
+            authMode === "login"
+              ? "使用后端已确定的 /auth/login 接口进入系统。"
+              : "后端文档尚未确认手机号注册接口，当前仅保留前端申请流程。"
+          }}
+        </p>
+      </div>
+
+      <el-alert
+        v-if="authNotice"
+        class="auth-alert"
+        :title="authNotice"
+        :type="authNoticeType"
+        :closable="false"
+        show-icon
+      />
+
+      <el-form v-if="authMode === 'login'" class="auth-form" label-position="top" @submit.prevent="submitLogin">
+        <el-form-item label="用户名 / 工号">
+          <el-input v-model="authForm.username" :prefix-icon="User" placeholder="例如 admin 或 teacher" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="authForm.password" :prefix-icon="Lock" placeholder="请输入密码" show-password />
+        </el-form-item>
+        <div class="auth-row">
+          <el-checkbox v-model="authForm.remember">记住登录状态</el-checkbox>
+          <span>Token 失效时返回登录页</span>
+        </div>
+        <el-button class="auth-submit" type="primary" :loading="authLoading" @click="submitLogin">登录</el-button>
+      </el-form>
+
+      <el-form v-else class="auth-form" label-position="top" @submit.prevent="submitRegisterRequest">
+        <el-form-item label="手机号">
+          <el-input v-model="registerForm.phone" placeholder="请输入 11 位手机号" />
+        </el-form-item>
+        <el-form-item label="姓名">
+          <el-input v-model="registerForm.name" placeholder="请输入真实姓名" />
+        </el-form-item>
+        <el-form-item label="申请角色">
+          <el-segmented v-model="registerForm.role" :options="[{ label: '教师', value: 'teacher' }, { label: '管理员', value: 'admin' }]" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input v-model="registerForm.password" placeholder="设置密码" show-password />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input v-model="registerForm.confirmPassword" placeholder="再次输入密码" show-password />
+        </el-form-item>
+        <el-form-item label="申请说明">
+          <el-input v-model="registerForm.remark" type="textarea" :rows="2" placeholder="例如任课班级、管理范围或申请原因" />
+        </el-form-item>
+        <el-button class="auth-submit" type="primary" @click="submitRegisterRequest">提交注册申请</el-button>
+      </el-form>
+
+      <div class="auth-contract">
+        <b>接口契约</b>
+        <span>已确定：`POST /auth/login`、`GET /auth/info`。待定：`POST /auth/logout`。手机号注册接口等待后端确认。</span>
+      </div>
+    </div>
+  </section>
+
+  <div v-else class="app-shell" :class="{ 'eye-care-theme': !isDay }">
     <aside class="side-nav">
       <div class="brand-block">
         <div class="brand-mark">AI</div>
@@ -354,6 +572,11 @@ onBeforeUnmount(() => {
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
           <el-button :icon="Setting" @click="activePage = 'rules'">规则配置</el-button>
+          <div class="user-chip" :title="userRoleName">
+            <el-icon><User /></el-icon>
+            <span>{{ userDisplayName }}</span>
+          </div>
+          <el-button @click="handleLogout">退出</el-button>
           <el-select v-model="activeStreamId" class="stream-select" @change="switchStream">
             <el-option
               v-for="stream in streams"
