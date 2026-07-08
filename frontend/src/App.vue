@@ -1,0 +1,844 @@
+<script setup>
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import {
+  Bell,
+  Camera,
+  CircleCheck,
+  Clock,
+  Connection,
+  FullScreen,
+  Moon,
+  Refresh,
+  Search,
+  Setting,
+  Sunny,
+  Switch,
+  User,
+  VideoCamera
+} from "@element-plus/icons-vue";
+import {
+  fetchAlerts,
+  fetchAlertStats,
+  fetchAnalysisEvents,
+  fetchAnalysisSummary,
+  fetchModelStatus,
+  fetchRules,
+  fetchStreams,
+  fetchStudents,
+  fetchSystemHealth,
+  getVideoFeedUrl
+} from "./services/smartClassApi";
+import { joinResourceUrl } from "./services/http";
+
+const activePage = ref("monitor");
+const activeStreamId = ref("A101");
+const activeAlertStatus = ref("全部");
+const isVideoLive = ref(false);
+const videoError = ref(false);
+const now = ref(new Date());
+
+const streams = ref([]);
+const alerts = ref([]);
+const rules = ref([]);
+const students = ref([]);
+const stats = ref({});
+const health = ref({});
+const summary = ref({});
+const modelStatus = ref({});
+const analysisEvents = ref([]);
+
+let timerId;
+let refreshId;
+
+const navItems = [
+  { key: "monitor", label: "实时监控", icon: VideoCamera },
+  { key: "alerts", label: "告警管理", icon: Bell },
+  { key: "rules", label: "区域规则", icon: Setting },
+  { key: "people", label: "人脸库", icon: User },
+  { key: "system", label: "系统状态", icon: Connection }
+];
+
+const statusOptions = ["全部", "未处理", "待确认", "已处理", "误报"];
+
+const currentStream = computed(() => {
+  return streams.value.find((item) => item.stream_id === activeStreamId.value) || streams.value[0] || {};
+});
+
+const videoFeedUrl = computed(() => getVideoFeedUrl(activeStreamId.value));
+
+const isDay = computed(() => {
+  const hour = now.value.getHours();
+  return hour >= 6 && hour < 18;
+});
+
+const dayTitle = computed(() => (isDay.value ? "白天模式" : "夜间模式"));
+const dayHint = computed(() => (isDay.value ? "课堂状态清晰可见" : "值守视图保持低亮"));
+
+const pendingAlertCount = computed(() => {
+  return alerts.value.filter((item) => ["未处理", "待确认"].includes(item.status)).length;
+});
+
+const criticalAlertCount = computed(() => alerts.value.filter((item) => item.level === "critical").length);
+const confirmedAlertCount = computed(() => alerts.value.filter((item) => item.status === "已处理").length);
+const enabledRuleCount = computed(() => rules.value.filter((item) => item.enabled).length);
+const registeredStudentCount = computed(() => students.value.filter((item) => item.face_registered).length);
+const strangerCount = computed(() => students.value.filter((item) => !item.face_registered).length);
+const onlineStreamCount = computed(() => streams.value.filter((item) => item.status === "online").length);
+
+const healthItems = computed(() => [
+  { label: "RTMP 流媒体", value: health.value.rtmp || "unknown" },
+  { label: "AI 分析服务", value: health.value.ai || "unknown" },
+  { label: "业务后端", value: health.value.api || "unknown" },
+  { label: "MySQL 数据库", value: health.value.database || "unknown" }
+]);
+
+const metricCards = computed(() => [
+  { label: "当前视频源", value: activeStreamId.value, icon: Camera },
+  { label: "平均延迟", value: currentStream.value.latency || stats.value.avg_latency || "--", icon: Clock },
+  { label: "今日识别人数", value: stats.value.recognized_count ?? 126, icon: User },
+  { label: "待处理告警", value: stats.value.pending_alerts ?? pendingAlertCount.value, icon: Bell }
+]);
+
+const filteredAlerts = computed(() => {
+  if (activeAlertStatus.value === "全部") return alerts.value;
+  return alerts.value.filter((item) => item.status === activeAlertStatus.value);
+});
+
+const highPriorityAlerts = computed(() => {
+  return alerts.value.filter((item) => ["critical", "high"].includes(item.level)).slice(0, 4);
+});
+
+const aiEventFeed = computed(() => {
+  const fallback = [
+    { time: "10:25", text: "行为识别模型完成第三排目标复核" },
+    { time: "10:24", text: "截图、短视频和事件记录已完成关联" },
+    { time: "10:23", text: "建议优先确认手机违规与低头叠加事件" }
+  ];
+  return (analysisEvents.value.length ? analysisEvents.value : fallback).slice(0, 3);
+});
+
+const actionItems = computed(() => {
+  return summary.value.actions?.length ? summary.value.actions : ["自动抓拍", "等待人工确认", "保留追踪记录"];
+});
+
+const alertPageCards = computed(() => [
+  { label: "待处置事件", value: pendingAlertCount.value, tone: "danger" },
+  { label: "高危事件", value: criticalAlertCount.value, tone: "warn" },
+  { label: "已闭环", value: confirmedAlertCount.value, tone: "ok" },
+  { label: "证据留存", value: `${alerts.value.length} 条`, tone: "brand" }
+]);
+
+const rulePageCards = computed(() => [
+  { label: "启用规则", value: `${enabledRuleCount.value}/${rules.value.length || 0}`, tone: "ok" },
+  { label: "ROI 区域", value: "3 个", tone: "brand" },
+  { label: "最高优先级", value: "明火", tone: "danger" },
+  { label: "复核窗口", value: "3-6 秒", tone: "warn" }
+]);
+
+const peoplePageCards = computed(() => [
+  { label: "人员档案", value: students.value.length, tone: "brand" },
+  { label: "已注册人脸", value: registeredStudentCount.value, tone: "ok" },
+  { label: "待核验身份", value: strangerCount.value, tone: "warn" },
+  { label: "最近出现", value: students.value[0]?.last_seen || "--", tone: "brand" }
+]);
+
+const systemPageCards = computed(() => [
+  { label: "在线视频源", value: `${onlineStreamCount.value}/${streams.value.length || 0}`, tone: "ok" },
+  { label: "模型版本", value: modelStatus.value.version || "demo-yolo-v8", tone: "brand" },
+  { label: "推理耗时", value: `${modelStatus.value.inference_ms || 42} ms`, tone: "warn" },
+  { label: "服务状态", value: healthItems.value.every((item) => item.value === "online") ? "正常" : "需关注", tone: "ok" }
+]);
+
+const activeModules = [
+  { title: "实时视频与 AI 标注", text: "单路画面、身份标签、目标框、行为标注。" },
+  { title: "异常行为与安全告警", text: "承接 AI 候选事件，展示等级、位置与处置状态。" },
+  { title: "区域与规则配置", text: "ROI 区域、禁用手机区、危险区和阈值开关。" },
+  { title: "告警追溯与处置", text: "告警列表、截图片段、备注和状态闭环。" },
+  { title: "人脸与人员身份库", text: "人员资料、人脸注册、陌生人核验。" },
+  { title: "系统运行概览", text: "视频源、延迟、AI 服务和数据库状态。" }
+];
+
+const handlingGuides = [
+  { title: "先看等级", text: "明火、摔倒、陌生人优先进入人工确认。" },
+  { title: "再看证据", text: "截图和视频片段用于确认目标、区域和持续时间。" },
+  { title: "最后闭环", text: "处理、误报或转交后保留完整追溯记录。" }
+];
+
+const ruleTemplates = [
+  { title: "课堂禁用手机", text: "绑定座位区，阈值 5 秒，适合上课时段。" },
+  { title: "门口陌生人", text: "绑定入口区域，识别失败后进入身份核验。" },
+  { title: "危险源识别", text: "明火、摔倒使用较短阈值并提升优先级。" }
+];
+
+const registrationSteps = computed(() => [
+  { title: "档案同步", value: "已接入学生基础信息" },
+  { title: "人脸采集", value: `${registeredStudentCount.value} 人完成` },
+  { title: "异常核验", value: `${strangerCount.value} 条待确认` }
+]);
+
+const dependencySteps = [
+  { title: "摄像头推流", text: "RTMP 写入流媒体服务" },
+  { title: "AI 推理", text: "抽帧、检测、身份识别" },
+  { title: "后端入库", text: "告警、规则、人员数据落库" },
+  { title: "前端展示", text: "实时画面与处置闭环" }
+];
+
+const operationLogs = [
+  "自动刷新告警列表，保持 5 秒轮询。",
+  "视频流不可达时展示课堂示意图。",
+  "接口异常时启用本地演示数据兜底。"
+];
+
+function levelText(level) {
+  return {
+    critical: "最高",
+    high: "高",
+    medium: "中",
+    low: "低"
+  }[level] || "普通";
+}
+
+function statusType(status) {
+  return {
+    未处理: "danger",
+    待确认: "warning",
+    已处理: "success",
+    误报: "info",
+    online: "success",
+    offline: "danger",
+    unknown: "info"
+  }[status] || "info";
+}
+
+function normalizeList(payload) {
+  if (Array.isArray(payload)) return payload;
+  return payload?.records || payload?.list || payload?.rows || [];
+}
+
+function normalizeHealth(payload) {
+  return {
+    rtmp: payload.rtmp || payload.rtmp_status || payload.media || "online",
+    ai: payload.ai || payload.ai_status || "online",
+    api: payload.api || payload.backend || "online",
+    database: payload.database || payload.db || "online"
+  };
+}
+
+async function loadDashboard() {
+  const [
+    streamResult,
+    alertResult,
+    statsResult,
+    ruleResult,
+    studentResult,
+    healthResult,
+    summaryResult,
+    eventResult,
+    modelResult
+  ] = await Promise.all([
+    fetchStreams(),
+    fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }),
+    fetchAlertStats({ stream_id: activeStreamId.value }),
+    fetchRules(),
+    fetchStudents({ page: 1, page_size: 10 }),
+    fetchSystemHealth(),
+    fetchAnalysisSummary(activeStreamId.value),
+    fetchAnalysisEvents({ stream_id: activeStreamId.value }),
+    fetchModelStatus()
+  ]);
+
+  streams.value = normalizeList(streamResult);
+  alerts.value = normalizeList(alertResult);
+  stats.value = statsResult || {};
+  rules.value = normalizeList(ruleResult);
+  students.value = normalizeList(studentResult);
+  health.value = normalizeHealth(healthResult || {});
+  summary.value = summaryResult || {};
+  analysisEvents.value = normalizeList(eventResult);
+  modelStatus.value = modelResult || {};
+
+  if (!streams.value.some((item) => item.stream_id === activeStreamId.value) && streams.value[0]) {
+    activeStreamId.value = streams.value[0].stream_id;
+  }
+}
+
+async function switchStream(streamId) {
+  activeStreamId.value = streamId;
+  isVideoLive.value = false;
+  videoError.value = false;
+  summary.value = await fetchAnalysisSummary(streamId);
+}
+
+function handleVideoLoad() {
+  isVideoLive.value = true;
+  videoError.value = false;
+}
+
+function handleVideoError() {
+  isVideoLive.value = false;
+  videoError.value = true;
+}
+
+function resourceUrl(path) {
+  return joinResourceUrl(path);
+}
+
+onMounted(async () => {
+  await loadDashboard();
+  timerId = window.setInterval(() => {
+    now.value = new Date();
+  }, 1000);
+  refreshId = window.setInterval(() => {
+    fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }).then((payload) => {
+      alerts.value = normalizeList(payload);
+    });
+  }, 5000);
+});
+
+onBeforeUnmount(() => {
+  window.clearInterval(timerId);
+  window.clearInterval(refreshId);
+});
+</script>
+
+<template>
+  <div class="app-shell">
+    <aside class="side-nav">
+      <div class="brand-block">
+        <div class="brand-mark">AI</div>
+        <span>智课</span>
+      </div>
+
+      <button
+        v-for="item in navItems"
+        :key="item.key"
+        class="nav-button"
+        :class="{ active: activePage === item.key }"
+        :title="item.label"
+        @click="activePage = item.key"
+      >
+        <el-icon><component :is="item.icon" /></el-icon>
+        <span>{{ item.label }}</span>
+      </button>
+
+      <div class="online-block">
+        <span class="live-dot"></span>
+        <span>在线值守</span>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="top-bar">
+        <div>
+          <h1>智慧教室实时行为分析与安全监测系统</h1>
+          <p>聚焦单路实时画面，优先呈现视频流、AI 标注、实时告警和事件追溯。</p>
+        </div>
+        <div class="header-actions">
+          <div class="sky-widget" :class="{ night: !isDay }">
+            <el-icon><Sunny v-if="isDay" /><Moon v-else /></el-icon>
+            <div>
+              <b>{{ dayTitle }}</b>
+              <span>{{ dayHint }}</span>
+            </div>
+          </div>
+          <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
+          <el-button :icon="Setting" @click="activePage = 'rules'">规则配置</el-button>
+          <el-select v-model="activeStreamId" class="stream-select" @change="switchStream">
+            <el-option
+              v-for="stream in streams"
+              :key="stream.stream_id"
+              :label="stream.stream_name || stream.stream_id"
+              :value="stream.stream_id"
+            />
+          </el-select>
+        </div>
+      </header>
+
+      <section class="metrics-grid">
+        <article v-for="item in metricCards" :key="item.label" class="metric-card">
+          <div class="metric-icon">
+            <el-icon><component :is="item.icon" /></el-icon>
+          </div>
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </article>
+      </section>
+
+      <section v-if="activePage === 'monitor'" class="monitor-layout">
+        <div class="left-column">
+          <section class="panel video-panel">
+            <div class="panel-head">
+              <div>
+                <h2>{{ currentStream.stream_name || activeStreamId }} 实时画面</h2>
+                <span>{{ currentStream.location || "单路实时监控" }}</span>
+              </div>
+              <div class="segment-group">
+                <button class="segment active">实时画面</button>
+                <button class="segment">AI 标注</button>
+                <button class="segment">区域规则</button>
+                <button class="segment" title="全屏查看">
+                  <el-icon><FullScreen /></el-icon>
+                </button>
+              </div>
+            </div>
+
+            <div class="video-stage">
+              <img
+                v-if="!videoError"
+                class="video-stream"
+                :src="videoFeedUrl"
+                alt="AI 处理后的视频流"
+                @load="handleVideoLoad"
+                @error="handleVideoError"
+              />
+              <div class="classroom-fallback" :class="{ muted: !videoError && isVideoLive }">
+                <div class="board"></div>
+                <div class="desk d1"></div>
+                <div class="desk d2"></div>
+                <div class="desk d3"></div>
+              </div>
+
+              <div class="feed-top">
+                <span class="video-chip">
+                  <span class="status-dot"></span>
+                  {{ currentStream.stream_name || "A101 主摄像头" }}
+                </span>
+                <span class="video-chip danger">
+                  <span class="status-dot red"></span>
+                  {{ videoError ? "演示画面" : "高风险" }}
+                </span>
+              </div>
+
+              <div class="roi-zone">禁用手机区</div>
+              <div class="heat-point h1"></div>
+              <div class="heat-point h2"></div>
+              <div class="person-box p1"><span>张同学 96%</span></div>
+              <div class="person-box p2"><span>低头 6.2s</span></div>
+              <div class="person-box p3"><span>手机违规</span></div>
+              <div class="person-box p4"><span>陌生人</span></div>
+
+              <div class="insight-strip">
+                <article>
+                  <span>AI 研判</span>
+                  <b>{{ summary.title || "手机违规风险上升" }}</b>
+                </article>
+                <article>
+                  <span>行为趋势</span>
+                  <div class="sparkline"><i></i><i></i><i></i><i></i></div>
+                </article>
+                <article>
+                  <span>自动动作</span>
+                  <b>{{ summary.actions?.[0] || "已抓拍并写入事件" }}</b>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="overview-grid">
+            <div class="panel">
+              <div class="panel-head compact">
+                <h2>告警追踪记录</h2>
+                <el-segmented v-model="activeAlertStatus" :options="statusOptions" size="small" />
+              </div>
+              <el-table :data="filteredAlerts" height="248" class="clean-table">
+                <el-table-column prop="time" label="时间" width="92" />
+                <el-table-column prop="alert_type" label="类型" min-width="110" />
+                <el-table-column prop="location" label="位置" min-width="120" />
+                <el-table-column label="等级" width="84">
+                  <template #default="{ row }">
+                    <el-tag :type="row.level === 'critical' ? 'danger' : row.level === 'high' ? 'warning' : 'info'" effect="light">
+                      {{ levelText(row.level) }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="状态" width="92">
+                  <template #default="{ row }">
+                    <el-tag :type="statusType(row.status)" effect="plain">{{ row.status }}</el-tag>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head compact">
+                <h2>前端呈现模块</h2>
+                <el-button size="small" :icon="User" @click="activePage = 'people'">注册人脸</el-button>
+              </div>
+              <div class="module-grid">
+                <article v-for="module in activeModules.slice(0, 4)" :key="module.title">
+                  <b>{{ module.title }}</b>
+                  <span>{{ module.text }}</span>
+                </article>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="right-column">
+          <section class="panel featured-ai">
+            <div class="panel-head compact">
+              <h2>AI 研判助手</h2>
+              <el-tag effect="dark" type="danger">重点关注</el-tag>
+            </div>
+            <div class="ai-card">
+              <div class="score-row">
+                <div class="risk-score" :style="{ '--score': `${summary.risk_score || 58}%` }">
+                  {{ summary.risk_score || 58 }}
+                </div>
+                <div>
+                  <b>{{ summary.title || "当前风险指数中高" }}</b>
+                  <p>{{ summary.summary || "手机违规和低头行为在同一区域叠加出现，建议优先复核。" }}</p>
+                </div>
+              </div>
+              <div class="action-pills">
+                <span v-for="action in actionItems" :key="action">{{ action }}</span>
+              </div>
+              <div class="event-feed">
+                <article v-for="item in aiEventFeed" :key="`${item.time}-${item.text}`">
+                  <time>{{ item.time }}</time>
+                  <span>{{ item.text }}</span>
+                </article>
+              </div>
+              <div class="timeline">
+                <div v-for="item in summary.timeline || []" :key="item.time">
+                  <time>{{ item.time }}</time>
+                  <span>{{ item.text }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>实时告警</h2>
+              <el-tag type="danger" effect="dark">优先处理</el-tag>
+            </div>
+            <div class="alert-list">
+              <article
+                v-for="alert in highPriorityAlerts"
+                :key="alert.id"
+                class="alert-card"
+                :class="alert.level"
+              >
+                <div>
+                  <b>{{ alert.alert_type }}</b>
+                  <el-tag :type="statusType(alert.status)" size="small">{{ alert.status }}</el-tag>
+                </div>
+                <p>{{ alert.stream_id }} {{ alert.location }}，{{ alert.description }}</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>规则概览</h2>
+            </div>
+            <div class="rule-list">
+              <article v-for="rule in rules" :key="rule.id">
+                <div>
+                  <b>{{ rule.name }}</b>
+                  <span>{{ rule.summary }}，阈值 {{ rule.threshold_seconds }} 秒</span>
+                </div>
+                <el-switch v-model="rule.enabled" />
+              </article>
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <section v-else-if="activePage === 'alerts'" class="page-grid">
+        <div class="page-kpis">
+          <article v-for="item in alertPageCards" :key="item.label" class="kpi-card" :class="item.tone">
+            <span>{{ item.label }}</span>
+            <b>{{ item.value }}</b>
+          </article>
+        </div>
+
+        <div class="panel wide-panel">
+          <div class="panel-head">
+            <div>
+              <h2>告警管理</h2>
+              <span>来自 SpringBoot `/alerts`，截图和录像路径由 Nginx 静态服务访问。</span>
+            </div>
+            <el-input class="search-box" :prefix-icon="Search" placeholder="搜索类型、位置或视频源" />
+          </div>
+          <el-table :data="filteredAlerts" class="clean-table">
+            <el-table-column prop="time" label="时间" width="110" />
+            <el-table-column prop="alert_type" label="告警类型" width="130" />
+            <el-table-column prop="stream_id" label="视频源" width="100" />
+            <el-table-column prop="location" label="位置" width="130" />
+            <el-table-column prop="description" label="说明" min-width="240" />
+            <el-table-column label="状态" width="100">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="证据" width="170">
+              <template #default="{ row }">
+                <el-button size="small" text :href="resourceUrl(row.snapshot_path)">截图</el-button>
+                <el-button size="small" text :href="resourceUrl(row.video_path)">片段</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>处置建议</h2>
+            </div>
+            <div class="info-list">
+              <article v-for="guide in handlingGuides" :key="guide.title" class="info-item">
+                <b>{{ guide.title }}</b>
+                <span>{{ guide.text }}</span>
+              </article>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>证据链概览</h2>
+            </div>
+            <div class="evidence-grid">
+              <article>
+                <b>截图</b>
+                <span>目标框、区域、时间戳</span>
+              </article>
+              <article>
+                <b>片段</b>
+                <span>触发前后短视频</span>
+              </article>
+              <article>
+                <b>记录</b>
+                <span>状态、备注、处理人</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section v-else-if="activePage === 'rules'" class="page-grid">
+        <div class="page-kpis">
+          <article v-for="item in rulePageCards" :key="item.label" class="kpi-card" :class="item.tone">
+            <span>{{ item.label }}</span>
+            <b>{{ item.value }}</b>
+          </article>
+        </div>
+
+        <div class="two-columns">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>区域规则配置</h2>
+                <span>用于承接 `/zones` 和 `/rules`，后续可扩展为 ROI 绘制。</span>
+              </div>
+              <el-button type="primary" :icon="CircleCheck">保存规则</el-button>
+            </div>
+            <div class="rule-editor">
+              <article v-for="rule in rules" :key="rule.id">
+                <div>
+                  <b>{{ rule.name }}</b>
+                  <span>{{ rule.summary }}</span>
+                </div>
+                <el-input-number v-model="rule.threshold_seconds" :min="1" :max="30" size="small" />
+                <el-switch v-model="rule.enabled" />
+              </article>
+            </div>
+          </div>
+          <div class="panel zone-panel">
+            <div class="panel-head compact">
+              <h2>A101 区域示意</h2>
+            </div>
+            <div class="zone-canvas">
+              <div class="canvas-board">讲台 / 黑板</div>
+              <div class="seat-zone s1">座位区</div>
+              <div class="seat-zone s2">禁用手机区</div>
+              <div class="seat-zone s3">危险区</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>推荐模板</h2>
+            </div>
+            <div class="info-list">
+              <article v-for="item in ruleTemplates" :key="item.title" class="info-item">
+                <b>{{ item.title }}</b>
+                <span>{{ item.text }}</span>
+              </article>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>规则联动</h2>
+            </div>
+            <div class="flow-steps compact-flow">
+              <article>
+                <b>区域命中</b>
+                <span>目标进入 ROI</span>
+              </article>
+              <article>
+                <b>阈值复核</b>
+                <span>持续时间达标</span>
+              </article>
+              <article>
+                <b>生成告警</b>
+                <span>写入事件队列</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section v-else-if="activePage === 'people'" class="page-grid">
+        <div class="page-kpis">
+          <article v-for="item in peoplePageCards" :key="item.label" class="kpi-card" :class="item.tone">
+            <span>{{ item.label }}</span>
+            <b>{{ item.value }}</b>
+          </article>
+        </div>
+
+        <div class="two-columns">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>人员与人脸库</h2>
+                <span>人员基础信息来自 `/students`，人脸注册提交到 `/students/{id}/face`。</span>
+              </div>
+              <el-button type="primary" :icon="User">新增人员</el-button>
+            </div>
+            <el-table :data="students" class="clean-table">
+              <el-table-column prop="student_no" label="编号" width="110" />
+              <el-table-column prop="name" label="姓名" width="120" />
+              <el-table-column prop="class_name" label="班级/身份" min-width="130" />
+              <el-table-column label="人脸状态" width="110">
+                <template #default="{ row }">
+                  <el-tag :type="row.face_registered ? 'success' : 'warning'">
+                    {{ row.face_registered ? "已注册" : "待注册" }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="last_seen" label="最近出现" width="110" />
+            </el-table>
+          </div>
+          <div class="panel">
+            <div class="panel-head compact">
+              <h2>陌生人核验</h2>
+            </div>
+            <div class="identity-preview">
+              <div class="face-placeholder">
+                <el-icon><User /></el-icon>
+              </div>
+              <b>发现未登记人员</b>
+              <p>系统保留最近一次截图与视频片段，等待管理员确认身份或加入访客名单。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>注册进度</h2>
+            </div>
+            <div class="progress-stack">
+              <article v-for="item in registrationSteps" :key="item.title">
+                <b>{{ item.title }}</b>
+                <span>{{ item.value }}</span>
+              </article>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>身份策略</h2>
+            </div>
+            <div class="info-list">
+              <article class="info-item">
+                <b>学生档案</b>
+                <span>用于课堂识别、到场记录和行为关联。</span>
+              </article>
+              <article class="info-item">
+                <b>访客名单</b>
+                <span>经人工确认后可临时加入白名单。</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section v-else class="page-grid">
+        <div class="page-kpis">
+          <article v-for="item in systemPageCards" :key="item.label" class="kpi-card" :class="item.tone">
+            <span>{{ item.label }}</span>
+            <b>{{ item.value }}</b>
+          </article>
+        </div>
+
+        <div class="two-columns">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>视频源与服务状态</h2>
+                <span>对应 `/streams`、`/ai/model/status`、`/system/health`。</span>
+              </div>
+              <el-button :icon="Switch">新增视频源</el-button>
+            </div>
+            <div class="stream-list">
+              <article v-for="stream in streams" :key="stream.stream_id">
+                <div>
+                  <b>{{ stream.stream_name }}</b>
+                  <span>{{ stream.rtmp_url }}</span>
+                </div>
+                <el-tag :type="statusType(stream.status)">{{ stream.status }}</el-tag>
+              </article>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head compact">
+              <h2>运行概览</h2>
+            </div>
+            <div class="health-grid">
+              <article v-for="item in healthItems" :key="item.label">
+                <span>{{ item.label }}</span>
+                <b :class="item.value">{{ item.value }}</b>
+              </article>
+              <article>
+                <span>模型版本</span>
+                <b>{{ modelStatus.version || "demo-yolo-v8" }}</b>
+              </article>
+              <article>
+                <span>推理耗时</span>
+                <b>{{ modelStatus.inference_ms || 42 }} ms</b>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-grid">
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>依赖调用链路</h2>
+            </div>
+            <div class="flow-steps">
+              <article v-for="item in dependencySteps" :key="item.title">
+                <b>{{ item.title }}</b>
+                <span>{{ item.text }}</span>
+              </article>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact">
+              <h2>运行提示</h2>
+            </div>
+            <div class="info-list">
+              <article v-for="item in operationLogs" :key="item" class="info-item">
+                <b>状态</b>
+                <span>{{ item }}</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+</template>
