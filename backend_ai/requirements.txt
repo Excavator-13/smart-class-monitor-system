@@ -4,7 +4,7 @@ Werkzeug==3.1.8
 PyYAML==6.0.3
 requests==2.34.2
 numpy==2.2.6
-opencv-python==5.0.0.93
+opencv-python==4.10.0.84
 insightface==1.0.1
 onnxruntime-gpu==1.23.2
 ultralytics==8.4.90
