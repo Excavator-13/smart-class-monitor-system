@@ -36,6 +36,18 @@ class FakeConfigClient:
         return {}
 
 
+class LazyFakeConfigClient(FakeConfigClient):
+    def __init__(self):
+        super().__init__()
+        self.cache.streams = {}
+        self.reload_called = False
+
+    def reload(self, stream_id=None, reload_items=None):
+        self.reload_called = True
+        self.cache.streams = {"classroom_01": {"stream_id": "classroom_01", "rtmp_url": "mock://stream"}}
+        return {"stream_id": stream_id, "streams_loaded": 1, "zones_loaded": 0, "rules_loaded": 0}
+
+
 class FakeFaceService:
     loaded = True
 
@@ -78,6 +90,21 @@ def app_client():
     app = create_app(
         {
             "config_client": FakeConfigClient(),
+            "event_service": EventService(),
+            "face_service": FakeFaceService(),
+            "stream_manager": FakeStreamManager(),
+            "behavior_service": FakeBehaviorService(),
+            "zone_service": FakeZoneService(),
+            "alert_client": FakeAlertClient(),
+        }
+    )
+    return app.test_client()
+
+
+def app_client_with_config(config_client):
+    app = create_app(
+        {
+            "config_client": config_client,
             "event_service": EventService(),
             "face_service": FakeFaceService(),
             "stream_manager": FakeStreamManager(),
@@ -153,3 +180,14 @@ def test_video_feed_known_stream_returns_mjpeg_chunk():
     assert response.mimetype == "multipart/x-mixed-replace"
     assert first_chunk.startswith(b"--frame")
     assert b"Content-Type: image/jpeg" in first_chunk
+
+
+def test_video_feed_lazy_reloads_stream_config():
+    config_client = LazyFakeConfigClient()
+
+    response = app_client_with_config(config_client).get("/video_feed/classroom_01", buffered=False)
+
+    first_chunk = next(response.response)
+    assert config_client.reload_called
+    assert response.status_code == 200
+    assert first_chunk.startswith(b"--frame")

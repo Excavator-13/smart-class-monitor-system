@@ -183,6 +183,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     @app.get("/video_feed/<stream_id>")
     def video_feed(stream_id: str):
         if not config_client.get_stream(stream_id):
+            try:
+                config_client.reload(stream_id=stream_id, reload_items=["streams", "zones", "rules"])
+            except Exception:
+                pass
+        if not config_client.get_stream(stream_id):
             return error_response(40401, "stream not found", status=404)
         annotate = request.args.get("annotate", "true").lower() != "false"
         modules_param = request.args.get("modules", "all")
