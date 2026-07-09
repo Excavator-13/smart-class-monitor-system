@@ -1,0 +1,23 @@
+streams:
+  - stream_id: classroom_01
+    rtmp_url: rtmp://localhost/live/classroom_01
+    name: 教室1
+    status: enabled
+
+zones:
+  - zone_id: zone_01
+    stream_id: classroom_01
+    name: 讲台区域
+    polygon:
+      - [0.1, 0.1]
+      - [0.5, 0.1]
+      - [0.5, 0.5]
+      - [0.1, 0.5]
+    enabled: true
+
+rules:
+  - rule_type: zone_intrusion
+    name: 区域入侵检测
+    enabled: true
+    threshold_seconds: 3
+    confidence_threshold: 0.6

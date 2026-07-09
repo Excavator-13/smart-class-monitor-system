@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
@@ -19,6 +21,8 @@ from backend_ai.utils.response import error_response, json_response
 
 
 BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -37,12 +41,13 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         model_config.update(overrides.get("model_config", {}))
 
     spring = app_config.get("spring", {})
+    spring_base_url = os.environ.get("SPRING_BASE_URL") or spring.get("base_url", "http://localhost:8080")
     stream_cfg = app_config.get("stream", {})
     events_cfg = app_config.get("events", {})
 
     config_client = (overrides or {}).get("config_client") if overrides else None
     config_client = config_client or ConfigClient(
-        base_url=spring.get("base_url", "http://localhost:8080"),
+        base_url=spring_base_url,
         timeout=float(spring.get("timeout_seconds", 5)),
     )
     event_service = (overrides or {}).get("event_service") if overrides else None
@@ -61,7 +66,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
     behavior_service = behavior_service or BehaviorService()
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring.get("base_url", "http://localhost:8080"))
+    alert_client = alert_client or AlertClient(base_url=spring_base_url)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,
@@ -171,4 +176,3 @@ app = create_app()
 if __name__ == "__main__":
     cfg = load_yaml(BASE_DIR / "config" / "app.yaml").get("service", {})
     app.run(host=cfg.get("host", "0.0.0.0"), port=int(cfg.get("port", 5000)), debug=bool(cfg.get("debug", False)))
-

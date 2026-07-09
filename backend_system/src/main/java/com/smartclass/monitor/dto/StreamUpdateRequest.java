@@ -8,7 +8,7 @@ public class StreamUpdateRequest {
     @Schema(description = "视频源展示名称", example = "一号教室")
     private String streamName;
 
-    @Schema(description = "RTMP 推拉流地址", example = "rtmp://39.106.209.208:9090/live/classroom_01")
+    @Schema(description = "RTMP 推拉流地址", example = "rtmp://localhost:9090/live/classroom_01")
     private String rtmpUrl;
 
     @Schema(description = "配置状态：enabled / disabled", example = "enabled")

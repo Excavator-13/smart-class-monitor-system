@@ -107,3 +107,12 @@ docker-compose.override.yml
 # Local runtime
 # =========================
 local-runtime/.env
+
+# =========================
+# .env files (keep .env.example)
+# =========================
+backend_system/.env
+backend_ai/.env
+mock_springboot/.env
+frontend/.env
+frontend/.env.production

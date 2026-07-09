@@ -15,7 +15,7 @@ public class StreamCreateRequest {
     private String streamId;
 
     @NotBlank(message = "RTMP 地址不能为空")
-    @Schema(description = "RTMP 推拉流地址", example = "rtmp://39.106.209.208:9090/live/classroom_01")
+    @Schema(description = "RTMP 推拉流地址", example = "rtmp://localhost:9090/live/classroom_01")
     private String rtmpUrl;
 
     @Schema(description = "备注")

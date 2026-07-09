@@ -20,7 +20,10 @@ function loadLocalEnv() {
     if (index === -1) continue;
 
     const key = trimmed.slice(0, index).trim();
-    const value = trimmed.slice(index + 1).trim().replace(/^['"]|['"]$/g, "");
+    const value = trimmed
+      .slice(index + 1)
+      .trim()
+      .replace(/^['"]|['"]$/g, "");
     if (key && process.env[key] == null) process.env[key] = value;
   }
 }
@@ -28,35 +31,60 @@ function loadLocalEnv() {
 loadLocalEnv();
 
 const port = Number(process.env.LOCAL_GATEWAY_PORT || 18080);
+
+const requiredEnvVars = ["API_TARGET", "AI_TARGET", "MEDIA_TARGET"];
+const missing = requiredEnvVars.filter((key) => !process.env[key]);
+if (missing.length > 0) {
+  console.warn(
+    `[local-gateway] Missing required env vars: ${missing.join(", ")}. ` +
+      `Please set them in ${join(here, ".env")} or as environment variables.`,
+  );
+  process.exit(1);
+}
+
 const routes = [
-  { prefix: "/api", target: process.env.API_TARGET || "http://127.0.0.1:8080" },
-  { prefix: "/ai", target: process.env.AI_TARGET || "http://127.0.0.1:5000" },
-  { prefix: "/media", target: process.env.MEDIA_TARGET || "http://127.0.0.1:9092" }
+  { prefix: "/api", target: process.env.API_TARGET },
+  { prefix: "/ai", target: process.env.AI_TARGET },
+  { prefix: "/media", target: process.env.MEDIA_TARGET },
 ];
 
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
-  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  response.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  response.setHeader(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  );
+  response.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With",
+  );
   response.setHeader("Access-Control-Max-Age", "86400");
 }
 
 function findRoute(pathname) {
-  return routes.find((route) => pathname === route.prefix || pathname.startsWith(`${route.prefix}/`));
+  return routes.find(
+    (route) =>
+      pathname === route.prefix || pathname.startsWith(`${route.prefix}/`),
+  );
 }
 
 function buildTargetUrl(route, requestUrl) {
   const incoming = new URL(requestUrl, "http://local-runtime");
   const strippedPath = incoming.pathname.replace(route.prefix, "") || "/";
   const target = new URL(route.target);
-  target.pathname = `${target.pathname.replace(/\/$/, "")}/${strippedPath.replace(/^\//, "")}`.replace(/\/+/g, "/");
+  target.pathname =
+    `${target.pathname.replace(/\/$/, "")}/${strippedPath.replace(/^\//, "")}`.replace(
+      /\/+/g,
+      "/",
+    );
   target.search = incoming.search;
   return target;
 }
 
 function proxyRequest(clientRequest, clientResponse, route) {
   const targetUrl = buildTargetUrl(route, clientRequest.url || "/");
-  const transport = targetUrl.protocol === "https:" ? httpsRequest : httpRequest;
+  const transport =
+    targetUrl.protocol === "https:" ? httpsRequest : httpRequest;
 
   const headers = { ...clientRequest.headers };
   headers.host = targetUrl.host;
@@ -65,24 +93,29 @@ function proxyRequest(clientRequest, clientResponse, route) {
     targetUrl,
     {
       method: clientRequest.method,
-      headers
+      headers,
     },
     (upstreamResponse) => {
       setCorsHeaders(clientResponse);
-      clientResponse.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
+      clientResponse.writeHead(
+        upstreamResponse.statusCode || 502,
+        upstreamResponse.headers,
+      );
       upstreamResponse.pipe(clientResponse);
-    }
+    },
   );
 
   upstreamRequest.on("error", (error) => {
     setCorsHeaders(clientResponse);
-    clientResponse.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    clientResponse.writeHead(502, {
+      "Content-Type": "application/json; charset=utf-8",
+    });
     clientResponse.end(
       JSON.stringify({
         message: "本地接口网关转发失败",
         target: targetUrl.origin,
-        detail: error.message
-      })
+        detail: error.message,
+      }),
     );
   });
 
@@ -102,12 +135,17 @@ const server = createServer((request, response) => {
   const route = findRoute(pathname);
 
   if (!route) {
-    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+    });
     response.end(
       JSON.stringify({
         name: "smart-class-monitor-local-runtime",
-        routes: routes.map((item) => ({ prefix: item.prefix, target: item.target }))
-      })
+        routes: routes.map((item) => ({
+          prefix: item.prefix,
+          target: item.target,
+        })),
+      }),
     );
     return;
   }
