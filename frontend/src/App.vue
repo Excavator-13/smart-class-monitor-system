@@ -33,6 +33,7 @@ import {
 import { clearAuthSession, getStoredToken, getStoredUser, joinResourceUrl, storeAuthSession } from "./services/http";
 
 const activePage = ref("monitor");
+const loginBackgroundVideo = `${import.meta.env.BASE_URL}auth/login-moonset.mp4`;
 const isAuthenticated = ref(Boolean(getStoredToken()));
 const currentUser = ref(getStoredUser());
 const authMode = ref("login");
@@ -57,8 +58,17 @@ const activeAlertStatus = ref("全部");
 const isVideoLive = ref(false);
 const videoError = ref(false);
 const isDay = ref(true);
+const showAiAnnotations = ref(true);
+const showRuleOverlay = ref(true);
+const isVideoExpanded = ref(false);
 const planterWaterLevel = ref(0);
 const isWateringPlanter = ref(false);
+const videoStageRef = ref(null);
+const isDrawingForbiddenZone = ref(false);
+const forbiddenZoneStart = ref(null);
+const forbiddenZoneCurrent = ref(null);
+const pendingForbiddenZone = ref(null);
+const confirmedForbiddenZone = ref(null);
 
 const streams = ref([]);
 const alerts = ref([]);
@@ -99,12 +109,38 @@ const userRoleName = computed(() => {
   }[currentUser.value?.role] || "未登录";
 });
 
-const pendingAlertCount = computed(() => {
-  return alerts.value.filter((item) => ["未处理", "待确认"].includes(item.status)).length;
+const hasConfirmedForbiddenZone = computed(() => Boolean(confirmedForbiddenZone.value));
+const hasPendingForbiddenZone = computed(() => Boolean(pendingForbiddenZone.value));
+
+function isPhoneRelated(item = {}) {
+  const text = [
+    item.alert_type,
+    item.event_type,
+    item.rule_type,
+    item.name,
+    item.title,
+    item.summary,
+    item.description,
+    item.text
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return /手机|phone/i.test(text);
+}
+
+const displayAlerts = computed(() => {
+  if (hasConfirmedForbiddenZone.value) return alerts.value;
+  return alerts.value.filter((item) => !isPhoneRelated(item));
 });
-const criticalAlertCount = computed(() => alerts.value.filter((item) => item.level === "critical").length);
-const confirmedAlertCount = computed(() => alerts.value.filter((item) => item.status === "已处理").length);
-const enabledRuleCount = computed(() => rules.value.filter((item) => item.enabled).length);
+
+const pendingAlertCount = computed(() => {
+  return displayAlerts.value.filter((item) => ["未处理", "待确认"].includes(item.status)).length;
+});
+const criticalAlertCount = computed(() => displayAlerts.value.filter((item) => item.level === "critical").length);
+const confirmedAlertCount = computed(() => displayAlerts.value.filter((item) => item.status === "已处理").length);
+const enabledRuleCount = computed(() => {
+  return rules.value.filter((item) => item.enabled && (hasConfirmedForbiddenZone.value || !isPhoneRelated(item))).length;
+});
 const registeredStudentCount = computed(() => students.value.filter((item) => item.face_registered).length);
 const strangerCount = computed(() => students.value.filter((item) => !item.face_registered).length);
 const onlineStreamCount = computed(() => streams.value.filter((item) => item.status === "online").length);
@@ -120,41 +156,63 @@ const metricCards = computed(() => [
   { label: "当前视频源", value: activeStreamId.value, icon: Camera },
   { label: "平均延迟", value: currentStream.value.latency || stats.value.avg_latency || "--", icon: Clock },
   { label: "今日识别人数", value: stats.value.recognized_count ?? 126, icon: User },
-  { label: "待处理告警", value: stats.value.pending_alerts ?? pendingAlertCount.value, icon: Bell }
+  { label: "待处理告警", value: pendingAlertCount.value, icon: Bell }
 ]);
 
 const filteredAlerts = computed(() => {
-  if (activeAlertStatus.value === "全部") return alerts.value;
-  return alerts.value.filter((item) => item.status === activeAlertStatus.value);
+  if (activeAlertStatus.value === "全部") return displayAlerts.value;
+  return displayAlerts.value.filter((item) => item.status === activeAlertStatus.value);
 });
 
 const highPriorityAlerts = computed(() => {
-  return alerts.value.filter((item) => ["critical", "high"].includes(item.level)).slice(0, 4);
+  return displayAlerts.value.filter((item) => ["critical", "high"].includes(item.level)).slice(0, 4);
 });
 
 const aiEventFeed = computed(() => {
-  const fallback = [
-    { time: "10:25", text: "行为识别模型完成第三排目标复核" },
-    { time: "10:24", text: "截图、短视频和事件记录已完成关联" },
-    { time: "10:23", text: "建议优先确认手机违规与低头叠加事件" }
-  ];
-  return (analysisEvents.value.length ? analysisEvents.value : fallback).slice(0, 3);
+  const fallback = hasConfirmedForbiddenZone.value
+    ? [
+        { time: "10:25", text: "行为识别模型完成第三排目标复核" },
+        { time: "10:24", text: "截图、短视频和事件记录已完成关联" },
+        { time: "10:23", text: "建议优先确认手机违规与低头叠加事件" }
+      ]
+    : [
+        { time: "10:25", text: "行为识别模型完成第三排目标复核" },
+        { time: "10:24", text: "当前未确认禁用区，手机违规检测未启用" },
+        { time: "10:23", text: "请先拖拽并确认禁用区，再生成手机相关告警" }
+      ];
+  const source = analysisEvents.value.length ? analysisEvents.value : fallback;
+  return source.filter((item) => hasConfirmedForbiddenZone.value || !isPhoneRelated(item)).slice(0, 3);
+});
+
+const activeSummary = computed(() => {
+  if (hasConfirmedForbiddenZone.value) return summary.value || {};
+  return {
+    risk_score: Math.min(summary.value?.risk_score || 36, 42),
+    title: "等待禁用区确认",
+    summary: "当前未确认手机禁用区，手机违规检测和相关告警暂不启用。请在实时画面中拖拽区域并点击确定。",
+    actions: ["绘制禁用区", "点击确定", "启用手机规则"],
+    timeline: [
+      { time: "当前", text: "手机违规规则等待禁用区坐标" },
+      { time: "下一步", text: "确认禁用区后输出四角归一化坐标" }
+    ]
+  };
 });
 
 const actionItems = computed(() => {
-  return summary.value.actions?.length ? summary.value.actions : ["自动抓拍", "等待人工确认", "保留追踪记录"];
+  if (!hasConfirmedForbiddenZone.value) return ["绘制禁用区", "点击确定", "启用手机规则"];
+  return activeSummary.value.actions?.length ? activeSummary.value.actions : ["自动抓拍", "等待人工确认", "保留追踪记录"];
 });
 
 const alertPageCards = computed(() => [
   { label: "待处置事件", value: pendingAlertCount.value, tone: "danger" },
   { label: "高危事件", value: criticalAlertCount.value, tone: "warn" },
   { label: "已闭环", value: confirmedAlertCount.value, tone: "ok" },
-  { label: "证据留存", value: `${alerts.value.length} 条`, tone: "brand" }
+  { label: "证据留存", value: `${displayAlerts.value.length} 条`, tone: "brand" }
 ]);
 
 const rulePageCards = computed(() => [
   { label: "启用规则", value: `${enabledRuleCount.value}/${rules.value.length || 0}`, tone: "ok" },
-  { label: "ROI 区域", value: "3 个", tone: "brand" },
+  { label: "禁用区", value: confirmedForbiddenZone.value ? "已确认" : pendingForbiddenZone.value ? "待确认" : "未绘制", tone: "brand" },
   { label: "最高优先级", value: "明火", tone: "danger" },
   { label: "复核窗口", value: "3-6 秒", tone: "warn" }
 ]);
@@ -176,7 +234,7 @@ const systemPageCards = computed(() => [
 const activeModules = [
   { title: "实时视频与 AI 标注", text: "单路画面、身份标签、目标框、行为标注。" },
   { title: "异常行为与安全告警", text: "承接 AI 候选事件，展示等级、位置与处置状态。" },
-  { title: "区域与规则配置", text: "ROI 区域、禁用手机区、危险区和阈值开关。" },
+  { title: "区域与规则配置", text: "动态禁用区、危险区和阈值开关。" },
   { title: "告警追溯与处置", text: "告警列表、截图片段、备注和状态闭环。" }
 ];
 
@@ -187,7 +245,7 @@ const handlingGuides = [
 ];
 
 const ruleTemplates = [
-  { title: "课堂禁用手机", text: "绑定座位区，阈值 5 秒，适合上课时段。" },
+  { title: "课堂禁用手机", text: "先确认动态禁用区，再按阈值触发。" },
   { title: "门口陌生人", text: "绑定入口区域，识别失败后进入身份核验。" },
   { title: "危险源识别", text: "明火、摔倒使用较短阈值并提升优先级。" }
 ];
@@ -211,6 +269,35 @@ const operationLogs = [
   "接口异常时启用本地演示数据兜底。"
 ];
 
+const activeForbiddenRect = computed(() => {
+  if (isDrawingForbiddenZone.value && forbiddenZoneStart.value && forbiddenZoneCurrent.value) {
+    return buildRectFromPoints(forbiddenZoneStart.value, forbiddenZoneCurrent.value);
+  }
+  return pendingForbiddenZone.value?.rect || confirmedForbiddenZone.value?.rect || null;
+});
+
+const forbiddenZoneStyle = computed(() => {
+  if (!activeForbiddenRect.value) return {};
+  const rect = activeForbiddenRect.value;
+  return {
+    left: `${rect.x * 100}%`,
+    top: `${rect.y * 100}%`,
+    width: `${rect.width * 100}%`,
+    height: `${rect.height * 100}%`
+  };
+});
+
+const forbiddenZoneCoordinates = computed(() => {
+  return confirmedForbiddenZone.value?.coordinates || [];
+});
+
+const forbiddenZonePayload = computed(() => ({
+  zone_type: "phone_forbidden",
+  shape_type: "rectangle",
+  stream_id: activeStreamId.value,
+  coordinates: forbiddenZoneCoordinates.value
+}));
+
 function levelText(level) {
   return {
     critical: "最高",
@@ -232,6 +319,11 @@ function statusType(status) {
   }[status] || "info";
 }
 
+function ruleSummary(rule) {
+  if (!hasConfirmedForbiddenZone.value && isPhoneRelated(rule)) return "等待禁用区确认后生效";
+  return rule.summary;
+}
+
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload;
   return payload?.records || payload?.list || payload?.rows || [];
@@ -244,6 +336,111 @@ function normalizeHealth(payload) {
     api: payload.api || payload.backend || "online",
     database: payload.database || payload.db || "online"
   };
+}
+
+function clampUnit(value) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function formatCoord(value) {
+  return Number(value).toFixed(3);
+}
+
+function getVideoPointerPoint(event) {
+  const stage = videoStageRef.value;
+  if (!stage) return null;
+  const rect = stage.getBoundingClientRect();
+  return {
+    x: clampUnit((event.clientX - rect.left) / rect.width),
+    y: clampUnit((event.clientY - rect.top) / rect.height)
+  };
+}
+
+function buildRectFromPoints(start, end) {
+  const x1 = Math.min(start.x, end.x);
+  const y1 = Math.min(start.y, end.y);
+  const x2 = Math.max(start.x, end.x);
+  const y2 = Math.max(start.y, end.y);
+  return {
+    x: x1,
+    y: y1,
+    width: x2 - x1,
+    height: y2 - y1
+  };
+}
+
+function buildCoordinatesFromRect(rect) {
+  return [
+    { x: Number(rect.x.toFixed(4)), y: Number(rect.y.toFixed(4)) },
+    { x: Number((rect.x + rect.width).toFixed(4)), y: Number(rect.y.toFixed(4)) },
+    { x: Number((rect.x + rect.width).toFixed(4)), y: Number((rect.y + rect.height).toFixed(4)) },
+    { x: Number(rect.x.toFixed(4)), y: Number((rect.y + rect.height).toFixed(4)) }
+  ];
+}
+
+function startForbiddenZoneDraw(event) {
+  if (!showRuleOverlay.value) return;
+  if (event.button !== 0) return;
+  const point = getVideoPointerPoint(event);
+  if (!point) return;
+  isDrawingForbiddenZone.value = true;
+  forbiddenZoneStart.value = point;
+  forbiddenZoneCurrent.value = point;
+}
+
+function updateForbiddenZoneDraw(event) {
+  if (!showRuleOverlay.value || !isDrawingForbiddenZone.value) return;
+  const point = getVideoPointerPoint(event);
+  if (!point) return;
+  forbiddenZoneCurrent.value = point;
+}
+
+function finishForbiddenZoneDraw() {
+  if (!isDrawingForbiddenZone.value || !forbiddenZoneStart.value || !forbiddenZoneCurrent.value) return;
+  const rect = buildRectFromPoints(forbiddenZoneStart.value, forbiddenZoneCurrent.value);
+  isDrawingForbiddenZone.value = false;
+  forbiddenZoneStart.value = null;
+  forbiddenZoneCurrent.value = null;
+  if (rect.width < 0.015 || rect.height < 0.015) return;
+  pendingForbiddenZone.value = {
+    rect,
+    coordinates: buildCoordinatesFromRect(rect)
+  };
+}
+
+function cancelForbiddenZoneDraw() {
+  isDrawingForbiddenZone.value = false;
+  forbiddenZoneStart.value = null;
+  forbiddenZoneCurrent.value = null;
+}
+
+function confirmForbiddenZone() {
+  if (!pendingForbiddenZone.value) return;
+  confirmedForbiddenZone.value = pendingForbiddenZone.value;
+  pendingForbiddenZone.value = null;
+}
+
+function clearForbiddenZone() {
+  pendingForbiddenZone.value = null;
+  confirmedForbiddenZone.value = null;
+  cancelForbiddenZoneDraw();
+}
+
+function toggleAiAnnotations() {
+  showAiAnnotations.value = !showAiAnnotations.value;
+}
+
+function toggleRuleOverlay() {
+  showRuleOverlay.value = !showRuleOverlay.value;
+  if (!showRuleOverlay.value) cancelForbiddenZoneDraw();
+}
+
+function openExpandedVideo() {
+  isVideoExpanded.value = true;
+}
+
+function closeExpandedVideo() {
+  isVideoExpanded.value = false;
 }
 
 function setAuthNotice(message, type = "info") {
@@ -380,6 +577,7 @@ async function switchStream(streamId) {
   activeStreamId.value = streamId;
   isVideoLive.value = false;
   videoError.value = false;
+  clearForbiddenZone();
   summary.value = await fetchAnalysisSummary(streamId);
 }
 
@@ -433,6 +631,11 @@ onBeforeUnmount(() => {
 
 <template>
   <section v-if="!isAuthenticated" class="auth-shell">
+    <video class="auth-bg-video" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+      <source :src="loginBackgroundVideo" type="video/mp4" />
+    </video>
+    <div class="auth-bg-overlay"></div>
+
     <div class="auth-visual">
       <div class="auth-brand">
         <div class="brand-mark">AI</div>
@@ -532,17 +735,19 @@ onBeforeUnmount(() => {
         <span>智课</span>
       </div>
 
-      <button
-        v-for="item in navItems"
-        :key="item.key"
-        class="nav-button"
-        :class="{ active: activePage === item.key }"
-        :title="item.label"
-        @click="activePage = item.key"
-      >
-        <el-icon><component :is="item.icon" /></el-icon>
-        <span>{{ item.label }}</span>
-      </button>
+      <div class="nav-stack">
+        <button
+          v-for="item in navItems"
+          :key="item.key"
+          class="nav-button"
+          :class="{ active: activePage === item.key }"
+          :title="item.label"
+          @click="activePage = item.key"
+        >
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </button>
+      </div>
 
       <div class="online-block">
         <span class="live-dot"></span>
@@ -610,19 +815,39 @@ onBeforeUnmount(() => {
                 <button class="tool-button active" title="实时画面">
                   <el-icon><VideoCamera /></el-icon>
                 </button>
-                <button class="tool-button" title="AI 标注">
+                <button
+                  class="tool-button"
+                  :class="{ active: showAiAnnotations }"
+                  title="AI 标注"
+                  type="button"
+                  @click="toggleAiAnnotations"
+                >
                   <el-icon><Search /></el-icon>
                 </button>
-                <button class="tool-button" title="区域规则">
+                <button
+                  class="tool-button"
+                  :class="{ active: showRuleOverlay }"
+                  title="区域规则"
+                  type="button"
+                  @click="toggleRuleOverlay"
+                >
                   <el-icon><Setting /></el-icon>
                 </button>
-                <button class="tool-button" title="全屏查看">
+                <button class="tool-button" title="放大实时画面" type="button" @click="openExpandedVideo">
                   <el-icon><FullScreen /></el-icon>
                 </button>
               </div>
             </div>
 
-            <div class="video-stage">
+            <div
+              ref="videoStageRef"
+              class="video-stage"
+              :class="{ drawing: isDrawingForbiddenZone, locked: !showRuleOverlay }"
+              @mousedown.left.prevent="startForbiddenZoneDraw"
+              @mousemove="updateForbiddenZoneDraw"
+              @mouseup="finishForbiddenZoneDraw"
+              @mouseleave="finishForbiddenZoneDraw"
+            >
               <img
                 v-if="!videoError"
                 class="video-stream"
@@ -649,18 +874,35 @@ onBeforeUnmount(() => {
                 </span>
               </div>
 
-              <div class="roi-zone">禁用手机区</div>
-              <div class="heat-point h1"></div>
-              <div class="heat-point h2"></div>
-              <div class="person-box p1"><span>张同学 96%</span></div>
-              <div class="person-box p2"><span>低头 6.2s</span></div>
-              <div class="person-box p3"><span>手机违规</span></div>
-              <div class="person-box p4"><span>陌生人</span></div>
+              <div
+                v-if="showRuleOverlay && activeForbiddenRect"
+                class="drawn-forbidden-zone"
+                :class="{ drafting: isDrawingForbiddenZone || hasPendingForbiddenZone, confirmed: hasConfirmedForbiddenZone }"
+                :style="forbiddenZoneStyle"
+              >
+                <span>{{ isDrawingForbiddenZone ? "绘制中" : hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区" }}</span>
+              </div>
+              <div v-else-if="showRuleOverlay" class="draw-hint">按住鼠标左键拖拽，绘制禁用区</div>
+              <div v-else class="draw-hint muted">区域规则层已关闭</div>
+              <div v-if="showRuleOverlay && (hasPendingForbiddenZone || hasConfirmedForbiddenZone)" class="zone-actions">
+                <button v-if="hasPendingForbiddenZone" type="button" class="zone-action primary" @click.stop="confirmForbiddenZone">
+                  确定
+                </button>
+                <button type="button" class="zone-action" @click.stop="clearForbiddenZone">删除重新选择</button>
+              </div>
+              <template v-if="showAiAnnotations">
+                <div class="heat-point h1"></div>
+                <div class="heat-point h2"></div>
+                <div class="person-box p1"><span>张同学 96%</span></div>
+                <div class="person-box p2"><span>低头 6.2s</span></div>
+                <div v-if="hasConfirmedForbiddenZone" class="person-box p3"><span>手机违规</span></div>
+                <div class="person-box p4"><span>陌生人</span></div>
+              </template>
 
-              <div class="insight-strip">
+              <div v-if="showAiAnnotations" class="insight-strip">
                 <article>
                   <span>AI 研判</span>
-                  <b>{{ summary.title || "手机违规风险上升" }}</b>
+                  <b>{{ activeSummary.title || "当前风险指数中高" }}</b>
                 </article>
                 <article>
                   <span>行为趋势</span>
@@ -722,12 +964,12 @@ onBeforeUnmount(() => {
             </div>
             <div class="ai-card">
               <div class="score-row">
-                <div class="risk-score" :style="{ '--score': `${summary.risk_score || 58}%` }">
-                  {{ summary.risk_score || 58 }}
+                <div class="risk-score" :style="{ '--score': `${activeSummary.risk_score || 58}%` }">
+                  {{ activeSummary.risk_score || 58 }}
                 </div>
                 <div>
-                  <b>{{ summary.title || "当前风险指数中高" }}</b>
-                  <p>{{ summary.summary || "手机违规和低头行为在同一区域叠加出现，建议优先复核。" }}</p>
+                  <b>{{ activeSummary.title || "当前风险指数中高" }}</b>
+                  <p>{{ activeSummary.summary || "当前画面风险可控，系统持续监测异常行为。" }}</p>
                 </div>
               </div>
               <div class="action-pills">
@@ -740,7 +982,7 @@ onBeforeUnmount(() => {
                 </article>
               </div>
               <div class="timeline">
-                <div v-for="item in summary.timeline || []" :key="item.time">
+                <div v-for="item in activeSummary.timeline || []" :key="item.time">
                   <time>{{ item.time }}</time>
                   <span>{{ item.text }}</span>
                 </div>
@@ -774,12 +1016,22 @@ onBeforeUnmount(() => {
               <h2>规则概览</h2>
             </div>
             <div class="rule-list">
+              <article class="zone-coordinate-card">
+                <div>
+                  <b>当前禁用区</b>
+                  <span v-if="forbiddenZoneCoordinates.length">
+                    {{ forbiddenZoneCoordinates.map((point) => `(${formatCoord(point.x)}, ${formatCoord(point.y)})`).join(" / ") }}
+                  </span>
+                  <span v-else-if="hasPendingForbiddenZone">区域待确认，点击确定后输出四角坐标</span>
+                  <span v-else>尚未绘制，拖拽实时画面生成四角坐标</span>
+                </div>
+              </article>
               <article v-for="rule in rules" :key="rule.id">
                 <div>
                   <b>{{ rule.name }}</b>
-                  <span>{{ rule.summary }}，阈值 {{ rule.threshold_seconds }} 秒</span>
+                  <span>{{ ruleSummary(rule) }}，阈值 {{ rule.threshold_seconds }} 秒</span>
                 </div>
-                <el-switch v-model="rule.enabled" />
+                <el-switch v-model="rule.enabled" :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)" />
               </article>
             </div>
           </section>
@@ -919,10 +1171,10 @@ onBeforeUnmount(() => {
               <article v-for="rule in rules" :key="rule.id">
                 <div>
                   <b>{{ rule.name }}</b>
-                  <span>{{ rule.summary }}</span>
+                  <span>{{ ruleSummary(rule) }}</span>
                 </div>
                 <el-input-number v-model="rule.threshold_seconds" :min="1" :max="30" size="small" />
-                <el-switch v-model="rule.enabled" />
+                <el-switch v-model="rule.enabled" :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)" />
               </article>
             </div>
           </section>
@@ -934,8 +1186,18 @@ onBeforeUnmount(() => {
             <div class="zone-canvas compact-zone">
               <div class="canvas-board">讲台 / 黑板</div>
               <div class="seat-zone s1">座位区</div>
-              <div class="seat-zone s2">禁用手机区</div>
+              <div class="seat-zone s2">动态禁用区</div>
               <div class="seat-zone s3">危险区</div>
+            </div>
+          </section>
+
+          <section class="panel span-6">
+            <div class="panel-head compact">
+              <h2>实时禁用区坐标</h2>
+            </div>
+            <div class="coordinate-export">
+              <p>后续提交给其他模块的矩形区域使用以下四角归一化坐标。</p>
+              <pre>{{ JSON.stringify(hasConfirmedForbiddenZone ? forbiddenZonePayload : { status: hasPendingForbiddenZone ? "pending_confirm" : "empty", message: "禁用区确认后才输出坐标" }, null, 2) }}</pre>
             </div>
           </section>
 
@@ -1122,5 +1384,51 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </main>
+
+    <teleport to="body">
+      <div v-if="isVideoExpanded" class="video-expanded-mask" @click.self="closeExpandedVideo">
+        <section class="video-expanded-panel">
+          <header class="video-expanded-head">
+            <div>
+              <h2>{{ currentStream.stream_name || activeStreamId }} 放大实时画面</h2>
+              <span>AI 标注：{{ showAiAnnotations ? "开启" : "关闭" }} / 区域规则：{{ showRuleOverlay ? "开启" : "关闭" }}</span>
+            </div>
+            <button type="button" class="zone-action" @click="closeExpandedVideo">关闭</button>
+          </header>
+          <div class="video-expanded-stage">
+            <img
+              v-if="!videoError"
+              class="video-stream"
+              :src="videoFeedUrl"
+              alt="放大的 AI 处理后视频流"
+              @load="handleVideoLoad"
+              @error="handleVideoError"
+            />
+            <div class="classroom-fallback" :class="{ muted: !videoError && isVideoLive }">
+              <div class="board"></div>
+              <div class="desk d1"></div>
+              <div class="desk d2"></div>
+              <div class="desk d3"></div>
+            </div>
+            <div
+              v-if="showRuleOverlay && activeForbiddenRect"
+              class="drawn-forbidden-zone"
+              :class="{ drafting: isDrawingForbiddenZone || hasPendingForbiddenZone, confirmed: hasConfirmedForbiddenZone }"
+              :style="forbiddenZoneStyle"
+            >
+              <span>{{ hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区" }}</span>
+            </div>
+            <template v-if="showAiAnnotations">
+              <div class="heat-point h1"></div>
+              <div class="heat-point h2"></div>
+              <div class="person-box p1"><span>张同学 96%</span></div>
+              <div class="person-box p2"><span>低头 6.2s</span></div>
+              <div v-if="hasConfirmedForbiddenZone" class="person-box p3"><span>手机违规</span></div>
+              <div class="person-box p4"><span>陌生人</span></div>
+            </template>
+          </div>
+        </section>
+      </div>
+    </teleport>
   </div>
 </template>
