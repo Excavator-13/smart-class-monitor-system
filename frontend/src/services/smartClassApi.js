@@ -5,7 +5,7 @@ import {
   mockRules,
   mockStreams,
   mockStudents,
-  mockSummary
+  mockSummary,
 } from "../data/mockData";
 
 function unwrapResponse(data) {
@@ -15,7 +15,7 @@ function unwrapResponse(data) {
 export async function login(payload) {
   const { data } = await apiClient.post("/auth/login", {
     username: payload.username,
-    password: payload.password
+    password: payload.password,
   });
   return unwrapResponse(data);
 }
@@ -47,16 +47,18 @@ export function fetchStreamStatus(streamId) {
 }
 
 export function fetchAlerts(params = {}) {
-  return safeGet(apiClient, "/alerts", { list: mockAlerts, total: mockAlerts.length }, params);
+  return safeGet(
+    apiClient,
+    "/alerts",
+    { list: mockAlerts, total: mockAlerts.length },
+    params,
+  );
 }
 
 export function fetchAlertStats(params = {}) {
   const fallback = {
-    current_stream: "A101",
-    avg_latency: "1.8s",
-    recognized_count: 126,
     pending_alerts: 7,
-    today_alerts: 18
+    today_alerts: 18,
   };
   return safeGet(apiClient, "/alert-stats", fallback, params);
 }
@@ -66,7 +68,12 @@ export function fetchRules(params = {}) {
 }
 
 export function fetchStudents(params = {}) {
-  return safeGet(apiClient, "/students", { list: mockStudents, total: mockStudents.length }, params);
+  return safeGet(
+    apiClient,
+    "/students",
+    { list: mockStudents, total: mockStudents.length },
+    params,
+  );
 }
 
 export function fetchSystemHealth() {
@@ -81,10 +88,10 @@ export function fetchAnalysisSummary(streamId) {
   return safeGet(aiClient, `/analysis/summary/${streamId}`, mockSummary);
 }
 
-export function fetchModelStatus() {
-  return safeGet(aiClient, "/model/status", {
-    loaded: true,
-    version: "demo-yolo-v8",
-    inference_ms: 42
-  });
+export async function fetchModelStatus() {
+  const result = await safeGet(aiClient, "/model/status", null);
+  if (!result) {
+    return { service_status: "unknown", models: [], streams: [] };
+  }
+  return result;
 }

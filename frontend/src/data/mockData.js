@@ -1,140 +1,190 @@
+export const ALERT_LEVEL_MAP = {
+  info: { label: "信息", color: "#909399" },
+  warning: { label: "警告", color: "#E6A23C" },
+  high: { label: "高危", color: "#F56C6C" },
+};
+
+export const ALERT_STATUS_MAP = {
+  unhandled: { label: "未处理", tag: "danger" },
+  processing: { label: "处理中", tag: "warning" },
+  handled: { label: "已处理", tag: "success" },
+  false_alarm: { label: "误报", tag: "info" },
+  ignored: { label: "已忽略", tag: "info" },
+};
+
+export const ALERT_TYPE_MAP = {
+  face_recognized: "已识别人员",
+  stranger_detected: "陌生人出现",
+  danger_zone_intrusion: "危险区域入侵",
+  danger_zone_stay: "危险区域停留",
+  danger_zone_approach: "危险区域接近",
+  phone_usage: "使用手机",
+  head_down: "长时间低头",
+  leave_seat: "长时间离座",
+  flame_detected: "明火检测",
+  fall_detected: "人员摔倒",
+  crowd_gathering: "异常人流聚集",
+  stream_offline: "视频流中断",
+};
+
 export const mockStreams = [
   {
-    stream_id: "A101",
-    stream_name: "A101 主摄像头",
-    location: "教学楼一层 A101",
+    stream_id: "classroom_01",
+    stream_name: "教室1",
+    location: "教学楼一层",
     status: "online",
-    latency: "1.8s",
-    rtmp_url: "rtmp://media-server/live/a101",
-    remark: "默认演示视频源"
+    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_01",
+    remark: "默认演示视频源",
   },
   {
-    stream_id: "B203",
-    stream_name: "B203 后排摄像头",
-    location: "教学楼二层 B203",
+    stream_id: "classroom_02",
+    stream_name: "教室2",
+    location: "教学楼二层",
     status: "online",
-    latency: "2.4s",
-    rtmp_url: "rtmp://media-server/live/b203",
-    remark: "用于多路扩展"
+    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_02",
+    remark: "用于多路扩展",
   },
   {
-    stream_id: "C305",
-    stream_name: "C305 门口摄像头",
-    location: "教学楼三层 C305",
+    stream_id: "classroom_03",
+    stream_name: "教室3",
+    location: "教学楼三层",
     status: "offline",
-    latency: "--",
-    rtmp_url: "rtmp://media-server/live/c305",
-    remark: "等待推流"
-  }
+    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_03",
+    remark: "等待推流",
+  },
 ];
 
 export const mockAlerts = [
   {
     id: 1001,
-    time: "10:28:19",
-    alert_type: "明火检测",
-    level: "critical",
-    status: "未处理",
-    stream_id: "A101",
-    location: "后排右侧",
-    description: "连续 3 帧置信度达标，已保留截图与片段。",
-    snapshot_path: "/alerts/a101/1001/snapshot.jpg",
-    video_path: "/alerts/a101/1001/record.flv"
+    alert_type: "flame_detected",
+    level: "high",
+    alert_status: "unhandled",
+    stream_id: "classroom_01",
+    confidence: 0.91,
+    occurred_at: "2026-07-09T10:28:19+08:00",
+    snapshot_url: "/snapshots/20260709/evt_001.jpg",
+    record_url: "/classroom_01-2026-07-09-10_28_00.mp4",
   },
   {
     id: 1002,
-    time: "10:22:41",
-    alert_type: "手机违规",
-    level: "high",
-    status: "待确认",
-    stream_id: "A101",
-    location: "第三排右侧",
-    description: "禁用区域内持续 5 秒，目标框已追踪。",
-    snapshot_path: "/alerts/a101/1002/snapshot.jpg",
-    video_path: "/alerts/a101/1002/record.flv"
+    alert_type: "phone_usage",
+    level: "warning",
+    alert_status: "processing",
+    stream_id: "classroom_01",
+    confidence: 0.86,
+    occurred_at: "2026-07-09T10:22:41+08:00",
+    snapshot_url: "/snapshots/20260709/evt_002.jpg",
+    record_url: "/classroom_01-2026-07-09-10_22_00.mp4",
   },
   {
     id: 1003,
-    time: "09:58:07",
-    alert_type: "陌生人",
-    level: "medium",
-    status: "已处理",
-    stream_id: "A101",
-    location: "教室门口",
-    description: "人脸识别失败，已生成身份核验记录。",
-    snapshot_path: "/alerts/a101/1003/snapshot.jpg",
-    video_path: "/alerts/a101/1003/record.flv"
+    alert_type: "stranger_detected",
+    level: "warning",
+    alert_status: "handled",
+    stream_id: "classroom_01",
+    confidence: 0.72,
+    occurred_at: "2026-07-09T09:58:07+08:00",
+    snapshot_url: "/snapshots/20260709/evt_003.jpg",
+    record_url: "/classroom_01-2026-07-09-09_58_00.mp4",
   },
   {
     id: 1004,
-    time: "09:34:12",
-    alert_type: "低头异常",
-    level: "low",
-    status: "误报",
-    stream_id: "A101",
-    location: "第二排中部",
-    description: "管理员标记为误报，保留追溯记录。",
-    snapshot_path: "/alerts/a101/1004/snapshot.jpg",
-    video_path: "/alerts/a101/1004/record.flv"
-  }
+    alert_type: "head_down",
+    level: "info",
+    alert_status: "false_alarm",
+    stream_id: "classroom_01",
+    confidence: 0.65,
+    occurred_at: "2026-07-09T09:34:12+08:00",
+    snapshot_url: "/snapshots/20260709/evt_004.jpg",
+    record_url: "/classroom_01-2026-07-09-09_34_00.mp4",
+  },
 ];
 
 export const mockRules = [
   {
     id: 1,
-    rule_type: "phone",
-    name: "手机违规",
+    rule_type: "danger_zone",
+    name: "危险区域检测",
     enabled: true,
-    threshold_seconds: 5,
-    summary: "仅在禁用手机区域生效"
+    threshold_seconds: 2,
+    confidence_threshold: 0.6,
+    cooldown_seconds: 45,
   },
   {
     id: 2,
-    rule_type: "fire",
-    name: "明火检测",
+    rule_type: "phone_usage",
+    name: "使用手机检测",
     enabled: true,
     threshold_seconds: 3,
-    summary: "最高优先级，连续帧触发"
+    confidence_threshold: 0.6,
+    cooldown_seconds: 45,
   },
   {
     id: 3,
-    rule_type: "fall",
-    name: "摔倒检测",
+    rule_type: "head_down",
+    name: "长时间低头检测",
     enabled: true,
-    threshold_seconds: 4,
-    summary: "倒地持续确认后告警"
+    threshold_seconds: 5,
+    confidence_threshold: 0.6,
+    cooldown_seconds: 45,
   },
   {
     id: 4,
-    rule_type: "head_down",
-    name: "低头 / 离座",
+    rule_type: "crowd_gathering",
+    name: "异常人流聚集检测",
     enabled: true,
-    threshold_seconds: 6,
-    summary: "结合座位区域和时间窗口判断"
-  }
+    threshold_seconds: 3,
+    confidence_threshold: 0.6,
+    cooldown_seconds: 60,
+  },
 ];
 
 export const mockStudents = [
-  { id: 1, student_no: "2026001", name: "张同学", class_name: "高一 1 班", face_registered: true, last_seen: "10:28" },
-  { id: 2, student_no: "2026002", name: "李同学", class_name: "高一 1 班", face_registered: true, last_seen: "10:24" },
-  { id: 3, student_no: "VISITOR", name: "陌生人记录", class_name: "待核验", face_registered: false, last_seen: "09:58" }
+  {
+    id: 1,
+    student_no: "2026001",
+    name: "张同学",
+    class_name: "高一 1 班",
+    face_registered: true,
+  },
+  {
+    id: 2,
+    student_no: "2026002",
+    name: "李同学",
+    class_name: "高一 1 班",
+    face_registered: true,
+  },
+  {
+    id: 3,
+    student_no: "VISITOR",
+    name: "陌生人记录",
+    class_name: "待核验",
+    face_registered: false,
+  },
 ];
 
 export const mockHealth = {
   rtmp: "online",
   ai: "online",
   api: "online",
-  database: "online"
+  database: "online",
 };
 
 export const mockSummary = {
+  stream_id: "classroom_01",
   risk_score: 58,
+  risk_level: "warning",
   title: "当前风险指数中高",
   summary: "手机违规和低头行为在同一区域叠加出现，建议教师优先查看第三排右侧。",
   actions: ["自动抓拍", "等待人工确认", "保留追踪记录"],
+  counts: {
+    phone_usage: 1,
+    head_down: 1,
+  },
   timeline: [
-    { time: "10:22", text: "检测到手机目标进入禁用区域" },
-    { time: "10:23", text: "持续低头超过阈值，触发候选事件" },
-    { time: "10:24", text: "自动抓拍，等待人工确认" }
-  ]
+    { time: "10:25", text: "行为识别模型完成目标复核" },
+    { time: "10:24", text: "截图、短视频和事件记录已完成关联" },
+    { time: "10:23", text: "建议优先确认手机违规与低头叠加事件" },
+  ],
 };
