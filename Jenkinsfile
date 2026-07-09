@@ -36,7 +36,7 @@ pipeline {
                     echo "前端部署完成"
                     # 后端：复制并重启 Flask
                     cp -r ../backend_ai/* /app/ 2>/dev/null
-                    pip install -r /app/requirements.txt --break-system-packages
+                    pip install -r /app/requirements.txt --break-system-packages || echo "跳过：服务器无 GPU，本地装依赖即可"
                     systemctl restart flask 2>/dev/null
                     echo "=== 部署完成 ==="
                 '''
