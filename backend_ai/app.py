@@ -42,6 +42,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     spring = app_config.get("spring", {})
     spring_base_url = os.environ.get("SPRING_BASE_URL") or spring.get("base_url", "http://localhost:8080")
+    internal_token = os.environ.get("INTERNAL_TOKEN") or spring.get("internal_token")
     stream_cfg = app_config.get("stream", {})
     events_cfg = app_config.get("events", {})
 
@@ -49,6 +50,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     config_client = config_client or ConfigClient(
         base_url=spring_base_url,
         timeout=float(spring.get("timeout_seconds", 5)),
+        internal_token=internal_token,
     )
     event_service = (overrides or {}).get("event_service") if overrides else None
     event_service = event_service or EventService(
@@ -66,7 +68,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
     behavior_service = behavior_service or BehaviorService()
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,

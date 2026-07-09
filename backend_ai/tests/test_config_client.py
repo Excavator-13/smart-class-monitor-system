@@ -16,7 +16,7 @@ class FakeSession:
     def __init__(self):
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append((url, params, timeout))
         if url.endswith("/streams"):
             return FakeResponse({"data": {"items": [{"stream_id": "classroom_01", "rtmp_url": "rtmp://x", "status": "enabled"}]}})
@@ -48,4 +48,3 @@ def test_reload_face_features():
 
     assert result["loaded_count"] == 1
     assert "2024001" in client.get_face_features()
-
