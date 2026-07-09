@@ -6,10 +6,11 @@ import requests
 
 
 class AlertClient:
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None):
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None, internal_token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
+        self.internal_token = internal_token
 
     def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         target = event.get("target") or {}
@@ -41,7 +42,9 @@ class AlertClient:
 
     def push_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         payload = self.map_event_to_alert(event, record_path=record_path)
-        response = self.session.post(f"{self.base_url}/alerts/ai", json=payload, timeout=self.timeout)
+        headers = {}
+        if self.internal_token:
+            headers["X-Internal-Token"] = self.internal_token
+        response = self.session.post(f"{self.base_url}/alerts/ai", json=payload, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
-
