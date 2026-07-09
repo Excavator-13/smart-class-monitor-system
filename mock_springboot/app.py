@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 BASE_DIR = Path(__file__).resolve().parent
+
+load_dotenv(BASE_DIR / ".env")
 
 
 def load_mock_data() -> dict:
@@ -50,4 +54,7 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    host = os.environ.get("MOCK_HOST", "0.0.0.0")
+    port = int(os.environ.get("MOCK_PORT", "8080"))
+    debug = os.environ.get("MOCK_DEBUG", "true").lower() in ("true", "1", "yes")
+    app.run(host=host, port=port, debug=debug)

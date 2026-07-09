@@ -10,6 +10,7 @@ import com.smartclass.monitor.mapper.VideoStreamMapper;
 import com.smartclass.monitor.vo.StreamPreviewVO;
 import com.smartclass.monitor.vo.StreamStatusVO;
 import com.smartclass.monitor.vo.StreamVO;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +25,12 @@ public class StreamService {
 
     private final VideoStreamMapper mapper;
     private final NginxClient nginxClient;
+    private final String aiBaseUrl;
 
-    public StreamService(VideoStreamMapper mapper, NginxClient nginxClient) {
+    public StreamService(VideoStreamMapper mapper, NginxClient nginxClient, @Value("${ai.base-url}") String aiBaseUrl) {
         this.mapper = mapper;
         this.nginxClient = nginxClient;
+        this.aiBaseUrl = aiBaseUrl;
     }
 
     public PageResult<StreamVO> listStreams(String status, String keyword, int page, int pageSize) {
@@ -93,7 +96,7 @@ public class StreamService {
         if (entity == null) throw new BusinessException(404, "视频源不存在");
 
         StreamPreviewVO vo = new StreamPreviewVO();
-        vo.setMjpegUrl("http://39.106.209.208:5000/video_feed/" + streamId);
+        vo.setMjpegUrl(aiBaseUrl + "/video_feed/" + streamId);
         vo.setRtmpUrl(entity.getRtmpUrl());
         vo.setHlsUrl(entity.getHlsUrl());
         return vo;
