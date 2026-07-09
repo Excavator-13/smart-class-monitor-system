@@ -1,6 +1,6 @@
 streams:
   - stream_id: classroom_01
-    rtmp_url: rtmp://localhost/live/classroom_01
+    rtmp_url: rtmp://${RTMP_BASE_URL}/live/classroom_01
     name: 教室1
     status: enabled
 
