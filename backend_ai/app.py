@@ -12,7 +12,7 @@ from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.analysis_service import AnalysisService
 from backend_ai.services.behavior_service import BehaviorService
 from backend_ai.services.config_client import ConfigClient
-from backend_ai.services.event_service import EventService
+from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
@@ -120,6 +120,42 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             since=request.args.get("since"),
         )
         return json_response({"items": items})
+
+    @app.get("/analysis/summary/<stream_id>")
+    def analysis_summary(stream_id: str):
+        events = event_service.query(stream_id=stream_id, limit=200)
+        counts: dict[str, int] = {}
+        for event in events:
+            et = event.get("event_type", "unknown")
+            counts[et] = counts.get(et, 0) + 1
+        high_count = sum(1 for e in events if e.get("level") == "high")
+        warning_count = sum(1 for e in events if e.get("level") == "warning")
+        if high_count > 0:
+            risk_level = "high"
+        elif warning_count > 3:
+            risk_level = "warning"
+        else:
+            risk_level = "low"
+        risk_score = min(100, high_count * 30 + warning_count * 10)
+        parts = []
+        for et, cnt in counts.items():
+            parts.append(f"{EVENT_NAMES.get(et, et)} {cnt} 起")
+        summary = "当前无异常事件" if not parts else "，".join(parts)
+        recent = events[:5]
+        timeline = [
+            {"time": e.get("occurred_at", "")[11:16], "text": f"{EVENT_NAMES.get(e.get('event_type', ''), e.get('event_type', ''))} 置信度 {e.get('confidence', 0):.0%}"}
+            for e in recent
+        ]
+        return json_response({
+            "stream_id": stream_id,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "title": "当前风险指数低" if risk_level == "low" else "当前风险指数中高" if risk_level == "warning" else "当前风险指数高",
+            "summary": summary,
+            "actions": ["自动抓拍", "等待人工确认", "保留追踪记录"] if risk_level != "low" else ["持续监控"],
+            "counts": counts,
+            "timeline": timeline,
+        })
 
     @app.post("/face/feature/extract")
     def face_feature_extract():
