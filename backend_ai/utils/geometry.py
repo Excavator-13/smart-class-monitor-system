@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Tuple
 
-Point = tuple[float, float]
+Point = Tuple[float, float]
 BBox = Sequence[float]
 
 
