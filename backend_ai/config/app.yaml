@@ -1,6 +1,6 @@
 service:
   host: 0.0.0.0
-  port: 5000
+  port: 5001
   debug: false
 
 spring:
@@ -25,4 +25,3 @@ events:
   default_cooldown_seconds: 45
   default_threshold_seconds: 3
   default_confidence_threshold: 0.6
-
