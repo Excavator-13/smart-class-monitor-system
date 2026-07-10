@@ -14,6 +14,7 @@ from backend_ai.services.behavior_service import BehaviorService
 from backend_ai.services.config_client import ConfigClient
 from backend_ai.services.event_service import EventService
 from backend_ai.services.face_service import FaceError, FaceService
+from backend_ai.services.fire_service import FireService
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
@@ -65,6 +66,27 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     zone_service = zone_service or ZoneService()
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
     behavior_service = behavior_service or BehaviorService()
+
+    fire_settings = (model_config.get("models") or {}).get("fire", {})
+    fire_service = (overrides or {}).get("fire_service") if overrides else None
+    if fire_service is None and fire_settings.get("enabled", False):
+        try:
+            from ultralytics import YOLO
+            weights = fire_settings.get("weights", "models/yolo/yolo_fire.pt")
+            fire_model = YOLO(BASE_DIR / weights if not Path(weights).is_absolute() else Path(weights))
+            fire_service = FireService(
+                model=fire_model,
+                confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
+                max_detections=int(fire_settings.get("max_detections", 20)),
+                min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+            )
+            print(f"[Fire] 明火检测模型加载成功: {weights}")
+        except Exception as exc:
+            print(f"[Fire] 明火检测模型加载失败: {exc}")
+            fire_service = FireService(model=None)
+    elif fire_service is None:
+        fire_service = FireService(model=None)
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
     alert_client = alert_client or AlertClient(base_url=spring_base_url)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
@@ -79,6 +101,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         behavior_service=behavior_service,
         event_service=event_service,
         config_client=config_client,
+        fire_service=fire_service,
         alert_client=alert_client,
     )
 
@@ -88,6 +111,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         "face_service": face_service,
         "zone_service": zone_service,
         "behavior_service": behavior_service,
+        "fire_service": fire_service,
         "alert_client": alert_client,
         "stream_manager": stream_manager,
         "analysis_service": analysis_service,
@@ -105,7 +129,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": False, "model_name": "reserved", "version": "not_in_scope", "avg_infer_ms": None},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
@@ -150,7 +174,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             return error_response(40401, "stream not found", status=404)
         annotate = request.args.get("annotate", "true").lower() != "false"
         modules_param = request.args.get("modules", "all")
-        modules = {"face", "zone", "behavior"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
+        modules = {"face", "zone", "behavior", "fire"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
 
         def generate():
             while True:

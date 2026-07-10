@@ -6,10 +6,11 @@ import numpy as np
 
 
 class AnalysisService:
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, alert_client: Any | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
+        self.fire_service = fire_service
         self.event_service = event_service
         self.config_client = config_client
         self.alert_client = alert_client
@@ -36,6 +37,15 @@ class AnalysisService:
                     persons,
                     self.config_client.get_zones(stream_id),
                     self.config_client.get_rule("danger_zone"),
+                )
+            )
+
+        if "fire" in enabled and self.fire_service is not None:
+            detected.extend(
+                self.fire_service.detect(
+                    stream_id,
+                    frame,
+                    {k: v for k, v in self.config_client.cache.rules.items()},
                 )
             )
 

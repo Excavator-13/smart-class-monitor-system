@@ -37,7 +37,7 @@ pipeline {
                     # 后端：复制并重启 Flask
                     cp -r ../backend_ai/* /app/ 2>/dev/null
                     pip install -r /app/requirements.txt --break-system-packages || echo "跳过：服务器无 GPU，本地装依赖即可"
-                    systemctl restart flask 2>/dev/null || echo "Flask 服务未配，重启跳过"
+                    systemctl restart flask 2>/dev/null
                     echo "=== 部署完成 ==="
                 '''
             }
