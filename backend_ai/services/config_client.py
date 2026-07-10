@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,11 +8,26 @@ from typing import Any
 import requests
 
 
+def parse_json_field(value: Any | None, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return default
+
+
 def _items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict) and "data" in payload:
         payload = payload["data"]
     if isinstance(payload, dict) and "items" in payload:
         payload = payload["items"]
+    elif isinstance(payload, dict) and "records" in payload:
+        payload = payload["records"]
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):

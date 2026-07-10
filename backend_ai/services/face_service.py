@@ -6,6 +6,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+from backend_ai.services.config_client import parse_json_field
 from backend_ai.utils.image_utils import decode_base64_image
 
 
@@ -101,7 +102,7 @@ class FaceService:
             bbox = face["bbox"] if isinstance(face, dict) else [int(v) for v in face.bbox]
             best: tuple[float, dict[str, Any] | None] = (-1.0, None)
             for student in feature_cache.values():
-                vector = np.asarray(student.get("feature_vector") or [], dtype=float)
+                vector = np.asarray(parse_json_field(student.get("feature_vector"), []), dtype=float)
                 if vector.size != embedding.size or vector.size == 0:
                     continue
                 similarity = float(np.dot(embedding, vector) / ((np.linalg.norm(embedding) * np.linalg.norm(vector)) or 1.0))

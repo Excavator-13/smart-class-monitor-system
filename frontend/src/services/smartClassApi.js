@@ -1,6 +1,7 @@
 import { aiClient, apiClient, joinAiUrl, safeGet } from "./http";
 import {
   mockAlerts,
+  mockAnalysisEvents,
   mockHealth,
   mockRules,
   mockStreams,
@@ -50,17 +51,17 @@ export function fetchAlerts(params = {}) {
   return safeGet(
     apiClient,
     "/alerts",
-    { list: mockAlerts, total: mockAlerts.length },
+    { records: mockAlerts, total: mockAlerts.length },
     params,
   );
 }
 
-export function fetchAlertStats(params = {}) {
+export function fetchAlertStats() {
   const fallback = {
-    pending_alerts: 7,
-    today_alerts: 18,
+    unhandled_count: 7,
+    today_total: 18,
   };
-  return safeGet(apiClient, "/alert-stats", fallback, params);
+  return safeGet(apiClient, "/alert-stats", fallback);
 }
 
 export function fetchRules(params = {}) {
@@ -71,7 +72,7 @@ export function fetchStudents(params = {}) {
   return safeGet(
     apiClient,
     "/students",
-    { list: mockStudents, total: mockStudents.length },
+    { records: mockStudents, total: mockStudents.length },
     params,
   );
 }
@@ -81,7 +82,7 @@ export function fetchSystemHealth() {
 }
 
 export function fetchAnalysisEvents(params = {}) {
-  return safeGet(aiClient, "/analysis/events", mockAlerts.slice(0, 2), params);
+  return safeGet(aiClient, "/analysis/events", mockAnalysisEvents, params);
 }
 
 export function fetchAnalysisSummary(streamId) {

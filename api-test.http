@@ -86,7 +86,7 @@ POST {{baseUrl}}/streams
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"stream_name":"一号教室","stream_id":"classroom_01","rtmp_url":"rtmp://localhost:9090/live/classroom_01","remark":""}
+{"stream_name":"2号教室","stream_id":"classroom_02","rtmp_url":"rtmp://localhost:9090/live/classroom_02","remark":""}
 
 ### 推流状态
 GET {{baseUrl}}/streams/classroom_01/status

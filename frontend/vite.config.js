@@ -13,19 +13,19 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: env.VITE_API_BASE || "http://localhost:8080",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, "")
+          rewrite: (path) => path.replace(/^\/api/, ""),
         },
         "/ai": {
-          target: env.VITE_AI_BASE || "http://localhost:5000",
+          target: env.VITE_AI_BASE || "http://localhost:5001",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/ai/, "")
+          rewrite: (path) => path.replace(/^\/ai/, ""),
         },
         "/media": {
           target: env.VITE_NGINX_BASE || "http://localhost:9092",
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/media/, "")
-        }
-      }
-    }
+          rewrite: (path) => path.replace(/^\/media/, ""),
+        },
+      },
+    },
   };
 });
