@@ -13,7 +13,7 @@ class FakeSession:
     def __init__(self):
         self.payload = None
 
-    def post(self, url, json=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None):
         self.payload = json
         return FakeResponse()
 
@@ -52,4 +52,3 @@ def test_push_alert_posts_to_springboot():
 
     assert result["code"] == 0
     assert session.payload["alert_type"] == "head_down"
-

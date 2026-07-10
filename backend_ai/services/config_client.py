@@ -29,14 +29,18 @@ class ConfigCache:
 
 
 class ConfigClient:
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None):
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None, internal_token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
+        self.internal_token = internal_token
         self.cache = ConfigCache()
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        response = self.session.get(f"{self.base_url}{path}", params=params, timeout=self.timeout)
+        headers = {}
+        if self.internal_token:
+            headers["X-Internal-Token"] = self.internal_token
+        response = self.session.get(f"{self.base_url}{path}", params=params, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
 
@@ -112,4 +116,3 @@ class ConfigClient:
 
     def get_face_features(self) -> dict[str, dict[str, Any]]:
         return self.cache.face_features
-
