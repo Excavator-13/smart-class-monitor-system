@@ -188,7 +188,7 @@ const strangerCount = computed(
   () => students.value.filter((item) => !item.face_registered).length,
 );
 const onlineStreamCount = computed(
-  () => streams.value.filter((item) => item.status === "online").length,
+  () => streams.value.filter((item) => item.status === "enabled").length,
 );
 
 const healthItems = computed(() => [
@@ -201,13 +201,13 @@ const healthItems = computed(() => [
 const metricCards = computed(() => [
   { label: "当前视频源", value: activeStreamId.value, icon: Camera },
   {
-    label: "在线视频源",
+    label: "已启用视频源",
     value: `${onlineStreamCount.value}/${streams.value.length || 0}`,
     icon: Clock,
   },
   {
     label: "今日告警",
-    value: stats.value.today_alerts ?? 0,
+    value: stats.value.today_total ?? 0,
     icon: User,
   },
   { label: "待处理告警", value: pendingAlertCount.value, icon: Bell },
@@ -462,7 +462,7 @@ function normalizeHealth(payload) {
   return {
     rtmp: payload.rtmp || payload.rtmp_status || payload.media || "online",
     ai: payload.ai || payload.ai_status || "online",
-    api: payload.api || payload.backend || "online",
+    api: payload.backend || payload.api || "online",
     database: payload.database || payload.db || "online",
   };
 }
@@ -707,7 +707,7 @@ async function loadDashboard() {
   ] = await Promise.all([
     fetchStreams(),
     fetchAlerts({ stream_id: activeStreamId.value, page: 1, page_size: 20 }),
-    fetchAlertStats({ stream_id: activeStreamId.value }),
+    fetchAlertStats(),
     fetchRules(),
     fetchStudents({ page: 1, page_size: 10 }),
     fetchSystemHealth(),

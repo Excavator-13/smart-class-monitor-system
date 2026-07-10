@@ -11,4 +11,5 @@ onnxruntime-gpu==1.23.2
 ultralytics==8.4.90
 torch==2.11.0+cu128
 torchvision==0.26.0+cu128
+dingtalk-stream
 pytest
