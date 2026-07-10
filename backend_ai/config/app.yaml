@@ -26,3 +26,17 @@ events:
   default_threshold_seconds: 3
   default_confidence_threshold: 0.6
 
+dingtalk:
+  webhook: "https://oapi.dingtalk.com/robot/send?access_token=fe78e4a17b3c97319bec619480e364e883df2305aae06d5258836fee6ea0a8ee"
+  enabled: true
+  step_timeout: 30      # 每步间隔秒数
+  persons:
+    zzc:
+      name: "章志超"
+      mobile: "15270985055"
+      superior: "组长"
+    组长:
+      name: "项重善"
+      mobile: ""           # 填组长的手机号
+      superior: null
+
