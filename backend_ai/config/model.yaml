@@ -3,12 +3,17 @@ models:
     enabled: true
     provider: insightface
     name: buffalo_l
+    providers:
+      - CUDAExecutionProvider
+    ctx_id: 0
+    det_size: [640, 640]
     feature_dim: 512
     similarity_threshold: 0.45
   behavior:
     enabled: true
     provider: ultralytics
-    weights: models/yolo/behavior.pt
+    name: yolov8n-coco
+    weights: models/yolo/yolov8n.pt
     confidence_threshold: 0.6
   zone:
     enabled: true
@@ -18,4 +23,3 @@ models:
     enabled: false
     provider: reserved
     reason: not_in_current_scope
-

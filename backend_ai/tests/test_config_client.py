@@ -16,8 +16,8 @@ class FakeSession:
     def __init__(self):
         self.calls = []
 
-    def get(self, url, params=None, timeout=None):
-        self.calls.append((url, params, timeout))
+    def get(self, url, params=None, timeout=None, headers=None):
+        self.calls.append((url, params, timeout, headers))
         if url.endswith("/streams"):
             return FakeResponse({"data": {"items": [{"stream_id": "classroom_01", "rtmp_url": "rtmp://x", "status": "enabled"}]}})
         if url.endswith("/zones"):
@@ -48,4 +48,13 @@ def test_reload_face_features():
 
     assert result["loaded_count"] == 1
     assert "2024001" in client.get_face_features()
+
+
+def test_internal_token_header_is_sent():
+    session = FakeSession()
+    client = ConfigClient(base_url="http://spring", session=session, internal_token="secret")
+
+    client.load_streams()
+
+    assert session.calls[0][3] == {"X-Internal-Token": "secret"}
 

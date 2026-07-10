@@ -16,25 +16,57 @@ class FaceError(ValueError):
 
 
 class FaceService:
-    def __init__(self, model: Any | None = None, feature_dim: int = 512, similarity_threshold: float = 0.45):
+    def __init__(
+        self,
+        model: Any | None = None,
+        feature_dim: int = 512,
+        similarity_threshold: float = 0.45,
+        model_name: str = "buffalo_l",
+        providers: list[str] | None = None,
+        det_size: tuple[int, int] = (640, 640),
+        ctx_id: int = 0,
+    ):
         self.model = model
         self.feature_dim = feature_dim
         self.similarity_threshold = similarity_threshold
         self.loaded = model is not None
+        self.model_name = model_name
+        self.model_version = "v1"
+        self.providers = providers or ["CUDAExecutionProvider"]
+        self.det_size = det_size
+        self.ctx_id = ctx_id
+        self.last_error: str | None = None
 
-    def load_model(self) -> None:
+    def load_model(self, settings: dict[str, Any] | None = None) -> None:
+        if settings and not settings.get("enabled", True):
+            self.loaded = False
+            self.last_error = "face model disabled"
+            return
+        if settings:
+            self.model_name = str(settings.get("name") or self.model_name)
+            self.feature_dim = int(settings.get("feature_dim", self.feature_dim))
+            self.similarity_threshold = float(settings.get("similarity_threshold", self.similarity_threshold))
+            self.providers = list(settings.get("providers") or self.providers)
+            det_size = settings.get("det_size")
+            if isinstance(det_size, list | tuple) and len(det_size) == 2:
+                self.det_size = (int(det_size[0]), int(det_size[1]))
+            self.ctx_id = int(settings.get("ctx_id", self.ctx_id))
         if self.model is not None:
             self.loaded = True
+            self.last_error = None
             return
         try:
             from insightface.app import FaceAnalysis
 
-            app = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-            app.prepare(ctx_id=0, det_size=(640, 640))
+            app = FaceAnalysis(name=self.model_name, providers=self.providers)
+            app.prepare(ctx_id=self.ctx_id, det_size=self.det_size)
             self.model = app
             self.loaded = True
-        except Exception:
+            self.last_error = None
+        except Exception as exc:
+            self.model = None
             self.loaded = False
+            self.last_error = f"face model load failed: {exc}"
 
     def _faces(self, frame: np.ndarray) -> list[Any]:
         if self.model is not None and hasattr(self.model, "get"):
@@ -122,4 +154,3 @@ class FaceService:
                     }
                 )
         return events
-
