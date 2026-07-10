@@ -3,6 +3,8 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Any
 
+from backend_ai.services.config_client import parse_json_field
+
 
 def _detect_torch_device(device: str | None = None) -> str:
     if device and device != "auto":
@@ -96,8 +98,8 @@ class BehaviorService:
                 )
 
         crowd_rule = rules.get("crowd_gathering", {})
-        min_count = int((crowd_rule.get("config_json") or {}).get("min_count", 4))
-        max_distance = float((crowd_rule.get("config_json") or {}).get("max_center_distance", 0.15))
+        min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
+        max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
         if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
             detections.append(
                 {

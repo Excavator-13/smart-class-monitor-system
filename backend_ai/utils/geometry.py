@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from typing import Iterable, Sequence
 
@@ -74,12 +75,18 @@ def distance_point_to_polygon(point: Point, polygon: Iterable[Point]) -> float:
     return min(distances)
 
 
-def parse_polygon_coordinates(coordinates: Iterable[dict | Sequence[float]]) -> list[Point]:
+def parse_polygon_coordinates(coordinates: Iterable[dict | Sequence[float]] | str) -> list[Point]:
+    if isinstance(coordinates, str):
+        try:
+            coordinates = json.loads(coordinates)
+        except (json.JSONDecodeError, ValueError):
+            return []
+    if not isinstance(coordinates, (list, tuple)):
+        return []
     points: list[Point] = []
     for item in coordinates:
         if isinstance(item, dict):
             points.append((float(item["x"]), float(item["y"])))
-        else:
+        elif isinstance(item, (list, tuple)):
             points.append((float(item[0]), float(item[1])))
     return points
-
