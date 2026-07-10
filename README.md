@@ -95,32 +95,119 @@ Vue前端展示
 
 ## 5. 项目运行方式
 
-### 5.1 启动Nginx推流服务器
+> 启动顺序：Nginx → MySQL → backend_system → backend_ai → frontend
+
+### 5.1 前置依赖
+
+| 依赖              | 版本  | 说明                |
+| ----------------- | ----- | ------------------- |
+| Java              | 17+   | backend_system      |
+| Maven             | 3.8+  | backend_system 构建 |
+| Python            | 3.10+ | backend_ai          |
+| Node.js           | 18+   | frontend            |
+| MySQL             | 8.0+  | 数据库              |
+| Nginx + RTMP 模块 | -     | 视频流              |
+
+### 5.2 Nginx RTMP 服务器
 
 ```bash
-service nginx start
+# 验证 RTMP 端口
+curl http://xxx:9092/stat   # 应返回 XML
 ```
 
-### 5.2 启动AI服务（Flask）
+### 5.3 MySQL 数据库
 
 ```bash
-cd backend-ai
-python app.py
+# 创建数据库
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS appdb DEFAULT CHARSET utf8mb4;"
+
+# 表结构由 Spring Boot 启动时自动创建（schema.sql + data.sql）
 ```
 
-### 5.3 启动SpringBoot后端
+### 5.4 backend_system（Spring Boot，端口 8080）
 
 ```bash
-cd backend-system
+cd backend_system
+
+# 1. 配置环境变量（首次）
+cp .env.example .env
+# 编辑 .env，填入数据库连接、JWT 密钥、AI 地址等
+
+# 2. 启动
 mvn spring-boot:run
+
+# 3. 验证
+curl http://localhost:8080/system/health
+# 应返回 {"code":0,"data":{"backend":"up","database":"up",...}}
 ```
 
-### 5.4 启动前端
+**环境变量说明（`.env`）：**
+
+| 变量                         | 说明                 | 默认值                                  |
+| ---------------------------- | -------------------- | --------------------------------------- |
+| `SPRING_DATASOURCE_URL`      | MySQL 连接串         | `jdbc:mysql://localhost:3306/appdb?...` |
+| `SPRING_DATASOURCE_USERNAME` | 数据库用户           | `root`                                  |
+| `SPRING_DATASOURCE_PASSWORD` | 数据库密码           | 空                                      |
+| `AUTH_JWT_SECRET`            | JWT 签名密钥         | `smart-class-monitor-system-...`        |
+| `AI_BASE_URL`                | AI 服务地址          | `http://localhost:5001`                 |
+| `AI_INTERNAL_TOKEN`          | 内部接口鉴权 Token   | 需与 AI 端一致                          |
+| `NGINX_STAT_URL`             | Nginx RTMP stat 地址 | `http://localhost:9092/stat`            |
+
+### 5.5 backend_ai（Flask，端口 5001）
+
+```bash
+cd backend_ai
+
+# 1. 创建虚拟环境
+python -m venv .venv
+source .venv/bin/activate       # macOS/Linux
+# .venv\Scripts\activate        # Windows
+
+# 2. 安装依赖
+#    GPU 服务器（Linux + CUDA）：
+pip install -r requirements.txt
+#    Mac / CPU 环境：
+pip install -r requirements-mac.txt
+
+# 3. 配置环境变量（首次）
+cp .env.example .env
+# 编辑 .env，填入 Spring Boot 地址和内部 Token
+
+# 4. 启动
+python app.py
+
+# 5. 验证
+curl http://localhost:5001/model/status
+# 应返回 {"code":0,"data":{"loaded":true,...}}
+```
+
+**环境变量说明（`.env`）：**
+
+| 变量              | 说明               | 默认值                  |
+| ----------------- | ------------------ | ----------------------- |
+| `SPRING_BASE_URL` | Spring Boot 地址   | `http://localhost:8080` |
+| `INTERNAL_TOKEN`  | 内部接口鉴权 Token | 需与 Spring Boot 端一致 |
+
+**依赖区别：**
+
+| 文件                   | 适用环境    | 区别                             |
+| ---------------------- | ----------- | -------------------------------- |
+| `requirements.txt`     | Linux + GPU | `onnxruntime-gpu`、`torch+cu128` |
+| `requirements-mac.txt` | macOS / CPU | `onnxruntime`、`torch`（CPU）    |
+
+### 5.6 frontend（Vue，端口 5173）
 
 ```bash
 cd frontend
+
+# 1. 安装依赖
 npm install
-npm run serve
+
+# 2. 启动开发服务器
+npm run dev
+
+# 3. 访问
+# http://localhost:5173
 ```
 
 ## 6. 核心功能说明
