@@ -1,8 +1,8 @@
 ### GET request to example server
-GET http://localhost:5000/model/status
+GET http://localhost:5001/model/status
 
 ###
-POST http://localhost:5000/config/reload
+POST http://localhost:5001/config/reload
 Content-Type:application/json
 
 {
@@ -10,7 +10,7 @@ Content-Type:application/json
   "reload_items": ["streams", "zones", "rules"]
 }
 ###
-POST http://localhost:5000/face/features/reload
+POST http://localhost:5001/face/features/reload
 Content-Type:application/json
 
 {
@@ -18,7 +18,7 @@ Content-Type:application/json
   "student_id": null
 }
 ###
-POST http://localhost:5000/face/feature/extract
+POST http://localhost:5001/face/feature/extract
 Content-Type:application/json
 
 {
@@ -27,4 +27,4 @@ Content-Type:application/json
   "student_id": "stu_001"
 }
 ###
-GET http://localhost:5000/analysis/events?stream_id=classroom_01&limit=10
+GET http://localhost:5001/analysis/events?stream_id=classroom_01&limit=10

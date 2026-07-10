@@ -4,6 +4,20 @@ from itertools import combinations
 from typing import Any
 
 
+def _detect_torch_device(device: str | None = None) -> str:
+    if device and device != "auto":
+        return device
+    try:
+        import torch
+    except ImportError:
+        return "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
     px1, py1, px2, py2 = person_bbox
     ox1, oy1, ox2, oy2 = object_bbox
@@ -17,13 +31,15 @@ def _bbox_center(bbox: list[float]) -> tuple[float, float]:
 
 
 class BehaviorService:
-    def __init__(self, model: Any | None = None):
+    def __init__(self, model: Any | None = None, device: str | None = None):
         self.model = model
+        self.device = device
 
     def detect_objects(self, frame: Any) -> list[dict[str, Any]]:
         if self.model is None:
             return []
-        results = self.model(frame)
+        device = _detect_torch_device(self.device)
+        results = self.model(frame, device=device)
         detections: list[dict[str, Any]] = []
         for result in results:
             names = getattr(result, "names", {})
@@ -105,4 +121,3 @@ class BehaviorService:
             if distances and max(distances) <= max_distance:
                 return True
         return False
-

@@ -43,6 +43,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     spring = app_config.get("spring", {})
     spring_base_url = os.environ.get("SPRING_BASE_URL") or spring.get("base_url", "http://localhost:8080")
+    internal_token = os.environ.get("INTERNAL_TOKEN") or spring.get("internal_token")
     stream_cfg = app_config.get("stream", {})
     events_cfg = app_config.get("events", {})
 
@@ -50,25 +51,29 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     config_client = config_client or ConfigClient(
         base_url=spring_base_url,
         timeout=float(spring.get("timeout_seconds", 5)),
+        internal_token=internal_token,
     )
     event_service = (overrides or {}).get("event_service") if overrides else None
     event_service = event_service or EventService(
         max_items=int(events_cfg.get("max_items", 500)),
         default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
     )
+    device_config = model_config.get("device")
     face_settings = (model_config.get("models") or {}).get("face", {})
     face_service = (overrides or {}).get("face_service") if overrides else None
     face_service = face_service or FaceService(
         feature_dim=int(face_settings.get("feature_dim", 512)),
         similarity_threshold=float(face_settings.get("similarity_threshold", 0.45)),
+        device=device_config,
     )
     zone_service = (overrides or {}).get("zone_service") if overrides else None
     zone_service = zone_service or ZoneService()
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
-    behavior_service = behavior_service or BehaviorService()
+    behavior_service = behavior_service or BehaviorService(device=device_config)
     alert_client = (overrides or {}).get("alert_client") if overrides else None
     alert_client = alert_client or AlertClient(base_url=spring_base_url, dingtalk=trigger_alert)
     start_stream()  # 启动钉钉 Stream 监听
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,

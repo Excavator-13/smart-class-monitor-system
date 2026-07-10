@@ -1,3 +1,4 @@
+device: auto
 models:
   face:
     enabled: true
@@ -18,4 +19,3 @@ models:
     enabled: false
     provider: reserved
     reason: not_in_current_scope
-
