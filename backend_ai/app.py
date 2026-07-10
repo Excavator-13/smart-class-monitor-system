@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
+from backend_ai.services.dingtalk_service import start_stream, trigger_alert
 from backend_ai.services.analysis_service import AnalysisService
 from backend_ai.services.behavior_service import BehaviorService
 from backend_ai.services.config_client import ConfigClient
@@ -70,6 +71,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
     behavior_service = behavior_service or BehaviorService(device=device_config)
     alert_client = (overrides or {}).get("alert_client") if overrides else None
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, dingtalk=trigger_alert)
+    start_stream()  # 启动钉钉 Stream 监听
     alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
