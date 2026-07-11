@@ -5,6 +5,22 @@ from itertools import combinations
 from pathlib import Path
 from typing import Any
 
+from backend_ai.services.config_client import parse_json_field
+
+
+def _detect_torch_device(device: str | None = None) -> str:
+    if device and device != "auto":
+        return device
+    try:
+        import torch
+    except ImportError:
+        return "cpu"
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
 
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
     px1, py1, px2, py2 = person_bbox
@@ -75,6 +91,7 @@ class BehaviorService:
         if self.model is None:
             return []
         results = self.model.predict(frame, conf=self.confidence_threshold, verbose=False) if hasattr(self.model, "predict") else self.model(frame)
+        device = _detect_torch_device(self.device)
         detections: list[dict[str, Any]] = []
         for result in results:
             names = getattr(result, "names", {})
@@ -131,8 +148,8 @@ class BehaviorService:
                 )
 
         crowd_rule = rules.get("crowd_gathering", {})
-        min_count = int((crowd_rule.get("config_json") or {}).get("min_count", 4))
-        max_distance = float((crowd_rule.get("config_json") or {}).get("max_center_distance", 0.15))
+        min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
+        max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
         if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
             detections.append(
                 {

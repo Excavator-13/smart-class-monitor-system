@@ -14,7 +14,7 @@ class FakeSession:
         self.payload = None
         self.headers = None
 
-    def post(self, url, json=None, timeout=None, headers=None):
+    def post(self, url, json=None, headers=None, timeout=None):
         self.payload = json
         self.headers = headers
         return FakeResponse()

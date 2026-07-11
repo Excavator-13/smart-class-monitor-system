@@ -9,11 +9,13 @@ from dotenv import load_dotenv
 from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
+from backend_ai.services.dingtalk_service import start_stream, trigger_alert
 from backend_ai.services.analysis_service import AnalysisService
 from backend_ai.services.behavior_service import BehaviorService
 from backend_ai.services.config_client import ConfigClient
-from backend_ai.services.event_service import EventService
+from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
+from backend_ai.services.fire_service import FireService
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
@@ -34,6 +36,19 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
+
+    @app.after_request
+    def add_cors_headers(response: Response) -> Response:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
+    @app.before_request
+    def handle_preflight() -> Response | None:
+        if request.method == "OPTIONS":
+            return Response(status=204)
+
     app_config = load_yaml(BASE_DIR / "config" / "app.yaml")
     model_config = load_yaml(BASE_DIR / "config" / "model.yaml")
     if overrides:
@@ -42,7 +57,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     spring = app_config.get("spring", {})
     spring_base_url = os.environ.get("SPRING_BASE_URL") or spring.get("base_url", "http://localhost:8080")
-    internal_token = os.environ.get("AI_INTERNAL_TOKEN") or spring.get("internal_token")
+    internal_token = os.environ.get("INTERNAL_TOKEN") or spring.get("internal_token")
     stream_cfg = app_config.get("stream", {})
     events_cfg = app_config.get("events", {})
     cache_cfg = app_config.get("cache", {})
@@ -59,7 +74,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         max_items=int(events_cfg.get("max_items", 500)),
         default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
     )
-    face_settings = model_settings.get("face", {})
+    device_config = model_config.get("device")
+    face_settings = (model_config.get("models") or {}).get("face", {})
     face_service = (overrides or {}).get("face_service") if overrides else None
     face_service = face_service or FaceService(
         feature_dim=int(face_settings.get("feature_dim", 512)),
@@ -68,6 +84,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         providers=list(face_settings.get("providers") or ["CUDAExecutionProvider"]),
         det_size=tuple(face_settings.get("det_size") or [640, 640]),
         ctx_id=int(face_settings.get("ctx_id", 0)),
+        device=device_config,
     )
     if not (overrides or {}).get("face_service"):
         face_service.load_model(face_settings)
@@ -80,8 +97,31 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     )
     if not (overrides or {}).get("behavior_service"):
         behavior_service.load_model(behavior_settings, BASE_DIR)
+    behavior_service = behavior_service or BehaviorService()
+
+    fire_settings = (model_config.get("models") or {}).get("fire", {})
+    fire_service = (overrides or {}).get("fire_service") if overrides else None
+    if fire_service is None and fire_settings.get("enabled", False):
+        try:
+            from ultralytics import YOLO
+            weights = fire_settings.get("weights", "models/yolo/yolo_fire.pt")
+            fire_model = YOLO(BASE_DIR / weights if not Path(weights).is_absolute() else Path(weights))
+            fire_service = FireService(
+                model=fire_model,
+                confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
+                max_detections=int(fire_settings.get("max_detections", 20)),
+                min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+            )
+            print(f"[Fire] 明火检测模型加载成功: {weights}")
+        except Exception as exc:
+            print(f"[Fire] 明火检测模型加载失败: {exc}")
+            fire_service = FireService(model=None)
+    elif fire_service is None:
+        fire_service = FireService(model=None)
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
+    start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,
@@ -94,6 +134,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         behavior_service=behavior_service,
         event_service=event_service,
         config_client=config_client,
+        fire_service=fire_service,
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
     )
@@ -104,6 +145,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         "face_service": face_service,
         "zone_service": zone_service,
         "behavior_service": behavior_service,
+        "fire_service": fire_service,
         "alert_client": alert_client,
         "stream_manager": stream_manager,
         "analysis_service": analysis_service,
@@ -135,7 +177,9 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 "avg_infer_ms": analysis_service.avg_latency_ms("behavior"),
                 "last_error": getattr(behavior_service, "last_error", None),
             },
-            {"module": "fire", "loaded": False, "model_name": "reserved", "version": "not_in_scope", "avg_infer_ms": None},
+            {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
+            {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
@@ -153,11 +197,15 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     @app.get("/analysis/summary/<stream_id>")
     def analysis_summary(stream_id: str):
-        counts = event_service.counts(stream_id=stream_id)
+        events = event_service.query(stream_id=stream_id, limit=200)
+        counts: dict[str, int] = {}
+        for event in events:
+            et = event.get("event_type", "unknown")
+            counts[et] = counts.get(et, 0) + 1
         high_types = {"danger_zone_stay", "stream_offline", "fall_detected", "flame_detected"}
         warning_types = {"stranger_detected", "danger_zone_intrusion", "danger_zone_approach", "phone_usage", "head_down", "crowd_gathering"}
         risk_score = min(100, sum(counts.get(t, 0) * 25 for t in high_types) + sum(counts.get(t, 0) * 12 for t in warning_types))
-        risk_level = "high" if risk_score >= 70 else "warning" if risk_score >= 30 else "normal"
+        risk_level = "high" if risk_score >= 70 else "warning" if risk_score >= 30 else "low"
         stream_status = next((item for item in stream_manager.status() if item.get("stream_id") == stream_id), None)
         parts = []
         if counts.get("phone_usage"):
@@ -168,18 +216,25 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             parts.append("视频流存在中断")
         if not parts:
             parts.append("当前未检测到明显异常")
-        suggestion = "建议教师优先关注高风险告警并核对实时画面。" if risk_level != "normal" else "建议保持巡检，持续观察课堂状态。"
-        return json_response(
-            {
-                "stream_id": stream_id,
-                "risk_score": risk_score,
-                "risk_level": risk_level,
-                "summary": "，".join(parts) + "。",
-                "counts": counts,
-                "stream_status": stream_status,
-                "suggestion": suggestion,
-            }
-        )
+        summary = "，".join(parts) + "。"
+        suggestion = "建议教师优先关注高风险告警并核对实时画面。" if risk_level != "low" else "建议保持巡检，持续观察课堂状态。"
+        recent = events[:5]
+        timeline = [
+            {"time": e.get("occurred_at", "")[11:16], "text": f"{EVENT_NAMES.get(e.get('event_type', ''), e.get('event_type', ''))} 置信度 {e.get('confidence', 0):.0%}"}
+            for e in recent
+        ]
+        return json_response({
+            "stream_id": stream_id,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "title": "当前风险指数低" if risk_level == "low" else "当前风险指数中高" if risk_level == "warning" else "当前风险指数高",
+            "summary": summary,
+            "actions": ["自动抓拍", "等待人工确认", "保留追踪记录"] if risk_level != "low" else ["持续监控"],
+            "counts": counts,
+            "stream_status": stream_status,
+            "suggestion": suggestion,
+            "timeline": timeline,
+        })
 
     @app.post("/face/feature/extract")
     def face_feature_extract():
@@ -215,7 +270,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             return error_response(40401, "stream not found", status=404)
         annotate = request.args.get("annotate", "true").lower() != "false"
         modules_param = request.args.get("modules", "all")
-        modules = {"face", "zone", "behavior"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
+        modules = {"face", "zone", "behavior", "fire"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
 
         def generate():
             while True:

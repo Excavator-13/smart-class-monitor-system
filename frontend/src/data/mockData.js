@@ -1,140 +1,156 @@
+export const ALERT_LEVEL_MAP = {
+  info: { label: "信息", color: "#909399" },
+  warning: { label: "警告", color: "#E6A23C" },
+  high: { label: "高危", color: "#F56C6C" },
+};
+
+export const ALERT_STATUS_MAP = {
+  unhandled: { label: "未处理", tag: "danger" },
+  processing: { label: "处理中", tag: "warning" },
+  handled: { label: "已处理", tag: "success" },
+  false_alarm: { label: "误报", tag: "info" },
+  ignored: { label: "已忽略", tag: "info" },
+};
+
+export const ALERT_TYPE_MAP = {
+  face_recognized: "已识别人员",
+  stranger_detected: "陌生人出现",
+  danger_zone_intrusion: "危险区域入侵",
+  danger_zone_stay: "危险区域停留",
+  danger_zone_approach: "危险区域接近",
+  phone_usage: "使用手机",
+  head_down: "长时间低头",
+  leave_seat: "长时间离座",
+  flame_detected: "明火检测",
+  fall_detected: "人员摔倒",
+  crowd_gathering: "异常人流聚集",
+  stream_offline: "视频流中断",
+};
+
 export const mockStreams = [
   {
-    stream_id: "A101",
-    stream_name: "A101 主摄像头",
-    location: "教学楼一层 A101",
-    status: "online",
+    id: 1,
+    stream_id: "classroom_01",
+    stream_name: "Classroom 01 Main Camera",
+    location: "Teaching Building A101",
+    status: "enabled",
     latency: "1.8s",
-    rtmp_url: "rtmp://media-server/live/a101",
-    remark: "默认演示视频源"
+    rtmp_url: "rtmp://media-server/live/classroom_01",
+    remark: "Local mock stream"
   },
   {
-    stream_id: "B203",
-    stream_name: "B203 后排摄像头",
-    location: "教学楼二层 B203",
-    status: "online",
+    id: 2,
+    stream_id: "classroom_02",
+    stream_name: "Classroom 02 Rear Camera",
+    location: "Teaching Building B203",
+    status: "enabled",
     latency: "2.4s",
-    rtmp_url: "rtmp://media-server/live/b203",
-    remark: "用于多路扩展"
-  },
-  {
-    stream_id: "C305",
-    stream_name: "C305 门口摄像头",
-    location: "教学楼三层 C305",
-    status: "offline",
-    latency: "--",
-    rtmp_url: "rtmp://media-server/live/c305",
-    remark: "等待推流"
+    rtmp_url: "rtmp://media-server/live/classroom_02",
+    remark: "Reserved stream"
   }
 ];
 
-export const mockAlerts = [
-  {
-    id: 1001,
-    time: "10:28:19",
-    alert_type: "明火检测",
-    level: "critical",
-    status: "未处理",
-    stream_id: "A101",
-    location: "后排右侧",
-    description: "连续 3 帧置信度达标，已保留截图与片段。",
-    snapshot_path: "/alerts/a101/1001/snapshot.jpg",
-    video_path: "/alerts/a101/1001/record.flv"
-  },
-  {
-    id: 1002,
-    time: "10:22:41",
-    alert_type: "手机违规",
-    level: "high",
-    status: "待确认",
-    stream_id: "A101",
-    location: "第三排右侧",
-    description: "禁用区域内持续 5 秒，目标框已追踪。",
-    snapshot_path: "/alerts/a101/1002/snapshot.jpg",
-    video_path: "/alerts/a101/1002/record.flv"
-  },
-  {
-    id: 1003,
-    time: "09:58:07",
-    alert_type: "陌生人",
-    level: "medium",
-    status: "已处理",
-    stream_id: "A101",
-    location: "教室门口",
-    description: "人脸识别失败，已生成身份核验记录。",
-    snapshot_path: "/alerts/a101/1003/snapshot.jpg",
-    video_path: "/alerts/a101/1003/record.flv"
-  },
-  {
-    id: 1004,
-    time: "09:34:12",
-    alert_type: "低头异常",
-    level: "low",
-    status: "误报",
-    stream_id: "A101",
-    location: "第二排中部",
-    description: "管理员标记为误报，保留追溯记录。",
-    snapshot_path: "/alerts/a101/1004/snapshot.jpg",
-    video_path: "/alerts/a101/1004/record.flv"
-  }
-];
+// Keep mock alerts empty by default. AI scoring should appear only after a real
+// alert/event is returned by the service or injected by integration testing.
+export const mockAlerts = [];
 
 export const mockRules = [
   {
     id: 1,
-    rule_type: "phone",
-    name: "手机违规",
+    rule_type: "phone_usage",
+    name: "Phone usage",
     enabled: true,
     threshold_seconds: 5,
-    summary: "仅在禁用手机区域生效"
+    confidence_threshold: 0.75,
+    cooldown_seconds: 30,
+    zone_type: "phone_forbidden",
+    summary: "Enabled only after forbidden zone confirmation"
   },
   {
     id: 2,
-    rule_type: "fire",
-    name: "明火检测",
+    rule_type: "fire_detected",
+    name: "Fire detection",
     enabled: true,
     threshold_seconds: 3,
-    summary: "最高优先级，连续帧触发"
+    confidence_threshold: 0.8,
+    cooldown_seconds: 20,
+    zone_type: "danger",
+    summary: "High-priority safety event"
   },
   {
     id: 3,
-    rule_type: "fall",
-    name: "摔倒检测",
+    rule_type: "fall_detected",
+    name: "Fall detection",
     enabled: true,
     threshold_seconds: 4,
-    summary: "倒地持续确认后告警"
+    confidence_threshold: 0.78,
+    cooldown_seconds: 20,
+    zone_type: "classroom",
+    summary: "Triggered after a sustained fall posture"
   },
   {
     id: 4,
     rule_type: "head_down",
-    name: "低头 / 离座",
+    name: "Head-down behavior",
     enabled: true,
     threshold_seconds: 6,
-    summary: "结合座位区域和时间窗口判断"
+    confidence_threshold: 0.7,
+    cooldown_seconds: 60,
+    zone_type: "seat",
+    summary: "Evaluated by seat area and duration"
   }
 ];
 
 export const mockStudents = [
-  { id: 1, student_no: "2026001", name: "张同学", class_name: "高一 1 班", face_registered: true, last_seen: "10:28" },
-  { id: 2, student_no: "2026002", name: "李同学", class_name: "高一 1 班", face_registered: true, last_seen: "10:24" },
-  { id: 3, student_no: "VISITOR", name: "陌生人记录", class_name: "待核验", face_registered: false, last_seen: "09:58" }
+  { id: 1, student_no: "2026001", name: "Student Zhang", class_name: "Class 1", status: "active", face_registered: true, last_seen: "--" },
+  { id: 2, student_no: "2026002", name: "Student Li", class_name: "Class 1", status: "active", face_registered: true, last_seen: "--" }
 ];
 
 export const mockHealth = {
-  rtmp: "online",
-  ai: "online",
-  api: "online",
-  database: "online"
+  rtmp: "up",
+  ai: "up",
+  backend: "up",
+  database: "up",
 };
 
 export const mockSummary = {
-  risk_score: 58,
-  title: "当前风险指数中高",
-  summary: "手机违规和低头行为在同一区域叠加出现，建议教师优先查看第三排右侧。",
-  actions: ["自动抓拍", "等待人工确认", "保留追踪记录"],
+  risk_score: 0,
+  title: "Waiting for risk events",
+  summary: "The frontend calculates risk scores only after effective alerts or AI events are returned.",
+  actions: ["Monitor", "Review AI marks", "Keep evidence"],
   timeline: [
-    { time: "10:22", text: "检测到手机目标进入禁用区域" },
-    { time: "10:23", text: "持续低头超过阈值，触发候选事件" },
-    { time: "10:24", text: "自动抓拍，等待人工确认" }
+    { time: "Now", text: "Phone risk requires a confirmed forbidden zone hit." },
+    { time: "Now", text: "Fire and fall alerts can score independently once detected." }
   ]
 };
+
+export const mockAnalysisEvents = [
+  {
+    event_id: "evt_a1b2c3d4e5f6g7h8",
+    stream_id: "classroom_01",
+    event_type: "stranger_detected",
+    event_name: "陌生人出现",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.78,
+    occurred_at: "2026-07-09T10:25:00+08:00",
+    duration_seconds: 5.2,
+    target: { track_id: "face_1", bbox: [100, 200, 300, 400] },
+    zone: null,
+    snapshot_path: null,
+  },
+  {
+    event_id: "evt_b2c3d4e5f6g7h8i9",
+    stream_id: "classroom_01",
+    event_type: "phone_usage",
+    event_name: "使用手机",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.85,
+    occurred_at: "2026-07-09T10:22:00+08:00",
+    duration_seconds: 3.1,
+    target: { track_id: "person_2", bbox: [150, 250, 350, 450] },
+    zone: null,
+    snapshot_path: null,
+  },
+];

@@ -1,3 +1,4 @@
+device: auto
 models:
   face:
     enabled: true
@@ -20,6 +21,10 @@ models:
     provider: rule
     safe_distance: 0.05
   fire:
-    enabled: false
-    provider: reserved
-    reason: not_in_current_scope
+    enabled: true
+    provider: ultralytics
+    weights: models/yolo/yolo_fire.pt
+    confidence_threshold: 0.25
+    max_detections: 20
+    min_bbox_area: 1000
+    cooldown_seconds: 10

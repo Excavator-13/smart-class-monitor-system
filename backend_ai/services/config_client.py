@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -8,11 +9,26 @@ from typing import Any
 import requests
 
 
+def parse_json_field(value: Any | None, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return default
+
+
 def _items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict) and "data" in payload:
         payload = payload["data"]
     if isinstance(payload, dict) and "items" in payload:
         payload = payload["items"]
+    elif isinstance(payload, dict) and "records" in payload:
+        payload = payload["records"]
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
@@ -34,6 +50,7 @@ class ConfigClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
+        self.internal_token = internal_token
         self.cache = ConfigCache()
         self.internal_token = internal_token
         self.last_error: str | None = None
@@ -44,7 +61,10 @@ class ConfigClient:
         return {"X-Internal-Token": self.internal_token} if self.internal_token else None
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        response = self.session.get(f"{self.base_url}{path}", params=params, timeout=self.timeout, headers=self._headers())
+        headers = {}
+        if self.internal_token:
+            headers["X-Internal-Token"] = self.internal_token
+        response = self.session.get(f"{self.base_url}{path}", params=params, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
 

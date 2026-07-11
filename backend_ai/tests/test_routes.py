@@ -132,6 +132,24 @@ def test_analysis_events_route_empty():
     assert payload["data"]["items"] == []
 
 
+def test_analysis_summary_route():
+    response = app_client().get("/analysis/summary/classroom_01")
+
+    payload = response.get_json()
+    assert response.status_code == 200
+    data = payload["data"]
+    assert data["stream_id"] == "classroom_01"
+    assert "risk_score" in data
+    assert "risk_level" in data
+    assert "title" in data
+    assert "actions" in data
+    assert isinstance(data["actions"], list)
+    assert "summary" in data
+    assert "counts" in data
+    assert "timeline" in data
+    assert isinstance(data["timeline"], list)
+
+
 def test_face_feature_extract_route():
     image = np.zeros((10, 10, 3), dtype=np.uint8)
     ok, buffer = cv2.imencode(".jpg", image)

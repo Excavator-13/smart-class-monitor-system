@@ -16,7 +16,7 @@ class FakeSession:
     def __init__(self):
         self.calls = []
 
-    def get(self, url, params=None, timeout=None, headers=None):
+    def get(self, url, params=None, headers=None, timeout=None):
         self.calls.append((url, params, timeout, headers))
         if url.endswith("/streams"):
             return FakeResponse({"data": {"items": [{"stream_id": "classroom_01", "rtmp_url": "rtmp://x", "status": "enabled"}]}})
