@@ -309,8 +309,10 @@ export async function createStudent(payload) {
     method: "post",
     url: "/students",
     data: {
+      student_no: payload.student_no,
       studentNo: payload.student_no,
       name: payload.name,
+      class_name: payload.class_name,
       className: payload.class_name
     }
   });
@@ -322,6 +324,18 @@ export async function registerStudentFace(id, image) {
     method: "post",
     url: `/students/${id}/face`,
     data: { image }
+  });
+}
+
+export async function extractFaceFeature(image, studentId = "preview") {
+  return requestData(aiClient, {
+    method: "post",
+    url: "/face/feature/extract",
+    data: {
+      image,
+      student_id: studentId,
+      image_type: "base64"
+    }
   });
 }
 
