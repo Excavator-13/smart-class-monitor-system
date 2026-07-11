@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   Bell,
   Camera,
-  CircleCheck,
   Clock,
   Connection,
   FullScreen,
@@ -19,6 +18,7 @@ import { ElMessage } from "element-plus";
 import {
   createStream,
   createStudent,
+  extractFaceFeature,
   fetchAlerts,
   fetchAlertStats,
   fetchAnalysisEvents,
@@ -29,6 +29,7 @@ import {
   fetchStreams,
   fetchStudents,
   fetchSystemHealth,
+  fetchZones,
   getVideoFeedUrl,
   login,
   logout,
@@ -71,6 +72,10 @@ const faceImageBase64 = ref("");
 const faceImageName = ref("");
 const newPersonFaceImageBase64 = ref("");
 const newPersonFaceImageName = ref("");
+const faceValidationMessage = ref("");
+const faceValidationLoading = ref(false);
+const newPersonFaceValidationMessage = ref("");
+const newPersonFaceValidationLoading = ref(false);
 const alertProcessForm = ref({
   status: "handled",
   remark: ""
@@ -144,6 +149,7 @@ const confirmedForbiddenZone = ref(null);
 const streams = ref([]);
 const alerts = ref([]);
 const rules = ref([]);
+const zones = ref([]);
 const students = ref([]);
 const stats = ref({});
 const health = ref({});
@@ -245,6 +251,26 @@ const alertTypeOptions = computed(() => {
     if (!seen.has(value)) seen.set(value, item.alert_name || alertTypeText(value));
   });
   return [{ label: "全部类型", value: "全部" }, ...Array.from(seen, ([value, label]) => ({ label, value }))];
+});
+
+const activeStreamZones = computed(() =>
+  zones.value.filter((item) => !activeStreamId.value || item.stream_id === activeStreamId.value),
+);
+
+const zoneRows = computed(() => {
+  const rows = [...activeStreamZones.value];
+  if (hasConfirmedForbiddenZone.value) {
+    rows.unshift({
+      id: "drawn-phone-zone",
+      zone_name: "当前手绘禁用区",
+      zone_type: "phone_forbidden",
+      stream_id: activeStreamId.value,
+      coordinates: forbiddenZoneCoordinates.value,
+      enabled: true,
+      source: "实时画面绘制"
+    });
+  }
+  return rows;
 });
 
 const pendingAlertCount = computed(() => {
@@ -609,6 +635,53 @@ function levelText(level) {
       low: "低",
     }[level] || "普通"
   );
+}
+
+function levelType(level) {
+  return (
+    {
+      critical: "danger",
+      high: "danger",
+      warning: "warning",
+      medium: "warning",
+      info: "info",
+      low: "info",
+    }[level] || "info"
+  );
+}
+
+function zoneTypeText(type) {
+  return (
+    {
+      danger: "危险区",
+      seat: "座位区",
+      phone_forbidden: "手机禁用区",
+      roi: "识别区域",
+    }[type] || type || "未分类"
+  );
+}
+
+function zoneCoordinateText(zone = {}) {
+  const points = Array.isArray(zone.coordinates) ? zone.coordinates : [];
+  if (!points.length) return "暂无坐标";
+  return points
+    .slice(0, 4)
+    .map((point) => {
+      if (Array.isArray(point)) {
+        return `(${formatCoord(point[0])}, ${formatCoord(point[1])})`;
+      }
+      return `(${formatCoord(point.x)}, ${formatCoord(point.y)})`;
+    })
+    .join(" / ");
+}
+
+function evidenceSummary(row = {}) {
+  const snapshot = Boolean(row.snapshot_url);
+  const record = Boolean(row.record_url);
+  if (snapshot && record) return "截图与录像片段已关联";
+  if (snapshot) return "已保存告警截图";
+  if (record) return "已关联录像路径";
+  return "未生成证据文件";
 }
 
 function statusType(status) {
@@ -1224,6 +1297,7 @@ async function loadDashboard() {
     }),
     stats: fetchAlertStats({ stream_id: activeStreamId.value }),
     rules: fetchRules(),
+    zones: fetchZones({ stream_id: activeStreamId.value }),
     students: fetchStudents({ page: 1, page_size: 10 }),
     health: fetchSystemHealth(),
     summary: activeStreamId.value
@@ -1257,6 +1331,7 @@ async function loadDashboard() {
   alerts.value = results.alerts.ok ? normalizeList(results.alerts.value) : [];
   stats.value = results.stats.ok ? results.stats.value || {} : {};
   rules.value = results.rules.ok ? normalizeList(results.rules.value) : [];
+  zones.value = results.zones.ok ? normalizeList(results.zones.value) : [];
   students.value = results.students.ok
     ? normalizeList(results.students.value)
     : [];
@@ -1338,6 +1413,7 @@ function openPersonDialog() {
   };
   newPersonFaceImageBase64.value = "";
   newPersonFaceImageName.value = "";
+  newPersonFaceValidationMessage.value = "";
   personDialogVisible.value = true;
 }
 
@@ -1446,29 +1522,182 @@ function openFaceDialog(row) {
   selectedStudent.value = row;
   faceImageBase64.value = "";
   faceImageName.value = "";
+  faceValidationMessage.value = "";
   faceDialogVisible.value = true;
 }
 
-function handleFaceFileChange(event) {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  faceImageName.value = file.name;
-  const reader = new FileReader();
-  reader.onload = () => {
-    faceImageBase64.value = String(reader.result || "").split(",")[1] || "";
-  };
-  reader.readAsDataURL(file);
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("图片读取失败，请重新选择。"));
+    reader.readAsDataURL(file);
+  });
 }
 
-function handleNewPersonFaceFileChange(event) {
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("图片解析失败，请选择常见格式的人脸照片。"));
+    image.src = dataUrl;
+  });
+}
+
+function calculateSharpness(image) {
+  const size = 180;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0, size, size);
+  const { data } = context.getImageData(0, 0, size, size);
+  const gray = new Float32Array(size * size);
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    gray[p] = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+  }
+  let sum = 0;
+  let sumSquares = 0;
+  let count = 0;
+  for (let y = 1; y < size - 1; y += 1) {
+    for (let x = 1; x < size - 1; x += 1) {
+      const index = y * size + x;
+      const value =
+        gray[index - size] +
+        gray[index - 1] -
+        gray[index] * 4 +
+        gray[index + 1] +
+        gray[index + size];
+      sum += value;
+      sumSquares += value * value;
+      count += 1;
+    }
+  }
+  const mean = sum / count;
+  return sumSquares / count - mean * mean;
+}
+
+async function detectFaceBox(image) {
+  if (!("FaceDetector" in window)) return null;
+  const detector = new window.FaceDetector({ fastMode: false });
+  const faces = await detector.detect(image);
+  if (faces.length !== 1) {
+    throw new Error("图片中必须且只能识别到一张人脸。");
+  }
+  const box = faces[0].boundingBox || {};
+  if ((box.width || 0) < 160 || (box.height || 0) < 160) {
+    throw new Error("人脸区域像素过低，请上传更近、更清晰的正脸照片。");
+  }
+  return box;
+}
+
+function hasFaceFeature(payload = {}) {
+  const faceCount = payload.face_count ?? payload.faceCount ?? payload.count;
+  if (faceCount !== undefined && Number(faceCount) < 1) return false;
+  const feature =
+    payload.feature ||
+    payload.face_feature ||
+    payload.feature_vector ||
+    payload.embedding ||
+    payload.vector;
+  if (Array.isArray(feature)) return feature.length > 0;
+  if (payload.face_detected === true || payload.detected === true) return true;
+  if (Array.isArray(payload.faces)) return payload.faces.length > 0;
+  return Boolean(feature);
+}
+
+function normalizeFaceValidationError(error) {
+  const status = error?.response?.status;
+  const code = error?.response?.data?.code;
+  const message = error?.message || "";
+  if (status >= 500) {
+    return "AI 人脸识别服务异常，请确认 AI 服务已启动且人脸模型加载正常。";
+  }
+  if (code === 40001 || message.includes("invalid image")) {
+    return "图片格式无效，请重新选择清晰的人脸照片。";
+  }
+  if (code === 40002 || message.includes("no face")) {
+    return "AI 未识别到人脸，请上传正脸清晰照片。";
+  }
+  if (code === 40003 || message.includes("multiple")) {
+    return "图片中识别到多张人脸，请上传单人脸照片。";
+  }
+  if (message.includes("Network Error")) {
+    return "无法连接 AI 人脸识别服务，请检查 VITE_AI_BASE 或服务端口。";
+  }
+  return message || "人脸图片校验失败。";
+}
+
+async function validateFaceFile(file, studentId) {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("请选择图片文件。");
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const base64 = dataUrl.split(",")[1] || "";
+  const image = await loadImage(dataUrl);
+  const minSide = Math.min(image.naturalWidth, image.naturalHeight);
+  if (minSide < 360) {
+    throw new Error("图片分辨率过低，短边至少需要 360 像素。");
+  }
+  const sharpness = calculateSharpness(image);
+  if (sharpness < 22) {
+    throw new Error("图片清晰度不足，请上传无明显模糊的人脸照片。");
+  }
+  await detectFaceBox(image);
+  let result = null;
+  try {
+    result = await extractFaceFeature(base64, studentId);
+  } catch (error) {
+    throw new Error(normalizeFaceValidationError(error));
+  }
+  if (!hasFaceFeature(result)) {
+    throw new Error("AI 未能从图片中提取到有效人脸特征，请更换正脸高清照片。");
+  }
+  return { base64, name: file.name };
+}
+
+async function handleFaceFileChange(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  newPersonFaceImageName.value = file.name;
-  const reader = new FileReader();
-  reader.onload = () => {
-    newPersonFaceImageBase64.value = String(reader.result || "").split(",")[1] || "";
-  };
-  reader.readAsDataURL(file);
+  faceImageBase64.value = "";
+  faceImageName.value = "";
+  faceValidationMessage.value = "正在检测图片清晰度和人脸特征...";
+  faceValidationLoading.value = true;
+  try {
+    const validated = await validateFaceFile(file, selectedStudent.value?.student_no || selectedStudent.value?.id || "preview");
+    faceImageBase64.value = validated.base64;
+    faceImageName.value = validated.name;
+    faceValidationMessage.value = "已识别到清晰人脸，可提交注册。";
+    ElMessage.success("人脸图片校验通过。");
+  } catch (error) {
+    faceValidationMessage.value = error?.message || "人脸图片校验失败。";
+    ElMessage.error(faceValidationMessage.value);
+  } finally {
+    faceValidationLoading.value = false;
+    event.target.value = "";
+  }
+}
+
+async function handleNewPersonFaceFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  newPersonFaceImageBase64.value = "";
+  newPersonFaceImageName.value = "";
+  newPersonFaceValidationMessage.value = "正在检测图片清晰度和人脸特征...";
+  newPersonFaceValidationLoading.value = true;
+  try {
+    const validated = await validateFaceFile(file, personForm.value.student_no || "preview");
+    newPersonFaceImageBase64.value = validated.base64;
+    newPersonFaceImageName.value = validated.name;
+    newPersonFaceValidationMessage.value = "已识别到清晰人脸，保存人员后会自动注册。";
+    ElMessage.success("人脸图片校验通过。");
+  } catch (error) {
+    newPersonFaceValidationMessage.value = error?.message || "人脸图片校验失败。";
+    ElMessage.error(newPersonFaceValidationMessage.value);
+  } finally {
+    newPersonFaceValidationLoading.value = false;
+    event.target.value = "";
+  }
 }
 
 async function saveFaceRegistration() {
@@ -2251,6 +2480,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <el-select v-model="activeAlertLevel" class="filter-select" placeholder="告警等级">
                   <el-option v-for="item in alertLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
                 </el-select>
+                <el-select v-model="activeAlertStatus" class="filter-select" placeholder="处理状态">
+                  <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
               </div>
             </div>
             <el-table :data="filteredAlerts" height="360" class="clean-table">
@@ -2263,6 +2495,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <el-table-column prop="stream_id" label="视频源" width="100" />
               <el-table-column prop="stream_name" label="名称" width="130" />
               <el-table-column prop="remark" label="说明" min-width="240" />
+              <el-table-column label="等级" width="92">
+                <template #default="{ row }">
+                  <el-tag :type="levelType(row.level)" effect="light">
+                    {{ levelText(row.level) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
               <el-table-column label="评分" width="92">
                 <template #default="{ row }">
                   <el-tag
@@ -2286,22 +2525,31 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="证据" width="150">
+              <el-table-column label="证据" width="210">
                 <template #default="{ row }">
-                  <el-button
-                    size="small"
-                    text
-                    :disabled="!row.snapshot_url"
-                    :href="resourceUrl(row.snapshot_url)"
-                    >截图</el-button
-                  >
-                  <el-button
-                    size="small"
-                    text
-                    :disabled="!row.record_url"
-                    :href="resourceUrl(row.record_url)"
-                    >片段</el-button
-                  >
+                  <div class="evidence-actions">
+                    <span>{{ evidenceSummary(row) }}</span>
+                    <div>
+                      <el-button
+                        size="small"
+                        text
+                        tag="a"
+                        target="_blank"
+                        :disabled="!row.snapshot_url"
+                        :href="row.snapshot_url ? resourceUrl(row.snapshot_url) : undefined"
+                        >截图</el-button
+                      >
+                      <el-button
+                        size="small"
+                        text
+                        tag="a"
+                        target="_blank"
+                        :disabled="!row.record_url"
+                        :href="row.record_url ? resourceUrl(row.record_url) : undefined"
+                        >录像</el-button
+                      >
+                    </div>
+                  </div>
                 </template>
               </el-table-column>
               <el-table-column label="处理" width="190" fixed="right">
@@ -2412,10 +2660,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div>
                 <h2>区域规则配置</h2>
                 <span
-                  >用于承接 `/zones` 和 `/rules`，后续可扩展为 ROI 绘制。</span
+                  >规则来自 `/rules`，区域来自 `/zones`；数值表示触发前需要持续命中的秒数。</span
                 >
               </div>
-              <el-button type="primary" :icon="CircleCheck">保存规则</el-button>
             </div>
             <div class="rule-editor">
               <article v-for="rule in rules" :key="rule.id">
@@ -2423,12 +2670,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ ruleNameText(rule) }}</b>
                   <span>{{ ruleSummaryText(rule) }}</span>
                 </div>
-                <el-input-number
-                  v-model="rule.threshold_seconds"
-                  :min="1"
-                  :max="30"
-                  size="small"
-                />
+                <div class="rule-threshold-control">
+                  <span>持续阈值（秒）</span>
+                  <el-input-number
+                    v-model="rule.threshold_seconds"
+                    :min="1"
+                    :max="30"
+                    size="small"
+                  />
+                </div>
                 <el-switch
                   v-model="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
@@ -2452,6 +2702,36 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div class="seat-zone s2">动态禁用区</div>
               <div class="seat-zone s3">危险区</div>
             </div>
+          </section>
+
+          <section class="panel span-6">
+            <div class="panel-head compact">
+              <h2>当前已设定区域</h2>
+            </div>
+            <el-table :data="zoneRows" height="260" class="clean-table">
+              <el-table-column label="区域名称" min-width="130">
+                <template #default="{ row }">
+                  {{ row.zone_name || "未命名区域" }}
+                </template>
+              </el-table-column>
+              <el-table-column label="类型" width="110">
+                <template #default="{ row }">
+                  <el-tag effect="plain">{{ zoneTypeText(row.zone_type) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="90">
+                <template #default="{ row }">
+                  <el-tag :type="row.enabled ? 'success' : 'info'">
+                    {{ row.enabled ? "启用" : "停用" }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="坐标" min-width="220">
+                <template #default="{ row }">
+                  <span class="coord-text">{{ zoneCoordinateText(row) }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
           </section>
 
           <section class="panel span-6">
@@ -2735,17 +3015,33 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </el-form-item>
           <el-form-item label="人脸图片">
             <label class="file-picker">
-              <input type="file" accept="image/*" @change="handleNewPersonFaceFileChange" />
-              <span>{{ newPersonFaceImageName || "选择单人脸图片，可稍后补录" }}</span>
+              <input
+                type="file"
+                accept="image/*"
+                :disabled="newPersonFaceValidationLoading"
+                @change="handleNewPersonFaceFileChange"
+              />
+              <span>{{
+                newPersonFaceValidationLoading
+                  ? "正在检测人脸图片..."
+                  : newPersonFaceImageName || "选择单人脸图片，可稍后补录"
+              }}</span>
             </label>
           </el-form-item>
+          <p
+            v-if="newPersonFaceValidationMessage"
+            class="dialog-hint"
+            :class="{ success: newPersonFaceImageBase64 }"
+          >
+            {{ newPersonFaceValidationMessage }}
+          </p>
           <p class="dialog-hint">
-            保存人员后，如已选择图片，前端会继续调用 `/students/{id}/face` 完成人脸注册。
+            图片需通过清晰度校验和 `/face/feature/extract` 人脸特征提取后才会被使用。
           </p>
         </el-form>
         <template #footer>
           <el-button @click="personDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="savePerson">确定新增</el-button>
+          <el-button type="primary" :disabled="newPersonFaceValidationLoading" @click="savePerson">确定新增</el-button>
         </template>
       </el-dialog>
 
@@ -2832,15 +3128,31 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </el-form-item>
           <el-form-item label="人脸图片">
             <label class="file-picker">
-              <input type="file" accept="image/*" @change="handleFaceFileChange" />
-              <span>{{ faceImageName || "选择单人脸图片" }}</span>
+              <input
+                type="file"
+                accept="image/*"
+                :disabled="faceValidationLoading"
+                @change="handleFaceFileChange"
+              />
+              <span>{{
+                faceValidationLoading
+                  ? "正在检测人脸图片..."
+                  : faceImageName || "选择单人脸图片"
+              }}</span>
             </label>
           </el-form-item>
-          <p class="dialog-hint">图片会通过 `/students/{id}/face` 提交给 SpringBoot，由后端调用 AI 服务提取特征。</p>
+          <p
+            v-if="faceValidationMessage"
+            class="dialog-hint"
+            :class="{ success: faceImageBase64 }"
+          >
+            {{ faceValidationMessage }}
+          </p>
+          <p class="dialog-hint">图片需先通过 `/face/feature/extract` 识别出清晰人脸，再提交到 `/students/{id}/face`。</p>
         </el-form>
         <template #footer>
           <el-button @click="faceDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveFaceRegistration">提交注册</el-button>
+          <el-button type="primary" :disabled="faceValidationLoading || !faceImageBase64" @click="saveFaceRegistration">提交注册</el-button>
         </template>
       </el-dialog>
 
