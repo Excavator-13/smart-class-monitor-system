@@ -11,6 +11,13 @@ function getBaseUrl(runtimeKey, envKey, fallback) {
   return runtimeValue || import.meta.env[envKey] || fallback;
 }
 
+export function isMockEnabled() {
+  const runtimeValue = getRuntimeConfig().USE_MOCK;
+  if (typeof runtimeValue === "boolean") return runtimeValue;
+  if (typeof runtimeValue === "string") return runtimeValue.toLowerCase() === "true";
+  return import.meta.env.VITE_USE_MOCK === "true";
+}
+
 export const apiClient = axios.create({
   baseURL: getBaseUrl("API_BASE", "VITE_API_BASE", "/api"),
   timeout
@@ -75,11 +82,17 @@ export function joinAiUrl(path) {
   return `${base.replace(/\/$/, "")}/${String(path).replace(/^\//, "")}`;
 }
 
-export async function safeGet(client, url, fallback, params = {}) {
-  try {
-    const { data } = await client.get(url, { params });
-    return data?.data ?? data;
-  } catch (error) {
-    return fallback;
+export function unwrapResponse(data) {
+  if (data && typeof data === "object" && "code" in data) {
+    if (Number(data.code) !== 0) {
+      throw new Error(data.message || "接口返回业务错误");
+    }
+    return data.data;
   }
+  return data?.data ?? data;
+}
+
+export async function requestData(client, config) {
+  const { data } = await client.request(config);
+  return unwrapResponse(data);
 }
