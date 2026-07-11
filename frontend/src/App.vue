@@ -17,6 +17,8 @@ import {
 } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import {
+  createStream,
+  createStudent,
   fetchAlerts,
   fetchAlertStats,
   fetchAnalysisEvents,
@@ -30,14 +32,10 @@ import {
   getVideoFeedUrl,
   login,
   logout,
+  registerStudentFace,
+  updateAlertStatus
 } from "./services/smartClassApi";
-import {
-  clearAuthSession,
-  getStoredToken,
-  getStoredUser,
-  joinResourceUrl,
-  storeAuthSession,
-} from "./services/http";
+import { clearAuthSession, getStoredToken, getStoredUser, isMockEnabled, joinResourceUrl, storeAuthSession } from "./services/http";
 import lineDogGif from "./assets/line-dog.gif";
 
 const activePage = ref("monitor");
@@ -65,6 +63,18 @@ const registerForm = ref({
 });
 const personDialogVisible = ref(false);
 const streamDialogVisible = ref(false);
+const faceDialogVisible = ref(false);
+const alertProcessDialogVisible = ref(false);
+const selectedStudent = ref(null);
+const selectedAlert = ref(null);
+const faceImageBase64 = ref("");
+const faceImageName = ref("");
+const newPersonFaceImageBase64 = ref("");
+const newPersonFaceImageName = ref("");
+const alertProcessForm = ref({
+  status: "handled",
+  remark: ""
+});
 const personForm = ref({
   student_no: "",
   name: "",
@@ -114,6 +124,9 @@ const riskScoreSettings = ref([
 ]);
 const activeStreamId = ref("");
 const activeAlertStatus = ref("全部");
+const alertKeyword = ref("");
+const activeAlertLevel = ref("全部");
+const activeAlertType = ref("全部");
 const isVideoLive = ref(false);
 const videoError = ref(false);
 const isDay = ref(true);
@@ -216,6 +229,24 @@ const displayAlerts = computed(() => {
   );
 });
 
+const alertLevelOptions = [
+  { label: "全部等级", value: "全部" },
+  { label: "最高", value: "critical" },
+  { label: "高", value: "high" },
+  { label: "警告", value: "warning" },
+  { label: "中", value: "medium" },
+  { label: "低", value: "low" }
+];
+
+const alertTypeOptions = computed(() => {
+  const seen = new Map();
+  displayAlerts.value.forEach((item) => {
+    const value = item.alert_type || item.event_type || "unknown";
+    if (!seen.has(value)) seen.set(value, item.alert_name || alertTypeText(value));
+  });
+  return [{ label: "全部类型", value: "全部" }, ...Array.from(seen, ([value, label]) => ({ label, value }))];
+});
+
 const pendingAlertCount = computed(() => {
   return displayAlerts.value.filter((item) =>
     ["unhandled", "processing"].includes(item.status),
@@ -237,15 +268,25 @@ const enabledRuleCount = computed(() => {
       (hasConfirmedForbiddenZone.value || !isPhoneRelated(item)),
   ).length;
 });
-const registeredStudentCount = computed(
-  () => students.value.filter((item) => item.face_registered).length,
-);
-const strangerCount = computed(
-  () => students.value.filter((item) => !item.face_registered).length,
-);
-const onlineStreamCount = computed(
-  () => streams.value.filter((item) => item.status === "enabled").length,
-);
+const registeredStudentCount = computed(() => students.value.filter((item) => item.face_registered).length);
+const strangerCount = computed(() => students.value.filter((item) => !item.face_registered).length);
+const modelStreamStatusRecords = computed(() => {
+  return Array.isArray(modelStatus.value?.streams) ? modelStatus.value.streams : [];
+});
+const allStreamStatusRecords = computed(() => {
+  const records = [...streams.value];
+  modelStreamStatusRecords.value.forEach((item) => {
+    const streamId = item.stream_id || item.streamId;
+    if (!streamId || records.some((stream) => stream.stream_id === streamId)) return;
+    records.push({
+      stream_id: streamId,
+      stream_name: item.stream_name || item.name || streamId,
+      status: item.status || item.stream_status || item.online_status || (item.online ? "online" : "unknown")
+    });
+  });
+  return records;
+});
+const onlineStreamCount = computed(() => allStreamStatusRecords.value.filter((item) => isOnlineStatus(item.status)).length);
 
 const healthItems = computed(() => [
   { label: "RTMP 流媒体", value: health.value.rtmp || "unknown" },
@@ -270,10 +311,28 @@ const metricCards = computed(() => [
 ]);
 
 const filteredAlerts = computed(() => {
-  if (activeAlertStatus.value === "全部") return displayAlerts.value;
-  return displayAlerts.value.filter(
-    (item) => item.alert_status === activeAlertStatus.value,
-  );
+  const keyword = alertKeyword.value.trim().toLowerCase();
+  return displayAlerts.value.filter((item) => {
+    if (activeAlertStatus.value !== "全部" && item.status !== activeAlertStatus.value) return false;
+    if (activeAlertLevel.value !== "全部" && item.level !== activeAlertLevel.value) return false;
+    if (activeAlertType.value !== "全部" && item.alert_type !== activeAlertType.value) return false;
+    if (!keyword) return true;
+    return [
+      item.alert_type,
+      item.alert_name,
+      item.stream_id,
+      item.stream_name,
+      item.student_name,
+      item.remark,
+      item.event_id,
+      statusText(item.status),
+      levelText(item.level)
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(keyword);
+  });
 });
 
 const highPriorityAlerts = computed(() => {
@@ -283,7 +342,7 @@ const highPriorityAlerts = computed(() => {
 });
 
 const activeRiskEvents = computed(() => {
-  return [...alerts.value, ...analysisEvents.value]
+  return uniqueEvents([...alerts.value, ...analysisEvents.value])
     .filter((item) => {
       if (!isPhoneRelated(item)) return true;
       return isPhoneItemInForbiddenZone(item);
@@ -399,30 +458,10 @@ const peoplePageCards = computed(() => [
 ]);
 
 const systemPageCards = computed(() => [
-  {
-    label: "在线视频源",
-    value: `${onlineStreamCount.value}/${streams.value.length || 0}`,
-    tone: "ok",
-  },
-  {
-    label: "模型版本",
-    value: modelStatus.value.version || modelStatus.value.model_name || "--",
-    tone: "brand",
-  },
-  {
-    label: "推理耗时",
-    value: modelStatus.value.inference_ms
-      ? `${modelStatus.value.inference_ms} ms`
-      : "--",
-    tone: "warn",
-  },
-  {
-    label: "服务状态",
-    value: healthItems.value.every((item) => item.value === "online")
-      ? "正常"
-      : "需关注",
-    tone: "ok",
-  },
+  { label: "在线视频源", value: `${onlineStreamCount.value}/${allStreamStatusRecords.value.length || 0}`, tone: "ok" },
+  { label: "模型版本", value: modelStatus.value.version || modelStatus.value.model_name || "--", tone: "brand" },
+  { label: "推理耗时", value: modelStatus.value.inference_ms ? `${modelStatus.value.inference_ms} ms` : "--", tone: "warn" },
+  { label: "服务状态", value: healthItems.value.every((item) => item.value === "online") ? "正常" : "需关注", tone: "ok" }
 ]);
 
 const activeModules = [
@@ -540,7 +579,7 @@ function isPhoneItemInForbiddenZone(item) {
 }
 
 const aiOverlayTargets = computed(() => {
-  return analysisEvents.value
+  return uniqueEvents([...analysisEvents.value, ...alerts.value])
     .filter((item) => !isPhoneRelated(item) || isPhoneItemInForbiddenZone(item))
     .map((item) => ({ item, rect: normalizeDetectionRect(item) }))
     .filter(({ rect }) => rect)
@@ -573,37 +612,43 @@ function levelText(level) {
 }
 
 function statusType(status) {
-  return (
-    {
-      unhandled: "danger",
-      processing: "warning",
-      handled: "success",
-      false_alarm: "info",
-      ignored: "info",
-      online: "success",
-      offline: "danger",
-      unknown: "info",
-    }[status] || "info"
-  );
+  return {
+    unhandled: "danger",
+    processing: "warning",
+    handled: "success",
+    false_alarm: "info",
+    ignored: "info",
+    online: "success",
+    enabled: "success",
+    running: "success",
+    active: "success",
+    connected: "success",
+    offline: "danger",
+    disabled: "info",
+    unknown: "info"
+  }[status] || "info";
+}
+
+function isOnlineStatus(status) {
+  return ["online", "enabled", "running", "active", "connected", true].includes(status);
 }
 
 function statusText(status) {
-  return (
-    {
-      unhandled: "未处理",
-      processing: "处理中",
-      handled: "已处理",
-      false_alarm: "误报",
-      ignored: "已忽略",
-      online: "在线",
-      offline: "离线",
-      enabled: "已启用",
-      disabled: "已停用",
-      unknown: "未知",
-    }[status] ||
-    status ||
-    "--"
-  );
+  return {
+    unhandled: "未处理",
+    processing: "处理中",
+    handled: "已处理",
+    false_alarm: "误报",
+    ignored: "已忽略",
+    online: "在线",
+    running: "运行中",
+    active: "活跃",
+    connected: "已连接",
+    offline: "离线",
+    enabled: "已启用",
+    disabled: "已停用",
+    unknown: "未知"
+  }[status] || status || "--";
 }
 
 function alertTypeText(type) {
@@ -685,6 +730,37 @@ function formatEventTime(value) {
   return date.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function parseMaybeJson(value) {
+  if (!value || typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function eventIdentity(item = {}) {
+  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || {});
+  const bbox = target?.bbox || item.bbox || item.box || "";
+  return [
+    item.event_id || item.event_uid || item.id || "",
+    item.alert_type || item.event_type || "",
+    item.stream_id || "",
+    item.occurred_at || item.time || "",
+    Array.isArray(bbox) ? bbox.join(",") : JSON.stringify(bbox)
+  ].join("|");
+}
+
+function uniqueEvents(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = eventIdentity(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
@@ -866,25 +942,9 @@ function rectFromBbox(bbox = [], source = {}) {
     };
   }
 
-  const frameWidth = Number(
-    source.frame_width ||
-      source.width ||
-      source.video_width ||
-      source.target?.frame_width,
-  );
-  const frameHeight = Number(
-    source.frame_height ||
-      source.height ||
-      source.video_height ||
-      source.target?.frame_height,
-  );
-  if (
-    !Number.isFinite(frameWidth) ||
-    !Number.isFinite(frameHeight) ||
-    frameWidth <= 0 ||
-    frameHeight <= 0
-  )
-    return null;
+  const target = parseMaybeJson(source.target || source.target_info || source.targetInfo || {});
+  const frameWidth = Number(source.frame_width || source.width || source.video_width || target?.frame_width || target?.frameWidth || 640);
+  const frameHeight = Number(source.frame_height || source.height || source.video_height || target?.frame_height || target?.frameHeight || 360);
 
   return {
     x: clampUnit(Math.min(x1, x2) / frameWidth),
@@ -895,7 +955,7 @@ function rectFromBbox(bbox = [], source = {}) {
 }
 
 function normalizeDetectionRect(item = {}) {
-  const target = item.target || item.target_info || {};
+  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || {});
   const candidate =
     item.bbox ||
     target.bbox ||
@@ -908,18 +968,19 @@ function normalizeDetectionRect(item = {}) {
     item.target_coordinates ||
     item.zone_coordinates;
 
-  if (Array.isArray(candidate)) {
-    return candidate.length === 4 &&
-      candidate.every((value) => typeof value === "number")
-      ? rectFromBbox(candidate, item)
-      : rectFromCoordinates(candidate);
+  const parsedCandidate = parseMaybeJson(candidate);
+
+  if (Array.isArray(parsedCandidate)) {
+    return parsedCandidate.length === 4 && parsedCandidate.every((value) => Number.isFinite(Number(value)))
+      ? rectFromBbox(parsedCandidate, { ...item, target })
+      : rectFromCoordinates(parsedCandidate);
   }
 
-  if (candidate && typeof candidate === "object") {
-    const x = Number(candidate.x ?? candidate.left);
-    const y = Number(candidate.y ?? candidate.top);
-    const width = Number(candidate.width ?? candidate.w);
-    const height = Number(candidate.height ?? candidate.h);
+  if (parsedCandidate && typeof parsedCandidate === "object") {
+    const x = Number(parsedCandidate.x ?? parsedCandidate.left);
+    const y = Number(parsedCandidate.y ?? parsedCandidate.top);
+    const width = Number(parsedCandidate.width ?? parsedCandidate.w);
+    const height = Number(parsedCandidate.height ?? parsedCandidate.h);
     if ([x, y, width, height].every(Number.isFinite)) {
       return {
         x: clampUnit(x),
@@ -1275,29 +1336,62 @@ function openPersonDialog() {
     class_name: "",
     face_registered: false,
   };
+  newPersonFaceImageBase64.value = "";
+  newPersonFaceImageName.value = "";
   personDialogVisible.value = true;
 }
 
-function savePerson() {
+async function savePerson() {
   const form = personForm.value;
   if (!form.name.trim()) {
     ElMessage.warning("请填写人员姓名。");
     return;
   }
-  students.value = [
-    {
-      id: Date.now(),
-      student_no: form.student_no.trim() || `P${String(Date.now()).slice(-6)}`,
-      name: form.name.trim(),
-      class_name: form.class_name.trim() || "未分组",
-      status: "active",
-      face_registered: Boolean(form.face_registered),
-      last_seen: "--",
-    },
-    ...students.value,
-  ];
+  const localPerson = {
+    id: Date.now(),
+    student_no: form.student_no.trim() || `P${String(Date.now()).slice(-6)}`,
+    name: form.name.trim(),
+    class_name: form.class_name.trim() || "未分组",
+    status: "active",
+    face_registered: false,
+    last_seen: "--"
+  };
+  let savedPerson = localPerson;
+  try {
+    const created = await createStudent(localPerson);
+    savedPerson = { ...created, face_registered: Boolean(created.face_registered) };
+  } catch (error) {
+    if (!isMockEnabled()) {
+      ElMessage.error(error?.message || "新增人员接口请求失败。");
+      return;
+    }
+    ElMessage.warning("人员接口不可用，已在开发模式下临时新增人员。");
+  }
+
+  if (newPersonFaceImageBase64.value) {
+    if (!savedPerson.id) {
+      ElMessage.warning("人员已新增，但后端未返回人员 ID，暂时无法注册人脸。");
+    } else {
+      try {
+        await registerStudentFace(savedPerson.id, newPersonFaceImageBase64.value);
+        savedPerson = { ...savedPerson, face_registered: true };
+        ElMessage.success("人员信息和人脸图片已提交。");
+      } catch (error) {
+        if (!isMockEnabled()) {
+          students.value = [savedPerson, ...students.value];
+          personDialogVisible.value = false;
+          ElMessage.error(error?.message || "人员已新增，但人脸注册接口请求失败。");
+          return;
+        }
+        savedPerson = { ...savedPerson, face_registered: true };
+        ElMessage.warning("人脸注册接口不可用，开发模式下已临时标记为已注册。");
+      }
+    }
+  } else {
+    ElMessage.success("已新增人员，后续可在人脸库中补录人脸。");
+  }
+  students.value = [savedPerson, ...students.value];
   personDialogVisible.value = false;
-  ElMessage.success("已新增人员到当前前端列表。");
 }
 
 function openStreamDialog() {
@@ -1311,17 +1405,17 @@ function openStreamDialog() {
   streamDialogVisible.value = true;
 }
 
-function saveStream() {
+async function saveStream() {
   const form = streamForm.value;
-  if (!form.stream_id.trim() || !form.stream_name.trim()) {
-    ElMessage.warning("请填写视频源编号和名称。");
+  if (!form.stream_id.trim() || !form.stream_name.trim() || !form.rtmp_url.trim()) {
+    ElMessage.warning("请填写视频源编号、名称和 RTMP 地址。");
     return;
   }
   if (streams.value.some((item) => item.stream_id === form.stream_id.trim())) {
     ElMessage.warning("视频源编号已存在，请换一个。");
     return;
   }
-  const nextStream = {
+  const localStream = {
     id: Date.now(),
     stream_id: form.stream_id.trim(),
     stream_name: form.stream_name.trim(),
@@ -1331,10 +1425,117 @@ function saveStream() {
     rtmp_url: form.rtmp_url.trim(),
     remark: "前端临时新增",
   };
-  streams.value = [nextStream, ...streams.value];
-  activeStreamId.value = nextStream.stream_id;
+  try {
+    const created = await createStream(localStream);
+    streams.value = [created, ...streams.value];
+    activeStreamId.value = created.stream_id;
+    ElMessage.success("已通过接口新增视频源。");
+  } catch (error) {
+    if (!isMockEnabled()) {
+      ElMessage.error(error?.message || "新增视频源接口请求失败。");
+      return;
+    }
+    streams.value = [localStream, ...streams.value];
+    activeStreamId.value = localStream.stream_id;
+    ElMessage.warning("接口不可用，已在开发模式下临时新增视频源。");
+  }
   streamDialogVisible.value = false;
-  ElMessage.success("已新增视频源到当前前端列表。");
+}
+
+function openFaceDialog(row) {
+  selectedStudent.value = row;
+  faceImageBase64.value = "";
+  faceImageName.value = "";
+  faceDialogVisible.value = true;
+}
+
+function handleFaceFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  faceImageName.value = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    faceImageBase64.value = String(reader.result || "").split(",")[1] || "";
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleNewPersonFaceFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  newPersonFaceImageName.value = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    newPersonFaceImageBase64.value = String(reader.result || "").split(",")[1] || "";
+  };
+  reader.readAsDataURL(file);
+}
+
+async function saveFaceRegistration() {
+  if (!selectedStudent.value?.id) {
+    ElMessage.warning("请选择需要注册人脸的人员。");
+    return;
+  }
+  if (!faceImageBase64.value) {
+    ElMessage.warning("请先选择一张单人脸图片。");
+    return;
+  }
+  try {
+    await registerStudentFace(selectedStudent.value.id, faceImageBase64.value);
+    students.value = students.value.map((item) =>
+      item.id === selectedStudent.value.id ? { ...item, face_registered: true } : item
+    );
+    faceDialogVisible.value = false;
+    ElMessage.success("人脸注册成功。");
+  } catch (error) {
+    if (!isMockEnabled()) {
+      ElMessage.error(error?.message || "人脸注册接口请求失败。");
+      return;
+    }
+    students.value = students.value.map((item) =>
+      item.id === selectedStudent.value.id ? { ...item, face_registered: true } : item
+    );
+    faceDialogVisible.value = false;
+    ElMessage.warning("接口不可用，已在开发模式下标记为已注册。");
+  }
+}
+
+function openAlertProcessDialog(row, status = "handled") {
+  selectedAlert.value = row;
+  alertProcessForm.value = {
+    status,
+    remark: row.remark || ""
+  };
+  alertProcessDialogVisible.value = true;
+}
+
+async function saveAlertProcess() {
+  if (!selectedAlert.value?.id) {
+    ElMessage.warning("请选择需要处理的告警。");
+    return;
+  }
+  try {
+    await updateAlertStatus(selectedAlert.value.id, alertProcessForm.value);
+    alerts.value = alerts.value.map((item) =>
+      item.id === selectedAlert.value.id
+        ? { ...item, status: alertProcessForm.value.status, remark: alertProcessForm.value.remark, handled_at: new Date().toISOString() }
+        : item
+    );
+    alertProcessDialogVisible.value = false;
+    ElMessage.success("告警状态已更新。");
+  } catch (error) {
+    if (!isMockEnabled()) {
+      ElMessage.error(error?.message || "告警处理接口请求失败。");
+      return;
+    }
+    alerts.value = alerts.value.map((item) =>
+      item.id === selectedAlert.value.id
+        ? { ...item, status: alertProcessForm.value.status, remark: alertProcessForm.value.remark, handled_at: new Date().toISOString() }
+        : item
+    );
+    alertProcessDialogVisible.value = false;
+    ElMessage.warning("接口不可用，已在开发模式下临时更新状态。");
+  }
 }
 
 onMounted(async () => {
@@ -2042,11 +2243,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   静态服务访问。</span
                 >
               </div>
-              <el-input
-                class="search-box"
-                :prefix-icon="Search"
-                placeholder="搜索类型、说明或视频源"
-              />
+              <div class="alert-filter-bar">
+                <el-input v-model="alertKeyword" class="search-box" :prefix-icon="Search" clearable placeholder="搜索类型、说明或视频源" />
+                <el-select v-model="activeAlertType" class="filter-select" placeholder="告警类型">
+                  <el-option v-for="item in alertTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+                <el-select v-model="activeAlertLevel" class="filter-select" placeholder="告警等级">
+                  <el-option v-for="item in alertLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
+              </div>
             </div>
             <el-table :data="filteredAlerts" height="360" class="clean-table">
               <el-table-column prop="occurred_at" label="时间" width="150" />
@@ -2097,6 +2302,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     :href="resourceUrl(row.record_url)"
                     >片段</el-button
                   >
+                </template>
+              </el-table-column>
+              <el-table-column label="处理" width="190" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" text @click="openAlertProcessDialog(row, 'handled')">处理</el-button>
+                  <el-button size="small" text @click="openAlertProcessDialog(row, 'false_alarm')">误报</el-button>
+                  <el-button size="small" text @click="openAlertProcessDialog(row, 'ignored')">忽略</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -2349,6 +2561,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </template>
               </el-table-column>
               <el-table-column prop="last_seen" label="最近出现" width="110" />
+              <el-table-column label="操作" width="130" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" text @click="openFaceDialog(row)">
+                    {{ row.face_registered ? "重新注册" : "注册人脸" }}
+                  </el-button>
+                </template>
+              </el-table-column>
             </el-table>
           </section>
 
@@ -2424,14 +2643,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               >
             </div>
             <div class="stream-list">
-              <article v-for="stream in streams" :key="stream.stream_id">
+              <article v-for="stream in allStreamStatusRecords" :key="stream.stream_id">
                 <div>
                   <b>{{ stream.stream_name }}</b>
                   <span>{{ stream.rtmp_url }}</span>
                 </div>
-                <el-tag :type="statusType(stream.status)">{{
-                  stream.status
-                }}</el-tag>
+                <el-tag :type="statusType(stream.status)">{{ statusText(stream.status) }}</el-tag>
               </article>
             </div>
           </section>
@@ -2516,13 +2733,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               placeholder="例如 高一 1 班 / 访客"
             />
           </el-form-item>
-          <el-form-item label="人脸状态">
-            <el-switch
-              v-model="personForm.face_registered"
-              active-text="已注册"
-              inactive-text="待注册"
-            />
+          <el-form-item label="人脸图片">
+            <label class="file-picker">
+              <input type="file" accept="image/*" @change="handleNewPersonFaceFileChange" />
+              <span>{{ newPersonFaceImageName || "选择单人脸图片，可稍后补录" }}</span>
+            </label>
           </el-form-item>
+          <p class="dialog-hint">
+            保存人员后，如已选择图片，前端会继续调用 `/students/{id}/face` 完成人脸注册。
+          </p>
         </el-form>
         <template #footer>
           <el-button @click="personDialogVisible = false">取消</el-button>
@@ -2577,11 +2796,55 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </template>
       </el-dialog>
 
-      <div
-        v-if="isVideoExpanded"
-        class="video-expanded-mask"
-        @click.self="closeExpandedVideo"
-      >
+      <el-dialog v-model="alertProcessDialogVisible" title="处理告警" width="480px" class="local-edit-dialog">
+        <el-form class="local-edit-form" label-position="top">
+          <el-form-item label="告警">
+            <el-input
+              :model-value="selectedAlert ? `${selectedAlert.alert_name || alertTypeText(selectedAlert.alert_type)} / ${selectedAlert.stream_name || selectedAlert.stream_id}` : ''"
+              disabled
+            />
+          </el-form-item>
+          <el-form-item label="处理状态">
+            <el-segmented
+              v-model="alertProcessForm.status"
+              :options="[
+                { label: '已处理', value: 'handled' },
+                { label: '误报', value: 'false_alarm' },
+                { label: '忽略', value: 'ignored' },
+                { label: '处理中', value: 'processing' }
+              ]"
+            />
+          </el-form-item>
+          <el-form-item label="处理备注">
+            <el-input v-model="alertProcessForm.remark" type="textarea" :rows="3" placeholder="填写复核结论、处理人或现场处置说明" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="alertProcessDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveAlertProcess">保存处理结果</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="faceDialogVisible" title="注册人脸" width="480px" class="local-edit-dialog">
+        <el-form class="local-edit-form" label-position="top">
+          <el-form-item label="人员">
+            <el-input :model-value="selectedStudent ? `${selectedStudent.name} / ${selectedStudent.student_no}` : ''" disabled />
+          </el-form-item>
+          <el-form-item label="人脸图片">
+            <label class="file-picker">
+              <input type="file" accept="image/*" @change="handleFaceFileChange" />
+              <span>{{ faceImageName || "选择单人脸图片" }}</span>
+            </label>
+          </el-form-item>
+          <p class="dialog-hint">图片会通过 `/students/{id}/face` 提交给 SpringBoot，由后端调用 AI 服务提取特征。</p>
+        </el-form>
+        <template #footer>
+          <el-button @click="faceDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveFaceRegistration">提交注册</el-button>
+        </template>
+      </el-dialog>
+
+      <div v-if="isVideoExpanded" class="video-expanded-mask" @click.self="closeExpandedVideo">
         <section class="video-expanded-panel">
           <header class="video-expanded-head">
             <div>
