@@ -1,11 +1,12 @@
 import { aiClient, apiClient, isMockEnabled, joinAiUrl, requestData, unwrapResponse } from "./http";
 import {
   mockAlerts,
+  mockAnalysisEvents,
   mockHealth,
   mockRules,
   mockStreams,
   mockStudents,
-  mockSummary
+  mockSummary,
 } from "../data/mockData";
 
 function asArray(payload) {

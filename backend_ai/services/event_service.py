@@ -18,6 +18,7 @@ EVENT_NAMES = {
     "phone_usage": "使用手机",
     "head_down": "长时间低头",
     "crowd_gathering": "异常人流聚集",
+    "flame_detected": "明火检测",
     "stream_offline": "视频流中断",
 }
 

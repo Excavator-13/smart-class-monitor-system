@@ -1,23 +1,68 @@
 streams:
   - stream_id: classroom_01
     rtmp_url: rtmp://${RTMP_BASE_URL}/live/classroom_01
-    name: 教室1
+    stream_name: 教室1
+    status: enabled
+  - stream_id: classroom_02
+    rtmp_url: rtmp://${RTMP_BASE_URL}/live/classroom_02
+    stream_name: 教室2
     status: enabled
 
 zones:
   - zone_id: zone_01
     stream_id: classroom_01
-    name: 讲台区域
-    polygon:
-      - [0.1, 0.1]
-      - [0.5, 0.1]
-      - [0.5, 0.5]
-      - [0.1, 0.5]
+    zone_name: 讲台危险区
+    zone_type: danger
+    coordinates:
+      - { x: 0.1, y: 0.1 }
+      - { x: 0.5, y: 0.1 }
+      - { x: 0.5, y: 0.5 }
+      - { x: 0.1, y: 0.5 }
+    threshold_seconds: 2
+    safe_distance: 0.05
+    enabled: true
+  - zone_id: zone_02
+    stream_id: classroom_01
+    zone_name: 禁手机区
+    zone_type: phone_forbidden
+    coordinates:
+      - { x: 0.0, y: 0.0 }
+      - { x: 1.0, y: 0.0 }
+      - { x: 1.0, y: 1.0 }
+      - { x: 0.0, y: 1.0 }
+    threshold_seconds: 3
+    safe_distance: 0.05
     enabled: true
 
 rules:
-  - rule_type: zone_intrusion
-    name: 区域入侵检测
+  - rule_type: danger_zone
+    name: 危险区域检测
+    enabled: true
+    threshold_seconds: 2
+    confidence_threshold: 0.6
+    cooldown_seconds: 45
+    config_json:
+      safe_distance: 0.05
+  - rule_type: phone_usage
+    name: 使用手机检测
     enabled: true
     threshold_seconds: 3
     confidence_threshold: 0.6
+    cooldown_seconds: 45
+    config_json:
+      need_person_phone_relation: true
+  - rule_type: head_down
+    name: 长时间低头检测
+    enabled: true
+    threshold_seconds: 5
+    confidence_threshold: 0.6
+    cooldown_seconds: 45
+  - rule_type: crowd_gathering
+    name: 异常人流聚集检测
+    enabled: true
+    threshold_seconds: 3
+    confidence_threshold: 0.6
+    cooldown_seconds: 60
+    config_json:
+      min_count: 4
+      max_center_distance: 0.15

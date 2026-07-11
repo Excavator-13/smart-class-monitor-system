@@ -13,7 +13,7 @@ import {
   Setting,
   Switch,
   User,
-  VideoCamera
+  VideoCamera,
 } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import {
@@ -29,7 +29,7 @@ import {
   fetchSystemHealth,
   getVideoFeedUrl,
   login,
-  logout
+  logout,
 } from "./services/smartClassApi";
 import { clearAuthSession, getStoredToken, getStoredUser, joinResourceUrl, storeAuthSession } from "./services/http";
 import lineDogGif from "./assets/line-dog.gif";
@@ -46,7 +46,7 @@ const canUseDeveloperLogin = import.meta.env.DEV || import.meta.env.VITE_ENABLE_
 const authForm = ref({
   username: "",
   password: "",
-  remember: true
+  remember: true,
 });
 const registerForm = ref({
   phone: "",
@@ -54,7 +54,7 @@ const registerForm = ref({
   role: "teacher",
   password: "",
   confirmPassword: "",
-  remark: ""
+  remark: "",
 });
 const personDialogVisible = ref(false);
 const streamDialogVisible = ref(false);
@@ -115,7 +115,7 @@ const navItems = [
   { key: "alerts", label: "告警管理", icon: Bell },
   { key: "rules", label: "区域规则", icon: Setting },
   { key: "people", label: "人脸库", icon: User },
-  { key: "system", label: "系统状态", icon: Connection }
+  { key: "system", label: "系统状态", icon: Connection },
 ];
 
 const statusOptions = [
@@ -128,7 +128,11 @@ const statusOptions = [
 ];
 
 const currentStream = computed(() => {
-  return streams.value.find((item) => item.stream_id === activeStreamId.value) || streams.value[0] || {};
+  return (
+    streams.value.find((item) => item.stream_id === activeStreamId.value) ||
+    streams.value[0] ||
+    {}
+  );
 });
 
 const videoFeedUrl = computed(() => getVideoFeedUrl(activeStreamId.value));
@@ -137,10 +141,12 @@ const dayTitle = computed(() => (isDay.value ? "白天模式" : "夜间模式"))
 const dayHint = computed(() => (isDay.value ? "点击切换到护眼黑夜" : "点击切换到明亮白天"));
 const userDisplayName = computed(() => currentUser.value?.nickname || currentUser.value?.username || "未登录用户");
 const userRoleName = computed(() => {
-  return {
-    admin: "管理员",
-    teacher: "教师"
-  }[currentUser.value?.role] || "未登录";
+  return (
+    {
+      admin: "管理员",
+      teacher: "教师",
+    }[currentUser.value?.role] || "未登录"
+  );
 });
 
 const hasConfirmedForbiddenZone = computed(() => Boolean(confirmedForbiddenZone.value));
@@ -154,7 +160,7 @@ function isPhoneRelated(item = {}) {
     item.title,
     item.summary,
     item.description,
-    item.text
+    item.text,
   ]
     .filter(Boolean)
     .join(" ");
@@ -171,17 +177,27 @@ const pendingAlertCount = computed(() => {
 const criticalAlertCount = computed(() => displayAlerts.value.filter((item) => item.level === "critical").length);
 const confirmedAlertCount = computed(() => displayAlerts.value.filter((item) => item.status === "handled").length);
 const enabledRuleCount = computed(() => {
-  return rules.value.filter((item) => item.enabled && (hasConfirmedForbiddenZone.value || !isPhoneRelated(item))).length;
+  return rules.value.filter(
+    (item) =>
+      item.enabled &&
+      (hasConfirmedForbiddenZone.value || !isPhoneRelated(item)),
+  ).length;
 });
-const registeredStudentCount = computed(() => students.value.filter((item) => item.face_registered).length);
-const strangerCount = computed(() => students.value.filter((item) => !item.face_registered).length);
-const onlineStreamCount = computed(() => streams.value.filter((item) => item.status === "online").length);
+const registeredStudentCount = computed(
+  () => students.value.filter((item) => item.face_registered).length,
+);
+const strangerCount = computed(
+  () => students.value.filter((item) => !item.face_registered).length,
+);
+const onlineStreamCount = computed(
+  () => streams.value.filter((item) => item.status === "enabled").length,
+);
 
 const healthItems = computed(() => [
   { label: "RTMP 流媒体", value: health.value.rtmp || "unknown" },
   { label: "AI 分析服务", value: health.value.ai || "unknown" },
   { label: "业务后端", value: health.value.api || "unknown" },
-  { label: "MySQL 数据库", value: health.value.database || "unknown" }
+  { label: "MySQL 数据库", value: health.value.database || "unknown" },
 ]);
 
 const metricCards = computed(() => [
@@ -193,11 +209,15 @@ const metricCards = computed(() => [
 
 const filteredAlerts = computed(() => {
   if (activeAlertStatus.value === "全部") return displayAlerts.value;
-  return displayAlerts.value.filter((item) => item.status === activeAlertStatus.value);
+  return displayAlerts.value.filter(
+    (item) => item.alert_status === activeAlertStatus.value,
+  );
 });
 
 const highPriorityAlerts = computed(() => {
-  return displayAlerts.value.filter((item) => ["critical", "high"].includes(item.level)).slice(0, 4);
+  return displayAlerts.value
+    .filter((item) => item.level === "high")
+    .slice(0, 4);
 });
 
 const activeRiskEvents = computed(() => {
@@ -270,9 +290,13 @@ const targetRiskScore = computed(() => {
 
 const alertPageCards = computed(() => [
   { label: "待处置事件", value: pendingAlertCount.value, tone: "danger" },
-  { label: "高危事件", value: criticalAlertCount.value, tone: "warn" },
+  { label: "高危事件", value: highAlertCount.value, tone: "warn" },
   { label: "已闭环", value: confirmedAlertCount.value, tone: "ok" },
-  { label: "证据留存", value: `${displayAlerts.value.length} 条`, tone: "brand" }
+  {
+    label: "证据留存",
+    value: `${displayAlerts.value.length} 条`,
+    tone: "brand",
+  },
 ]);
 
 const rulePageCards = computed(() => [
@@ -286,7 +310,11 @@ const peoplePageCards = computed(() => [
   { label: "人员档案", value: students.value.length, tone: "brand" },
   { label: "已注册人脸", value: registeredStudentCount.value, tone: "ok" },
   { label: "待核验身份", value: strangerCount.value, tone: "warn" },
-  { label: "最近出现", value: students.value[0]?.last_seen || "--", tone: "brand" }
+  {
+    label: "最近出现",
+    value: students.value[0]?.last_seen || "--",
+    tone: "brand",
+  },
 ]);
 
 const systemPageCards = computed(() => [
@@ -318,7 +346,7 @@ const ruleTemplates = [
 const registrationSteps = computed(() => [
   { title: "档案同步", value: `${students.value.length} 条人员记录` },
   { title: "人脸采集", value: `${registeredStudentCount.value} 人完成` },
-  { title: "异常核验", value: `${strangerCount.value} 条待确认` }
+  { title: "异常核验", value: `${strangerCount.value} 条待确认` },
 ]);
 
 const dependencySteps = [
@@ -334,10 +362,21 @@ const operationLogs = [
   "只有显式开启 mock 模式时才使用本地演示数据。"
 ];
 const activeForbiddenRect = computed(() => {
-  if (isDrawingForbiddenZone.value && forbiddenZoneStart.value && forbiddenZoneCurrent.value) {
-    return buildRectFromPoints(forbiddenZoneStart.value, forbiddenZoneCurrent.value);
+  if (
+    isDrawingForbiddenZone.value &&
+    forbiddenZoneStart.value &&
+    forbiddenZoneCurrent.value
+  ) {
+    return buildRectFromPoints(
+      forbiddenZoneStart.value,
+      forbiddenZoneCurrent.value,
+    );
   }
-  return pendingForbiddenZone.value?.rect || confirmedForbiddenZone.value?.rect || null;
+  return (
+    pendingForbiddenZone.value?.rect ||
+    confirmedForbiddenZone.value?.rect ||
+    null
+  );
 });
 
 const forbiddenZoneStyle = computed(() => {
@@ -347,7 +386,7 @@ const forbiddenZoneStyle = computed(() => {
     left: `${rect.x * 100}%`,
     top: `${rect.y * 100}%`,
     width: `${rect.width * 100}%`,
-    height: `${rect.height * 100}%`
+    height: `${rect.height * 100}%`,
   };
 });
 
@@ -359,7 +398,7 @@ const forbiddenZonePayload = computed(() => ({
   zone_type: "phone_forbidden",
   shape_type: "rectangle",
   stream_id: activeStreamId.value,
-  coordinates: forbiddenZoneCoordinates.value
+  coordinates: forbiddenZoneCoordinates.value,
 }));
 
 const phoneDetectionSources = computed(() => {
@@ -477,13 +516,16 @@ function ruleSummaryText(rule) {
 }
 
 function ruleSummary(rule) {
-  if (!hasConfirmedForbiddenZone.value && isPhoneRelated(rule)) return "等待禁用区确认后生效";
+  if (!hasConfirmedForbiddenZone.value && isPhoneRelated(rule))
+    return "等待禁用区确认后生效";
   return rule.summary;
 }
 
 function normalizeList(payload) {
   if (Array.isArray(payload)) return payload;
-  return payload?.records || payload?.list || payload?.rows || [];
+  return (
+    payload?.items || payload?.records || payload?.list || payload?.rows || []
+  );
 }
 
 function normalizeHealth(payload) {
@@ -597,7 +639,7 @@ function getVideoPointerPoint(event) {
   const rect = stage.getBoundingClientRect();
   return {
     x: clampUnit((event.clientX - rect.left) / rect.width),
-    y: clampUnit((event.clientY - rect.top) / rect.height)
+    y: clampUnit((event.clientY - rect.top) / rect.height),
   };
 }
 
@@ -610,16 +652,25 @@ function buildRectFromPoints(start, end) {
     x: x1,
     y: y1,
     width: x2 - x1,
-    height: y2 - y1
+    height: y2 - y1,
   };
 }
 
 function buildCoordinatesFromRect(rect) {
   return [
     { x: Number(rect.x.toFixed(4)), y: Number(rect.y.toFixed(4)) },
-    { x: Number((rect.x + rect.width).toFixed(4)), y: Number(rect.y.toFixed(4)) },
-    { x: Number((rect.x + rect.width).toFixed(4)), y: Number((rect.y + rect.height).toFixed(4)) },
-    { x: Number(rect.x.toFixed(4)), y: Number((rect.y + rect.height).toFixed(4)) }
+    {
+      x: Number((rect.x + rect.width).toFixed(4)),
+      y: Number(rect.y.toFixed(4)),
+    },
+    {
+      x: Number((rect.x + rect.width).toFixed(4)),
+      y: Number((rect.y + rect.height).toFixed(4)),
+    },
+    {
+      x: Number(rect.x.toFixed(4)),
+      y: Number((rect.y + rect.height).toFixed(4)),
+    },
   ];
 }
 
@@ -740,15 +791,23 @@ function updateForbiddenZoneDraw(event) {
 }
 
 function finishForbiddenZoneDraw() {
-  if (!isDrawingForbiddenZone.value || !forbiddenZoneStart.value || !forbiddenZoneCurrent.value) return;
-  const rect = buildRectFromPoints(forbiddenZoneStart.value, forbiddenZoneCurrent.value);
+  if (
+    !isDrawingForbiddenZone.value ||
+    !forbiddenZoneStart.value ||
+    !forbiddenZoneCurrent.value
+  )
+    return;
+  const rect = buildRectFromPoints(
+    forbiddenZoneStart.value,
+    forbiddenZoneCurrent.value,
+  );
   isDrawingForbiddenZone.value = false;
   forbiddenZoneStart.value = null;
   forbiddenZoneCurrent.value = null;
   if (rect.width < 0.015 || rect.height < 0.015) return;
   pendingForbiddenZone.value = {
     rect,
-    coordinates: buildCoordinatesFromRect(rect)
+    coordinates: buildCoordinatesFromRect(rect),
   };
 }
 
@@ -812,13 +871,14 @@ function setAuthNotice(message, type = "info") {
 }
 
 function normalizeUser(loginPayload, username) {
-  const user = loginPayload?.user || loginPayload?.user_info || loginPayload || {};
+  const user =
+    loginPayload?.user || loginPayload?.user_info || loginPayload || {};
   return {
     user_id: user.user_id || user.id || "",
     username: user.username || username,
     nickname: user.nickname || user.name || username,
     role: user.role || "teacher",
-    avatar_url: user.avatar_url || ""
+    avatar_url: user.avatar_url || "",
   };
 }
 
@@ -952,7 +1012,10 @@ async function loadDashboard() {
   analysisEvents.value = results.events.ok ? normalizeList(results.events.value) : [];
   modelStatus.value = results.model.ok ? results.model.value || {} : {};
 
-  if (!streams.value.some((item) => item.stream_id === activeStreamId.value) && streams.value[0]) {
+  if (
+    !streams.value.some((item) => item.stream_id === activeStreamId.value) &&
+    streams.value[0]
+  ) {
     activeStreamId.value = streams.value[0].stream_id;
   }
 
@@ -1104,7 +1167,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
 <template>
   <section v-if="!isAuthenticated" class="auth-shell">
-    <video class="auth-bg-video" autoplay muted loop playsinline preload="auto" aria-hidden="true">
+    <video
+      class="auth-bg-video"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="auto"
+      aria-hidden="true"
+    >
       <source :src="loginBackgroundVideo" type="video/mp4" />
     </video>
     <div class="auth-bg-overlay"></div>
@@ -1115,7 +1186,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         <span>智慧教室安全监测</span>
       </div>
       <h1>智慧教室实时行为分析与安全监测系统</h1>
-      <p>统一接入 SpringBoot 鉴权、AI 视频分析和 Nginx 静态资源，为教师和管理员提供安全、清晰的值守入口。</p>
+      <p>
+        统一接入 SpringBoot 鉴权、AI 视频分析和 Nginx
+        静态资源，为教师和管理员提供安全、清晰的值守入口。
+      </p>
       <div class="auth-feature-grid">
         <article>
           <b>JWT 鉴权</b>
@@ -1134,8 +1208,20 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
     <div class="auth-panel">
       <div class="auth-tabs" role="tablist" aria-label="认证方式">
-        <button :class="{ active: authMode === 'login' }" type="button" @click="authMode = 'login'">用户登录</button>
-        <button :class="{ active: authMode === 'register' }" type="button" @click="authMode = 'register'">手机号注册</button>
+        <button
+          :class="{ active: authMode === 'login' }"
+          type="button"
+          @click="authMode = 'login'"
+        >
+          用户登录
+        </button>
+        <button
+          :class="{ active: authMode === 'register' }"
+          type="button"
+          @click="authMode = 'register'"
+        >
+          手机号注册
+        </button>
       </div>
 
       <div class="auth-title">
@@ -1158,12 +1244,26 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         show-icon
       />
 
-      <el-form v-if="authMode === 'login'" class="auth-form" label-position="top" @submit.prevent="submitLogin">
+      <el-form
+        v-if="authMode === 'login'"
+        class="auth-form"
+        label-position="top"
+        @submit.prevent="submitLogin"
+      >
         <el-form-item label="用户名 / 工号">
-          <el-input v-model="authForm.username" :prefix-icon="User" placeholder="例如 admin 或 teacher" />
+          <el-input
+            v-model="authForm.username"
+            :prefix-icon="User"
+            placeholder="例如 admin 或 teacher"
+          />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input v-model="authForm.password" :prefix-icon="Lock" placeholder="请输入密码" show-password />
+          <el-input
+            v-model="authForm.password"
+            :prefix-icon="Lock"
+            placeholder="请输入密码"
+            show-password
+          />
         </el-form-item>
         <div class="auth-row">
           <el-checkbox v-model="authForm.remember">记住登录状态</el-checkbox>
@@ -1180,26 +1280,58 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </button>
       </el-form>
 
-      <el-form v-else class="auth-form" label-position="top" @submit.prevent="submitRegisterRequest">
+      <el-form
+        v-else
+        class="auth-form"
+        label-position="top"
+        @submit.prevent="submitRegisterRequest"
+      >
         <el-form-item label="手机号">
-          <el-input v-model="registerForm.phone" placeholder="请输入 11 位手机号" />
+          <el-input
+            v-model="registerForm.phone"
+            placeholder="请输入 11 位手机号"
+          />
         </el-form-item>
         <el-form-item label="姓名">
           <el-input v-model="registerForm.name" placeholder="请输入真实姓名" />
         </el-form-item>
         <el-form-item label="申请角色">
-          <el-segmented v-model="registerForm.role" :options="[{ label: '教师', value: 'teacher' }, { label: '管理员', value: 'admin' }]" />
+          <el-segmented
+            v-model="registerForm.role"
+            :options="[
+              { label: '教师', value: 'teacher' },
+              { label: '管理员', value: 'admin' },
+            ]"
+          />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input v-model="registerForm.password" placeholder="设置密码" show-password />
+          <el-input
+            v-model="registerForm.password"
+            placeholder="设置密码"
+            show-password
+          />
         </el-form-item>
         <el-form-item label="确认密码">
-          <el-input v-model="registerForm.confirmPassword" placeholder="再次输入密码" show-password />
+          <el-input
+            v-model="registerForm.confirmPassword"
+            placeholder="再次输入密码"
+            show-password
+          />
         </el-form-item>
         <el-form-item label="申请说明">
-          <el-input v-model="registerForm.remark" type="textarea" :rows="2" placeholder="例如任课班级、管理范围或申请原因" />
+          <el-input
+            v-model="registerForm.remark"
+            type="textarea"
+            :rows="2"
+            placeholder="例如任课班级、管理范围或申请原因"
+          />
         </el-form-item>
-        <el-button class="auth-submit" type="primary" @click="submitRegisterRequest">提交注册申请</el-button>
+        <el-button
+          class="auth-submit"
+          type="primary"
+          @click="submitRegisterRequest"
+          >提交注册申请</el-button
+        >
       </el-form>
 
       <div class="auth-contract">
@@ -1243,8 +1375,18 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           <p>聚焦单路实时画面，优先呈现视频流、AI 标注、实时告警和事件追踪。</p>
         </div>
         <div class="header-actions">
-          <button class="sky-widget" :class="{ night: !isDay }" :title="dayHint" type="button" @click="toggleThemeMode">
-            <div class="sky-avatar" :class="isDay ? 'sun-face' : 'moon-face'" aria-hidden="true">
+          <button
+            class="sky-widget"
+            :class="{ night: !isDay }"
+            :title="dayHint"
+            type="button"
+            @click="toggleThemeMode"
+          >
+            <div
+              class="sky-avatar"
+              :class="isDay ? 'sun-face' : 'moon-face'"
+              aria-hidden="true"
+            >
               <span class="sky-eye left"></span>
               <span class="sky-eye right"></span>
               <span class="sky-mouth"></span>
@@ -1257,13 +1399,19 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
-          <el-button :icon="Setting" @click="activePage = 'rules'">规则配置</el-button>
+          <el-button :icon="Setting" @click="activePage = 'rules'"
+            >规则配置</el-button
+          >
           <div class="user-chip" :title="userRoleName">
             <el-icon><User /></el-icon>
             <span>{{ userDisplayName }}</span>
           </div>
           <el-button @click="handleLogout">退出</el-button>
-          <el-select v-model="activeStreamId" class="stream-select" @change="switchStream">
+          <el-select
+            v-model="activeStreamId"
+            class="stream-select"
+            @change="switchStream"
+          >
             <el-option
               v-for="stream in streams"
               :key="stream.stream_id"
@@ -1275,7 +1423,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
       </header>
 
       <section class="metrics-grid">
-        <article v-for="item in metricCards" :key="item.label" class="metric-card">
+        <article
+          v-for="item in metricCards"
+          :key="item.label"
+          class="metric-card"
+        >
           <div class="metric-icon">
             <el-icon><component :is="item.icon" /></el-icon>
           </div>
@@ -1289,7 +1441,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           <section class="panel video-panel">
             <div class="panel-head">
               <div>
-                <h2>{{ currentStream.stream_name || activeStreamId }} 实时画面</h2>
+                <h2>
+                  {{ currentStream.stream_name || activeStreamId }} 实时画面
+                </h2>
                 <span>{{ currentStream.location || "单路实时监控" }}</span>
               </div>
               <div class="video-toolbar" aria-label="实时监控工具">
@@ -1314,7 +1468,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >
                   <el-icon><Setting /></el-icon>
                 </button>
-                <button class="tool-button" title="放大实时画面" type="button" @click="openExpandedVideo">
+                <button
+                  class="tool-button"
+                  title="放大实时画面"
+                  type="button"
+                  @click="openExpandedVideo"
+                >
                   <el-icon><FullScreen /></el-icon>
                 </button>
               </div>
@@ -1323,7 +1482,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div
               ref="videoStageRef"
               class="video-stage"
-              :class="{ drawing: isDrawingForbiddenZone, locked: !showRuleOverlay }"
+              :class="{
+                drawing: isDrawingForbiddenZone,
+                locked: !showRuleOverlay,
+              }"
               @mousedown.left.prevent="startForbiddenZoneDraw"
               @mousemove="updateForbiddenZoneDraw"
               @mouseup="finishForbiddenZoneDraw"
@@ -1337,7 +1499,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 @load="handleVideoLoad"
                 @error="handleVideoError"
               />
-              <div class="classroom-fallback" :class="{ muted: !videoError && isVideoLive }">
+              <div
+                class="classroom-fallback"
+                :class="{ muted: !videoError && isVideoLive }"
+              >
                 <div class="board"></div>
                 <div class="desk d1"></div>
                 <div class="desk d2"></div>
@@ -1358,18 +1523,46 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div
                 v-if="showRuleOverlay && activeForbiddenRect"
                 class="drawn-forbidden-zone"
-                :class="{ drafting: isDrawingForbiddenZone || hasPendingForbiddenZone, confirmed: hasConfirmedForbiddenZone }"
+                :class="{
+                  drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
+                  confirmed: hasConfirmedForbiddenZone,
+                }"
                 :style="forbiddenZoneStyle"
               >
-                <span>{{ isDrawingForbiddenZone ? "绘制中" : hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区" }}</span>
+                <span>{{
+                  isDrawingForbiddenZone
+                    ? "绘制中"
+                    : hasPendingForbiddenZone
+                      ? "待确认禁用区"
+                      : "已确认禁用区"
+                }}</span>
               </div>
-              <div v-else-if="showRuleOverlay" class="draw-hint">按住鼠标左键拖拽，绘制禁用区</div>
+              <div v-else-if="showRuleOverlay" class="draw-hint">
+                按住鼠标左键拖拽，绘制禁用区
+              </div>
               <div v-else class="draw-hint muted">区域规则层已关闭</div>
-              <div v-if="showRuleOverlay && (hasPendingForbiddenZone || hasConfirmedForbiddenZone)" class="zone-actions">
-                <button v-if="hasPendingForbiddenZone" type="button" class="zone-action primary" @click.stop="confirmForbiddenZone">
+              <div
+                v-if="
+                  showRuleOverlay &&
+                  (hasPendingForbiddenZone || hasConfirmedForbiddenZone)
+                "
+                class="zone-actions"
+              >
+                <button
+                  v-if="hasPendingForbiddenZone"
+                  type="button"
+                  class="zone-action primary"
+                  @click.stop="confirmForbiddenZone"
+                >
                   确定
                 </button>
-                <button type="button" class="zone-action" @click.stop="clearForbiddenZone">删除重新选择</button>
+                <button
+                  type="button"
+                  class="zone-action"
+                  @click.stop="clearForbiddenZone"
+                >
+                  删除重新选择
+                </button>
               </div>
               <template v-if="showAiAnnotations">
                 <div
@@ -1404,7 +1597,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel">
               <div class="panel-head compact">
                 <h2>告警追踪记录</h2>
-                <el-segmented v-model="activeAlertStatus" :options="statusOptions" size="small" />
+                <el-segmented
+                  v-model="activeAlertStatus"
+                  :options="statusOptions"
+                  size="small"
+                />
               </div>
               <el-table :data="filteredAlerts" height="248" class="clean-table">
                 <el-table-column prop="occurred_at" label="时间" width="150" />
@@ -1416,7 +1613,16 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <el-table-column prop="stream_name" label="视频源" min-width="120" />
                 <el-table-column label="等级" width="84">
                   <template #default="{ row }">
-                    <el-tag :type="row.level === 'critical' ? 'danger' : row.level === 'high' ? 'warning' : 'info'" effect="light">
+                    <el-tag
+                      :type="
+                        row.level === 'high'
+                          ? 'danger'
+                          : row.level === 'warning'
+                            ? 'warning'
+                            : 'info'
+                      "
+                      effect="light"
+                    >
                       {{ levelText(row.level) }}
                     </el-tag>
                   </template>
@@ -1432,7 +1638,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel">
               <div class="panel-head compact">
                 <h2>前端呈现模块</h2>
-                <el-button size="small" :icon="User" @click="activePage = 'people'">注册人脸</el-button>
+                <el-button
+                  size="small"
+                  :icon="User"
+                  @click="activePage = 'people'"
+                  >注册人脸</el-button
+                >
               </div>
               <div class="module-grid">
                 <article v-for="module in activeModules" :key="module.title">
@@ -1462,16 +1673,24 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </div>
               </div>
               <div class="action-pills">
-                <span v-for="action in actionItems" :key="action">{{ action }}</span>
+                <span v-for="action in actionItems" :key="action">{{
+                  action
+                }}</span>
               </div>
               <div class="event-feed">
-                <article v-for="item in aiEventFeed" :key="`${item.time}-${item.text}`">
+                <article
+                  v-for="item in aiEventFeed"
+                  :key="`${item.time}-${item.text}`"
+                >
                   <time>{{ item.time }}</time>
                   <span>{{ item.text }}</span>
                 </article>
               </div>
               <div class="timeline">
-                <div v-for="item in activeSummary.timeline || []" :key="item.time">
+                <div
+                  v-for="item in activeSummary.timeline || []"
+                  :key="item.time"
+                >
                   <time>{{ item.time }}</time>
                   <span>{{ item.text }}</span>
                 </div>
@@ -1509,9 +1728,18 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <div>
                   <b>当前禁用区</b>
                   <span v-if="forbiddenZoneCoordinates.length">
-                    {{ forbiddenZoneCoordinates.map((point) => `(${formatCoord(point.x)}, ${formatCoord(point.y)})`).join(" / ") }}
+                    {{
+                      forbiddenZoneCoordinates
+                        .map(
+                          (point) =>
+                            `(${formatCoord(point.x)}, ${formatCoord(point.y)})`,
+                        )
+                        .join(" / ")
+                    }}
                   </span>
-                  <span v-else-if="hasPendingForbiddenZone">区域待确认，点击确定后输出四角坐标</span>
+                  <span v-else-if="hasPendingForbiddenZone"
+                    >区域待确认，点击确定后输出四角坐标</span
+                  >
                   <span v-else>尚未绘制，拖拽实时画面生成四角坐标</span>
                 </div>
               </article>
@@ -1520,7 +1748,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ ruleNameText(rule) }}</b>
                   <span>{{ ruleSummaryText(rule) }}，阈值 {{ rule.threshold_seconds }} 秒</span>
                 </div>
-                <el-switch v-model="rule.enabled" :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)" />
+                <el-switch
+                  v-model="rule.enabled"
+                  :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                />
               </article>
             </div>
           </section>
@@ -1533,9 +1764,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </aside>
       </section>
 
-      <section v-else-if="activePage === 'alerts'" class="page-grid module-page">
+      <section
+        v-else-if="activePage === 'alerts'"
+        class="page-grid module-page"
+      >
         <div class="page-kpis">
-          <article v-for="item in alertPageCards" :key="item.label" class="kpi-card" :class="item.tone">
+          <article
+            v-for="item in alertPageCards"
+            :key="item.label"
+            class="kpi-card"
+            :class="item.tone"
+          >
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
           </article>
@@ -1546,7 +1785,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>告警管理</h2>
-                <span>来自 SpringBoot `/alerts`，截图和录像路径由 Nginx 静态服务访问。</span>
+                <span
+                  >来自 SpringBoot `/alerts`，截图和录像路径由 Nginx
+                  静态服务访问。</span
+                >
               </div>
               <el-input class="search-box" :prefix-icon="Search" placeholder="搜索类型、说明或视频源" />
             </div>
@@ -1652,7 +1894,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
       <section v-else-if="activePage === 'rules'" class="page-grid module-page">
         <div class="page-kpis">
-          <article v-for="item in rulePageCards" :key="item.label" class="kpi-card" :class="item.tone">
+          <article
+            v-for="item in rulePageCards"
+            :key="item.label"
+            class="kpi-card"
+            :class="item.tone"
+          >
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
           </article>
@@ -1663,7 +1910,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>区域规则配置</h2>
-                <span>用于承接 `/zones` 和 `/rules`，后续可扩展为 ROI 绘制。</span>
+                <span
+                  >用于承接 `/zones` 和 `/rules`，后续可扩展为 ROI 绘制。</span
+                >
               </div>
               <el-button type="primary" :icon="CircleCheck">保存规则</el-button>
             </div>
@@ -1673,8 +1922,16 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ ruleNameText(rule) }}</b>
                   <span>{{ ruleSummaryText(rule) }}</span>
                 </div>
-                <el-input-number v-model="rule.threshold_seconds" :min="1" :max="30" size="small" />
-                <el-switch v-model="rule.enabled" :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)" />
+                <el-input-number
+                  v-model="rule.threshold_seconds"
+                  :min="1"
+                  :max="30"
+                  size="small"
+                />
+                <el-switch
+                  v-model="rule.enabled"
+                  :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                />
               </article>
             </div>
           </section>
@@ -1697,7 +1954,20 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
             <div class="coordinate-export">
               <p>后续提交给其他模块的矩形区域使用以下四角归一化坐标。</p>
-              <pre>{{ JSON.stringify(hasConfirmedForbiddenZone ? forbiddenZonePayload : { status: hasPendingForbiddenZone ? "pending_confirm" : "empty", message: "禁用区确认后才输出坐标" }, null, 2) }}</pre>
+              <pre>{{
+                JSON.stringify(
+                  hasConfirmedForbiddenZone
+                    ? forbiddenZonePayload
+                    : {
+                        status: hasPendingForbiddenZone
+                          ? "pending_confirm"
+                          : "empty",
+                        message: "禁用区确认后才输出坐标",
+                      },
+                  null,
+                  2,
+                )
+              }}</pre>
             </div>
           </section>
 
@@ -1706,7 +1976,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <h2>推荐模板</h2>
             </div>
             <div class="info-list">
-              <article v-for="item in ruleTemplates" :key="item.title" class="info-item">
+              <article
+                v-for="item in ruleTemplates"
+                :key="item.title"
+                class="info-item"
+              >
                 <b>{{ item.title }}</b>
                 <span>{{ item.text }}</span>
               </article>
@@ -1735,9 +2009,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
       </section>
 
-      <section v-else-if="activePage === 'people'" class="page-grid module-page">
+      <section
+        v-else-if="activePage === 'people'"
+        class="page-grid module-page"
+      >
         <div class="page-kpis">
-          <article v-for="item in peoplePageCards" :key="item.label" class="kpi-card" :class="item.tone">
+          <article
+            v-for="item in peoplePageCards"
+            :key="item.label"
+            class="kpi-card"
+            :class="item.tone"
+          >
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
           </article>
@@ -1748,14 +2030,21 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>人员与人脸库</h2>
-                <span>人员基础信息来自 `/students`，人脸注册提交到 `/students/{id}/face`。</span>
+                <span
+                  >人员基础信息来自 `/students`，人脸注册提交到
+                  `/students/{id}/face`。</span
+                >
               </div>
               <el-button type="primary" :icon="User" @click="openPersonDialog">新增人员</el-button>
             </div>
             <el-table :data="students" height="320" class="clean-table">
               <el-table-column prop="student_no" label="编号" width="110" />
               <el-table-column prop="name" label="姓名" width="120" />
-              <el-table-column prop="class_name" label="班级/身份" min-width="130" />
+              <el-table-column
+                prop="class_name"
+                label="班级/身份"
+                min-width="130"
+              />
               <el-table-column label="人脸状态" width="110">
                 <template #default="{ row }">
                   <el-tag :type="row.face_registered ? 'success' : 'warning'">
@@ -1776,7 +2065,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <el-icon><User /></el-icon>
               </div>
               <b>发现未登记人员</b>
-              <p>系统保留最近一次截图与视频片段，等待管理员确认身份或加入访客名单。</p>
+              <p>
+                系统保留最近一次截图与视频片段，等待管理员确认身份或加入访客名单。
+              </p>
             </div>
           </section>
 
@@ -1812,7 +2103,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
       <section v-else class="page-grid module-page">
         <div class="page-kpis">
-          <article v-for="item in systemPageCards" :key="item.label" class="kpi-card" :class="item.tone">
+          <article
+            v-for="item in systemPageCards"
+            :key="item.label"
+            class="kpi-card"
+            :class="item.tone"
+          >
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
           </article>
@@ -1833,7 +2129,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ stream.stream_name }}</b>
                   <span>{{ stream.rtmp_url }}</span>
                 </div>
-                <el-tag :type="statusType(stream.status)">{{ stream.status }}</el-tag>
+                <el-tag :type="statusType(stream.status)">{{
+                  stream.status
+                }}</el-tag>
               </article>
             </div>
           </section>
@@ -1875,7 +2173,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <h2>运行提示</h2>
             </div>
             <div class="info-list">
-              <article v-for="item in operationLogs" :key="item" class="info-item">
+              <article
+                v-for="item in operationLogs"
+                :key="item"
+                class="info-item"
+              >
                 <b>状态</b>
                 <span>{{ item }}</span>
               </article>
@@ -1938,10 +2240,21 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         <section class="video-expanded-panel">
           <header class="video-expanded-head">
             <div>
-              <h2>{{ currentStream.stream_name || activeStreamId }} 放大实时画面</h2>
-              <span>AI 标注：{{ showAiAnnotations ? "开启" : "关闭" }} / 区域规则：{{ showRuleOverlay ? "开启" : "关闭" }}</span>
+              <h2>
+                {{ currentStream.stream_name || activeStreamId }} 放大实时画面
+              </h2>
+              <span
+                >AI 标注：{{ showAiAnnotations ? "开启" : "关闭" }} /
+                区域规则：{{ showRuleOverlay ? "开启" : "关闭" }}</span
+              >
             </div>
-            <button type="button" class="zone-action" @click="closeExpandedVideo">关闭</button>
+            <button
+              type="button"
+              class="zone-action"
+              @click="closeExpandedVideo"
+            >
+              关闭
+            </button>
           </header>
           <div class="video-expanded-stage">
             <img
@@ -1952,7 +2265,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               @load="handleVideoLoad"
               @error="handleVideoError"
             />
-            <div class="classroom-fallback" :class="{ muted: !videoError && isVideoLive }">
+            <div
+              class="classroom-fallback"
+              :class="{ muted: !videoError && isVideoLive }"
+            >
               <div class="board"></div>
               <div class="desk d1"></div>
               <div class="desk d2"></div>
@@ -1961,10 +2277,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div
               v-if="showRuleOverlay && activeForbiddenRect"
               class="drawn-forbidden-zone"
-              :class="{ drafting: isDrawingForbiddenZone || hasPendingForbiddenZone, confirmed: hasConfirmedForbiddenZone }"
+              :class="{
+                drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
+                confirmed: hasConfirmedForbiddenZone,
+              }"
               :style="forbiddenZoneStyle"
             >
-              <span>{{ hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区" }}</span>
+              <span>{{
+                hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区"
+              }}</span>
             </div>
               <template v-if="showAiAnnotations">
                 <div

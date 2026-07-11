@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -7,11 +8,26 @@ from typing import Any
 import requests
 
 
+def parse_json_field(value: Any | None, default: Any = None) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return default
+
+
 def _items(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict) and "data" in payload:
         payload = payload["data"]
     if isinstance(payload, dict) and "items" in payload:
         payload = payload["items"]
+    elif isinstance(payload, dict) and "records" in payload:
+        payload = payload["records"]
     if isinstance(payload, list):
         return [item for item in payload if isinstance(item, dict)]
     if isinstance(payload, dict):
@@ -29,14 +45,18 @@ class ConfigCache:
 
 
 class ConfigClient:
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None):
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None, internal_token: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
+        self.internal_token = internal_token
         self.cache = ConfigCache()
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        response = self.session.get(f"{self.base_url}{path}", params=params, timeout=self.timeout)
+        headers = {}
+        if self.internal_token:
+            headers["X-Internal-Token"] = self.internal_token
+        response = self.session.get(f"{self.base_url}{path}", params=params, headers=headers, timeout=self.timeout)
         response.raise_for_status()
         return response.json()
 
@@ -112,4 +132,3 @@ class ConfigClient:
 
     def get_face_features(self) -> dict[str, dict[str, Any]]:
         return self.cache.face_features
-

@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import platform
 from typing import Any
 
 import cv2
 import numpy as np
 
+from backend_ai.services.config_client import parse_json_field
 from backend_ai.utils.image_utils import decode_base64_image
+
+
+def _detect_onnx_providers(device: str | None = None) -> tuple[list[str], int]:
+    if device == "cpu":
+        return ["CPUExecutionProvider"], -1
+    is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
+    if device == "cuda" or (device is None and not is_apple_silicon):
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"], 0
+    if is_apple_silicon:
+        return ["CoreMLExecutionProvider", "CPUExecutionProvider"], -1
+    return ["CPUExecutionProvider"], -1
 
 
 class FaceError(ValueError):
@@ -16,10 +29,11 @@ class FaceError(ValueError):
 
 
 class FaceService:
-    def __init__(self, model: Any | None = None, feature_dim: int = 512, similarity_threshold: float = 0.45):
+    def __init__(self, model: Any | None = None, feature_dim: int = 512, similarity_threshold: float = 0.45, device: str | None = None):
         self.model = model
         self.feature_dim = feature_dim
         self.similarity_threshold = similarity_threshold
+        self.device = device
         self.loaded = model is not None
 
     def load_model(self) -> None:
@@ -29,8 +43,9 @@ class FaceService:
         try:
             from insightface.app import FaceAnalysis
 
-            app = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-            app.prepare(ctx_id=0, det_size=(640, 640))
+            providers, ctx_id = _detect_onnx_providers(self.device)
+            app = FaceAnalysis(name="buffalo_l", providers=providers)
+            app.prepare(ctx_id=ctx_id, det_size=(640, 640))
             self.model = app
             self.loaded = True
         except Exception:
@@ -87,7 +102,7 @@ class FaceService:
             bbox = face["bbox"] if isinstance(face, dict) else [int(v) for v in face.bbox]
             best: tuple[float, dict[str, Any] | None] = (-1.0, None)
             for student in feature_cache.values():
-                vector = np.asarray(student.get("feature_vector") or [], dtype=float)
+                vector = np.asarray(parse_json_field(student.get("feature_vector"), []), dtype=float)
                 if vector.size != embedding.size or vector.size == 0:
                     continue
                 similarity = float(np.dot(embedding, vector) / ((np.linalg.norm(embedding) * np.linalg.norm(vector)) or 1.0))
@@ -122,4 +137,3 @@ class FaceService:
                     }
                 )
         return events
-
