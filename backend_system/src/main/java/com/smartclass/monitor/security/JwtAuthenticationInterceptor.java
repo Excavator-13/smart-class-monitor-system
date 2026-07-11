@@ -18,6 +18,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
 
     private static final List<String> EXCLUDE_PATHS = List.of(
             "/auth/login",
+            "/auth/register",
             "/system/health"
     );
 

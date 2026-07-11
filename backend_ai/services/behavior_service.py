@@ -8,20 +8,6 @@ from typing import Any
 from backend_ai.services.config_client import parse_json_field
 
 
-def _detect_torch_device(device: str | None = None) -> str:
-    if device and device != "auto":
-        return device
-    try:
-        import torch
-    except ImportError:
-        return "cpu"
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
-
-
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
     px1, py1, px2, py2 = person_bbox
     ox1, oy1, ox2, oy2 = object_bbox
@@ -35,7 +21,7 @@ def _bbox_center(bbox: list[float]) -> tuple[float, float]:
 
 
 class BehaviorService:
-    def __init__(self, model: Any | None = None, confidence_threshold: float = 0.6):
+    def __init__(self, model: Any | None = None, confidence_threshold: float = 0.6, device: str | None = None):
         self.model = model
         self.loaded = model is not None
         self.model_name = "ultralytics"
@@ -43,6 +29,7 @@ class BehaviorService:
         self.weights_path: str | None = None
         self.last_error: str | None = None
         self.confidence_threshold = confidence_threshold
+        self.device = device
 
     def load_model(self, settings: dict[str, Any], base_dir: Path) -> None:
         if not settings.get("enabled", True):
@@ -91,7 +78,6 @@ class BehaviorService:
         if self.model is None:
             return []
         results = self.model.predict(frame, conf=self.confidence_threshold, verbose=False) if hasattr(self.model, "predict") else self.model(frame)
-        device = _detect_torch_device(self.device)
         detections: list[dict[str, Any]] = []
         for result in results:
             names = getattr(result, "names", {})

@@ -1,7 +1,7 @@
 device: auto
 models:
   face:
-    enabled: true
+    enabled: false
     provider: insightface
     name: buffalo_l
     providers:
@@ -21,7 +21,7 @@ models:
     provider: rule
     safe_distance: 0.05
   fire:
-    enabled: true
+    enabled: false
     provider: ultralytics
     weights: models/yolo/yolo_fire.pt
     confidence_threshold: 0.25
