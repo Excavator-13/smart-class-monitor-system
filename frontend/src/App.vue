@@ -69,6 +69,8 @@ const selectedStudent = ref(null);
 const selectedAlert = ref(null);
 const faceImageBase64 = ref("");
 const faceImageName = ref("");
+const newPersonFaceImageBase64 = ref("");
+const newPersonFaceImageName = ref("");
 const alertProcessForm = ref({
   status: "handled",
   remark: ""
@@ -1334,6 +1336,8 @@ function openPersonDialog() {
     class_name: "",
     face_registered: false,
   };
+  newPersonFaceImageBase64.value = "";
+  newPersonFaceImageName.value = "";
   personDialogVisible.value = true;
 }
 
@@ -1349,21 +1353,44 @@ async function savePerson() {
     name: form.name.trim(),
     class_name: form.class_name.trim() || "未分组",
     status: "active",
-    face_registered: Boolean(form.face_registered),
+    face_registered: false,
     last_seen: "--"
   };
+  let savedPerson = localPerson;
   try {
     const created = await createStudent(localPerson);
-    students.value = [created, ...students.value];
-    ElMessage.success("已通过接口新增人员。");
+    savedPerson = { ...created, face_registered: Boolean(created.face_registered) };
   } catch (error) {
     if (!isMockEnabled()) {
       ElMessage.error(error?.message || "新增人员接口请求失败。");
       return;
     }
-    students.value = [localPerson, ...students.value];
-    ElMessage.warning("接口不可用，已在开发模式下临时新增人员。");
+    ElMessage.warning("人员接口不可用，已在开发模式下临时新增人员。");
   }
+
+  if (newPersonFaceImageBase64.value) {
+    if (!savedPerson.id) {
+      ElMessage.warning("人员已新增，但后端未返回人员 ID，暂时无法注册人脸。");
+    } else {
+      try {
+        await registerStudentFace(savedPerson.id, newPersonFaceImageBase64.value);
+        savedPerson = { ...savedPerson, face_registered: true };
+        ElMessage.success("人员信息和人脸图片已提交。");
+      } catch (error) {
+        if (!isMockEnabled()) {
+          students.value = [savedPerson, ...students.value];
+          personDialogVisible.value = false;
+          ElMessage.error(error?.message || "人员已新增，但人脸注册接口请求失败。");
+          return;
+        }
+        savedPerson = { ...savedPerson, face_registered: true };
+        ElMessage.warning("人脸注册接口不可用，开发模式下已临时标记为已注册。");
+      }
+    }
+  } else {
+    ElMessage.success("已新增人员，后续可在人脸库中补录人脸。");
+  }
+  students.value = [savedPerson, ...students.value];
   personDialogVisible.value = false;
 }
 
@@ -1429,6 +1456,17 @@ function handleFaceFileChange(event) {
   const reader = new FileReader();
   reader.onload = () => {
     faceImageBase64.value = String(reader.result || "").split(",")[1] || "";
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleNewPersonFaceFileChange(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  newPersonFaceImageName.value = file.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    newPersonFaceImageBase64.value = String(reader.result || "").split(",")[1] || "";
   };
   reader.readAsDataURL(file);
 }
@@ -2695,13 +2733,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               placeholder="例如 高一 1 班 / 访客"
             />
           </el-form-item>
-          <el-form-item label="人脸状态">
-            <el-switch
-              v-model="personForm.face_registered"
-              active-text="已注册"
-              inactive-text="待注册"
-            />
+          <el-form-item label="人脸图片">
+            <label class="file-picker">
+              <input type="file" accept="image/*" @change="handleNewPersonFaceFileChange" />
+              <span>{{ newPersonFaceImageName || "选择单人脸图片，可稍后补录" }}</span>
+            </label>
           </el-form-item>
+          <p class="dialog-hint">
+            保存人员后，如已选择图片，前端会继续调用 `/students/{id}/face` 完成人脸注册。
+          </p>
         </el-form>
         <template #footer>
           <el-button @click="personDialogVisible = false">取消</el-button>
