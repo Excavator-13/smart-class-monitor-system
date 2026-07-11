@@ -36,4 +36,7 @@ public interface StudentMapper {
 
     @Update("UPDATE student SET face_registered = #{registered} WHERE id = #{id}")
     int updateFaceRegistered(@Param("id") Long id, @Param("registered") boolean registered);
+
+    @Delete("TRUNCATE TABLE student")
+    void truncate();
 }

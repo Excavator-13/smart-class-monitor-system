@@ -36,4 +36,7 @@ public interface VideoStreamMapper {
 
     @Update("UPDATE video_stream SET deleted_at=NOW() WHERE id=#{id}")
     int softDelete(@Param("id") Long id);
+
+    @Delete("TRUNCATE TABLE video_stream")
+    void truncate();
 }

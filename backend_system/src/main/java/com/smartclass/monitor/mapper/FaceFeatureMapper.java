@@ -37,4 +37,7 @@ public interface FaceFeatureMapper {
             "FROM face_feature ff JOIN student s ON ff.student_id = s.id " +
             "WHERE ff.enabled = 1 AND ff.deleted_at IS NULL AND s.deleted_at IS NULL")
     List<java.util.Map<String, Object>> findAllEnabledWithStudent();
+
+    @Delete("TRUNCATE TABLE face_feature")
+    void truncate();
 }

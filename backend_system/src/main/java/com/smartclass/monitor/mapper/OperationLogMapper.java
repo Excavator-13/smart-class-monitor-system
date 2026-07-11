@@ -51,4 +51,7 @@ public interface OperationLogMapper {
             "#{method}, #{requestUri}, #{requestIp}, #{requestBody}, #{resultCode}, #{resultMessage})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(OperationLog log);
+
+    @Delete("TRUNCATE TABLE operation_log")
+    void truncate();
 }
