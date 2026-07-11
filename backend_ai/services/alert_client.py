@@ -18,7 +18,10 @@ class AlertClient:
         self.internal_token = internal_token
         self.dingtalk = dingtalk
 
-    def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
+    def _headers(self) -> dict[str, str] | None:
+        return {"X-Internal-Token": self.internal_token} if self.internal_token else None
+
+    def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None, event_time_offset: float | None = None) -> dict[str, Any]:
         target = event.get("target") or {}
         zone = event.get("zone") or {}
         target_info = {
@@ -43,6 +46,7 @@ class AlertClient:
             "zone_id": zone.get("zone_id"),
             "snapshot_path": event.get("snapshot_path"),
             "record_path": record_path,
+            "event_time_offset": event_time_offset,
             "extra": {"source": "backend_ai"},
         }
 

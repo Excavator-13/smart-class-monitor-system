@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from itertools import combinations
+from pathlib import Path
 from typing import Any
 
 from backend_ai.services.config_client import parse_json_field
@@ -33,15 +35,63 @@ def _bbox_center(bbox: list[float]) -> tuple[float, float]:
 
 
 class BehaviorService:
-    def __init__(self, model: Any | None = None, device: str | None = None):
+    def __init__(self, model: Any | None = None, confidence_threshold: float = 0.6):
         self.model = model
-        self.device = device
+        self.loaded = model is not None
+        self.model_name = "ultralytics"
+        self.model_version = "v1"
+        self.weights_path: str | None = None
+        self.last_error: str | None = None
+        self.confidence_threshold = confidence_threshold
+
+    def load_model(self, settings: dict[str, Any], base_dir: Path) -> None:
+        if not settings.get("enabled", True):
+            self.loaded = False
+            self.last_error = "behavior model disabled"
+            return
+        if self.model is not None:
+            self.loaded = True
+            self.last_error = None
+            return
+
+        weights = str(settings.get("weights") or "").strip()
+        if not weights:
+            self.loaded = False
+            self.last_error = "behavior model weights not configured"
+            return
+
+        weights_path = Path(weights)
+        if not weights_path.is_absolute():
+            weights_path = base_dir / weights_path
+        self.weights_path = str(weights_path)
+        self.confidence_threshold = float(settings.get("confidence_threshold", self.confidence_threshold))
+        self.model_name = str(settings.get("name") or weights_path.stem or "ultralytics")
+
+        if not weights_path.exists():
+            self.loaded = False
+            self.last_error = f"behavior model weights not found: {weights_path}"
+            return
+
+        try:
+            ultralytics_config_dir = base_dir / "config" / "ultralytics"
+            ultralytics_config_dir.mkdir(parents=True, exist_ok=True)
+            os.environ.setdefault("YOLO_CONFIG_DIR", str(ultralytics_config_dir))
+
+            from ultralytics import YOLO
+
+            self.model = YOLO(str(weights_path))
+            self.loaded = True
+            self.last_error = None
+        except Exception as exc:
+            self.model = None
+            self.loaded = False
+            self.last_error = f"behavior model load failed: {exc}"
 
     def detect_objects(self, frame: Any) -> list[dict[str, Any]]:
         if self.model is None:
             return []
+        results = self.model.predict(frame, conf=self.confidence_threshold, verbose=False) if hasattr(self.model, "predict") else self.model(frame)
         device = _detect_torch_device(self.device)
-        results = self.model(frame, device=device)
         detections: list[dict[str, Any]] = []
         for result in results:
             names = getattr(result, "names", {})
@@ -112,6 +162,28 @@ class BehaviorService:
                     "cooldown_seconds": float(crowd_rule.get("cooldown_seconds", 45)),
                 }
             )
+
+        fall_rule = rules.get("fall_detected", {})
+        fall_config = fall_rule.get("config_json") or {}
+        min_aspect_ratio = float(fall_config.get("min_width_height_ratio", 1.2))
+        for idx, person in enumerate(persons):
+            bbox = person.get("bbox")
+            if not bbox:
+                continue
+            width = abs(float(bbox[2]) - float(bbox[0]))
+            height = abs(float(bbox[3]) - float(bbox[1]))
+            if height > 0 and width / height >= min_aspect_ratio:
+                detections.append(
+                    {
+                        "event_type": "fall_detected",
+                        "confidence": float(person.get("confidence", 0.75)),
+                        "level": "high",
+                        "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": bbox},
+                        "track_key": person.get("track_id", f"person_{idx + 1}"),
+                        "threshold_seconds": float(fall_rule.get("threshold_seconds", 1)),
+                        "cooldown_seconds": float(fall_rule.get("cooldown_seconds", 45)),
+                    }
+                )
         return detections
 
     def _has_crowd(self, persons: list[dict[str, Any]], min_count: int, max_distance: float) -> bool:
