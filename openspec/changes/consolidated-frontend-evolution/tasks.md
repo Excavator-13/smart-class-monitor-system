@@ -1,0 +1,7 @@
+- [x] 创建合并后的 OpenSpec 变更目录
+- [x] 合并此前多个 `proposal.md` 的有效内容
+- [x] 合并此前多个 `design.md` 的有效内容
+- [x] 合并此前多个 `tasks.md` 的完成记录
+- [x] 保留正式规范目录 `openspec/specs`
+- [x] 删除已合并的小变更目录中的重复 Markdown 文件
+- [x] 保留当前前端、部署和交互实现不变

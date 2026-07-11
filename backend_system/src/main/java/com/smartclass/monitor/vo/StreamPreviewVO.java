@@ -5,10 +5,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "视频源播放地址")
 public class StreamPreviewVO {
 
-    @Schema(description = "MJPEG 流地址", example = "http://39.106.209.208:5000/video_feed/classroom_01")
+    @Schema(description = "MJPEG 流地址", example = "http://localhost:5000/video_feed/classroom_01")
     private String mjpegUrl;
 
-    @Schema(description = "RTMP 拉流地址", example = "rtmp://39.106.209.208:9090/live/classroom_01")
+    @Schema(description = "RTMP 拉流地址", example = "rtmp://localhost:9090/live/classroom_01")
     private String rtmpUrl;
 
     @Schema(description = "HLS 播放地址")

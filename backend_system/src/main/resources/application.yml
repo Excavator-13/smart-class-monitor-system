@@ -2,11 +2,10 @@ server:
   port: 8080
 
 spring:
-  # MySQL 数据源配置
   datasource:
-    url: jdbc:mysql://39.106.209.208:3306/appdb?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true
-    username: appuser
-    password: MySQL@186strongpass3435
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/appdb?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       connection-timeout: 5000
@@ -28,20 +27,22 @@ mybatis:
 # JWT 鉴权配置
 auth:
   jwt:
-    secret: smart-class-monitor-system-jwt-secret-key-2026
-    expiration-hours: 24
+    secret: ${AUTH_JWT_SECRET:smart-class-monitor-system-jwt-secret-key-2026-dev-only}
+    expiration-hours: ${AUTH_JWT_EXPIRATION_HOURS:24}
 
 # Flask AI 服务
 ai:
-  base-url: http://39.106.209.208:5000
-  connect-timeout-ms: 3000
-  read-timeout-ms: 10000
-  # AI 内部接口鉴权 Token（生产环境通过环境变量覆盖）
-  internal-token: smart-class-ai-internal-token-2026
+  base-url: ${AI_BASE_URL:http://localhost:5000}
+  connect-timeout-ms: ${AI_CONNECT_TIMEOUT_MS:3000}
+  read-timeout-ms: ${AI_READ_TIMEOUT_MS:10000}
+  internal-token: ${AI_INTERNAL_TOKEN:smart-class-ai-internal-token-2026-dev-only}
 
 # Nginx RTMP 状态页
 nginx:
-  stat-url: http://39.106.209.208:9092/stat
+  stat-url: ${NGINX_STAT_URL:http://localhost:9092/stat}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
 
 # springdoc-openapi (Swagger) 配置 —— 分组由 SwaggerConfig.java 的 GroupedOpenApi Bean 定义
 springdoc:

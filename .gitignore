@@ -56,6 +56,9 @@ backend-ai/data/
 node_modules/
 dist/
 dist-ssr/
+.npm-cache/
+!frontend/package.json
+!frontend/package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -99,3 +102,25 @@ Thumbs.db
 # Docker（如果用）
 # =========================
 docker-compose.override.yml
+
+# =========================
+# Local runtime
+# =========================
+local-runtime/.env
+
+# Fire detection module backup (local only)
+fire_module_backup/
+snapshots/
+test_output/
+test_result.txt
+backup_fire.bat
+restore_fire.bat
+
+# =========================
+# .env files (keep .env.example)
+# =========================
+backend_system/.env
+backend_ai/.env
+mock_springboot/.env
+frontend/.env
+frontend/.env.production
