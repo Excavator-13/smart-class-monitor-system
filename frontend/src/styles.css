@@ -374,6 +374,31 @@ textarea {
   margin-bottom: 14px;
 }
 
+.dialog-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.file-picker {
+  display: flex;
+  width: 100%;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(15, 120, 154, 0.36);
+  border-radius: 8px;
+  background: rgba(15, 120, 154, 0.05);
+  color: var(--brand);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.file-picker input {
+  display: none;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
@@ -1796,6 +1821,18 @@ textarea {
   min-width: 0;
 }
 
+.alert-filter-bar {
+  display: grid;
+  width: min(100%, 620px);
+  grid-template-columns: minmax(220px, 1fr) 150px 130px;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-select {
+  width: 100%;
+}
+
 .score-config-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2222,6 +2259,7 @@ textarea {
   .module-grid,
   .health-grid,
   .page-kpis,
+  .alert-filter-bar,
   .flow-steps,
   .compact-flow,
   .evidence-grid,
