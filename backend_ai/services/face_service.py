@@ -51,6 +51,7 @@ class FaceService:
         self.det_size = det_size
         self.ctx_id = ctx_id
         self.last_error: str | None = None
+        self._cascade: Any | None = None
 
     def load_model(self, settings: dict[str, Any] | None = None) -> None:
         if settings and not settings.get("enabled", True):
@@ -73,9 +74,9 @@ class FaceService:
         try:
             from insightface.app import FaceAnalysis
 
-            providers, ctx_id = _detect_onnx_providers(self.device)
-            app = FaceAnalysis(name=self.model_name, providers=self.providers)
-            app.prepare(ctx_id=self.ctx_id, det_size=self.det_size)
+            detected_providers, detected_ctx_id = _detect_onnx_providers(self.device)
+            app = FaceAnalysis(name=self.model_name, providers=detected_providers)
+            app.prepare(ctx_id=detected_ctx_id, det_size=self.det_size)
             self.model = app
             self.loaded = True
             self.last_error = None
@@ -88,8 +89,9 @@ class FaceService:
         if self.model is not None and hasattr(self.model, "get"):
             return list(self.model.get(frame))
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        boxes = detector.detectMultiScale(gray, 1.1, 4)
+        if self._cascade is None:
+            self._cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        boxes = self._cascade.detectMultiScale(gray, 1.1, 4)
         faces = []
         for x, y, w, h in boxes:
             roi = cv2.resize(gray[y : y + h, x : x + w], (32, 16)).astype("float32").flatten()

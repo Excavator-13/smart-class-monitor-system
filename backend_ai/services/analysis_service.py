@@ -9,11 +9,12 @@ import cv2
 import numpy as np
 
 from backend_ai.utils.geometry import parse_polygon_coordinates
+from backend_ai.utils.image_utils import draw_text
 from backend_ai.utils.logger import get_logger
 
 
 class AnalysisService:
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
@@ -42,7 +43,8 @@ class AnalysisService:
             started = time.perf_counter()
             object_list = self.behavior_service.detect_objects(frame)
             self._observe_latency("behavior", started)
-        self._draw_objects(frame, object_list)
+        if self.behavior_service.loaded:
+            self._draw_objects(frame, object_list)
 
         if "behavior" in enabled:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
@@ -177,7 +179,7 @@ class AnalysisService:
             cv2.polylines(frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
             label = str(zone.get("zone_name") or zone.get("zone_type") or "danger zone")
             x0, y0 = points[0]
-            cv2.putText(frame, label, (x0, max(18, y0 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 2)
+            draw_text(frame, label, (x0, max(18, y0 - 8)), font_scale=0.55, color=(0, 0, 255), thickness=2)
 
     def _draw_status(self, frame: np.ndarray, text: str, color: tuple[int, int, int]) -> None:
         height, width = frame.shape[:2]
@@ -187,7 +189,7 @@ class AnalysisService:
         x = max(8, width - text_width - 12)
         y = max(text_height + 10, 28)
         cv2.rectangle(frame, (x - 6, y - text_height - 8), (width - 6, y + 6), (0, 0, 0), -1)
-        cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thickness)
+        draw_text(frame, text, (x, y), font_scale=scale, color=color, thickness=thickness)
 
     def _draw_bbox(self, frame: np.ndarray, bbox: list[float], label: str, color: tuple[int, int, int]) -> None:
         x1f, y1f, x2f, y2f = [float(v) for v in bbox]
@@ -200,4 +202,4 @@ class AnalysisService:
         x1, x2 = max(0, min(x1, width - 1)), max(0, min(x2, width - 1))
         y1, y2 = max(0, min(y1, height - 1)), max(0, min(y2, height - 1))
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame, label, (x1, max(18, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+        draw_text(frame, label, (x1, max(18, y1 - 8)), font_scale=0.55, color=color, thickness=2)
