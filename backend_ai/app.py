@@ -36,6 +36,19 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
+
+    @app.after_request
+    def add_cors_headers(response: Response) -> Response:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
+    @app.before_request
+    def handle_preflight() -> Response | None:
+        if request.method == "OPTIONS":
+            return Response(status=204)
+
     app_config = load_yaml(BASE_DIR / "config" / "app.yaml")
     model_config = load_yaml(BASE_DIR / "config" / "model.yaml")
     if overrides:

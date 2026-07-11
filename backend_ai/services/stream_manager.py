@@ -107,6 +107,8 @@ class StreamManager:
             return None
         if state.last_frame_at and time.time() - state.last_frame_at > self.offline_after_seconds:
             state.online = False
+        if not state.online:
+            return None
         return None if state.frame is None else state.frame.copy()
 
     def status(self) -> list[dict[str, Any]]:
@@ -134,4 +136,3 @@ class StreamManager:
                 cap.release()
             except Exception:
                 pass
-
