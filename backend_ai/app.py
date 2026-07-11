@@ -93,11 +93,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
     behavior_settings = model_settings.get("behavior", {})
     behavior_service = behavior_service or BehaviorService(
-        confidence_threshold=float(behavior_settings.get("confidence_threshold", 0.6))
+        confidence_threshold=float(behavior_settings.get("confidence_threshold", 0.6)),
+        device=device_config,
     )
     if not (overrides or {}).get("behavior_service"):
         behavior_service.load_model(behavior_settings, BASE_DIR)
-    behavior_service = behavior_service or BehaviorService()
 
     fire_settings = (model_config.get("models") or {}).get("fire", {})
     fire_service = (overrides or {}).get("fire_service") if overrides else None
@@ -177,9 +177,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 "avg_infer_ms": analysis_service.avg_latency_ms("behavior"),
                 "last_error": getattr(behavior_service, "last_error", None),
             },
-            {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
-            {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 

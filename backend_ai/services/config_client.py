@@ -52,7 +52,6 @@ class ConfigClient:
         self.session = session or requests.Session()
         self.internal_token = internal_token
         self.cache = ConfigCache()
-        self.internal_token = internal_token
         self.last_error: str | None = None
         self._poll_stop = threading.Event()
         self._poll_thread: threading.Thread | None = None
@@ -190,4 +189,3 @@ class ConfigClient:
 
     def stop_polling(self) -> None:
         self._poll_stop.set()
-

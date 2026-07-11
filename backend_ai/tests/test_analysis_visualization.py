@@ -10,6 +10,8 @@ class FakeFaceService:
 
 
 class FakeBehaviorService:
+    loaded = False
+
     def __init__(self):
         self.detect_called = False
 
