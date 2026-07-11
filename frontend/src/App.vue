@@ -167,7 +167,9 @@ const currentStream = computed(() => {
   );
 });
 
-const videoFeedUrl = computed(() => getVideoFeedUrl(activeStreamId.value));
+const videoFeedUrl = computed(() =>
+  getVideoFeedUrl(activeStreamId.value, { annotate: showAiAnnotations.value }),
+);
 
 const dayTitle = computed(() => (isDay.value ? "白天模式" : "夜间模式"));
 const dayHint = computed(() =>
@@ -224,6 +226,9 @@ const criticalAlertCount = computed(
 );
 const confirmedAlertCount = computed(
   () => displayAlerts.value.filter((item) => item.status === "handled").length,
+);
+const highAlertCount = computed(
+  () => displayAlerts.value.filter((item) => item.level === "high").length,
 );
 const enabledRuleCount = computed(() => {
   return rules.value.filter(
