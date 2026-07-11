@@ -33,4 +33,7 @@ public interface BehaviorRuleMapper {
 
     @Update("UPDATE behavior_rule SET deleted_at=NOW() WHERE id=#{id}")
     int softDelete(@Param("id") Long id);
+
+    @Delete("TRUNCATE TABLE behavior_rule")
+    void truncate();
 }
