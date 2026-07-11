@@ -12,9 +12,11 @@ class FakeResponse:
 class FakeSession:
     def __init__(self):
         self.payload = None
+        self.headers = None
 
-    def post(self, url, json=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None):
         self.payload = json
+        self.headers = headers
         return FakeResponse()
 
 
@@ -52,4 +54,13 @@ def test_push_alert_posts_to_springboot():
 
     assert result["code"] == 0
     assert session.payload["alert_type"] == "head_down"
+
+
+def test_push_alert_sends_internal_token():
+    session = FakeSession()
+    client = AlertClient(base_url="http://spring", session=session, internal_token="secret")
+
+    client.push_alert({"event_id": "evt_1", "stream_id": "classroom_01", "event_type": "phone_usage"})
+
+    assert session.headers == {"X-Internal-Token": "secret"}
 

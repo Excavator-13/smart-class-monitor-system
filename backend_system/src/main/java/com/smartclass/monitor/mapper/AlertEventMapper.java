@@ -90,4 +90,7 @@ public interface AlertEventMapper {
     @Select("SELECT alert_type, COUNT(*) AS cnt FROM alert_event " +
             "WHERE DATE(occurred_at) = CURDATE() GROUP BY alert_type")
     List<Map<String, Object>> countByTypeToday();
+
+    @Delete("TRUNCATE TABLE alert_event")
+    void truncate();
 }

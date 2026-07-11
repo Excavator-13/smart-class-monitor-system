@@ -17,6 +17,15 @@ application-dev.yml
 # =========================
 # Python / Flask / AI
 # =========================
+# pytest
+.pytest_cache/
+
+# Ultralytics
+backend_ai/config/ultralytics/
+
+# AI models
+backend_ai/models/
+
 __pycache__/
 *.pyc
 *.pyo
@@ -108,6 +117,14 @@ docker-compose.override.yml
 # =========================
 local-runtime/.env
 
+# Fire detection module backup (local only)
+fire_module_backup/
+snapshots/
+test_output/
+test_result.txt
+backup_fire.bat
+restore_fire.bat
+
 # =========================
 # .env files (keep .env.example)
 # =========================
@@ -116,3 +133,4 @@ backend_ai/.env
 mock_springboot/.env
 frontend/.env
 frontend/.env.production
+frontend/public/runtime-config.js

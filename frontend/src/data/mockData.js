@@ -1,3 +1,32 @@
+export const ALERT_LEVEL_MAP = {
+  info: { label: "信息", color: "#909399" },
+  warning: { label: "警告", color: "#E6A23C" },
+  high: { label: "高危", color: "#F56C6C" },
+};
+
+export const ALERT_STATUS_MAP = {
+  unhandled: { label: "未处理", tag: "danger" },
+  processing: { label: "处理中", tag: "warning" },
+  handled: { label: "已处理", tag: "success" },
+  false_alarm: { label: "误报", tag: "info" },
+  ignored: { label: "已忽略", tag: "info" },
+};
+
+export const ALERT_TYPE_MAP = {
+  face_recognized: "已识别人员",
+  stranger_detected: "陌生人出现",
+  danger_zone_intrusion: "危险区域入侵",
+  danger_zone_stay: "危险区域停留",
+  danger_zone_approach: "危险区域接近",
+  phone_usage: "使用手机",
+  head_down: "长时间低头",
+  leave_seat: "长时间离座",
+  flame_detected: "明火检测",
+  fall_detected: "人员摔倒",
+  crowd_gathering: "异常人流聚集",
+  stream_offline: "视频流中断",
+};
+
 export const mockStreams = [
   {
     id: 1,
@@ -78,10 +107,10 @@ export const mockStudents = [
 ];
 
 export const mockHealth = {
-  rtmp: "online",
-  ai: "online",
-  api: "online",
-  database: "online"
+  rtmp: "up",
+  ai: "up",
+  backend: "up",
+  database: "up",
 };
 
 export const mockSummary = {
@@ -94,3 +123,34 @@ export const mockSummary = {
     { time: "Now", text: "Fire and fall alerts can score independently once detected." }
   ]
 };
+
+export const mockAnalysisEvents = [
+  {
+    event_id: "evt_a1b2c3d4e5f6g7h8",
+    stream_id: "classroom_01",
+    event_type: "stranger_detected",
+    event_name: "陌生人出现",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.78,
+    occurred_at: "2026-07-09T10:25:00+08:00",
+    duration_seconds: 5.2,
+    target: { track_id: "face_1", bbox: [100, 200, 300, 400] },
+    zone: null,
+    snapshot_path: null,
+  },
+  {
+    event_id: "evt_b2c3d4e5f6g7h8i9",
+    stream_id: "classroom_01",
+    event_type: "phone_usage",
+    event_name: "使用手机",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.85,
+    occurred_at: "2026-07-09T10:22:00+08:00",
+    duration_seconds: 3.1,
+    target: { track_id: "person_2", bbox: [150, 250, 350, 450] },
+    zone: null,
+    snapshot_path: null,
+  },
+];

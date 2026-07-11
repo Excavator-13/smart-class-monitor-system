@@ -36,4 +36,7 @@ public interface RecordingFileMapper {
                           @Param("eventId") String eventId,
                           @Param("startTime") LocalDateTime startTime,
                           @Param("endTime") LocalDateTime endTime);
+
+    @Delete("TRUNCATE TABLE recording_file")
+    void truncate();
 }
