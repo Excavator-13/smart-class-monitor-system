@@ -2,7 +2,11 @@ from backend_ai.services.behavior_service import BehaviorService
 
 
 class FakeYoloModel:
-    def predict(self, frame, conf=0.6, verbose=False):
+    def __init__(self):
+        self.predict_kwargs = None
+
+    def predict(self, frame, conf=0.6, verbose=False, **kwargs):
+        self.predict_kwargs = {"conf": conf, "verbose": verbose, **kwargs}
         class Box:
             cls = [67]
             conf = [0.91]
@@ -31,6 +35,15 @@ def test_detect_objects_uses_yolo_predict_api():
     detections = service.detect_objects(frame=object())
 
     assert detections == [{"class_name": "cell phone", "confidence": 0.91, "bbox": [10.0, 20.0, 30.0, 40.0]}]
+
+
+def test_detect_objects_passes_cuda_device_to_yolo():
+    model = FakeYoloModel()
+    service = BehaviorService(model=model, confidence_threshold=0.7, device="cuda")
+
+    service.detect_objects(frame=object())
+
+    assert model.predict_kwargs["device"] == "cuda"
 
 
 def test_phone_usage_from_mock_objects():

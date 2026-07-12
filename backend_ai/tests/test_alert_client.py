@@ -1,3 +1,7 @@
+import json
+
+import numpy as np
+
 from backend_ai.services.alert_client import AlertClient
 
 
@@ -63,4 +67,25 @@ def test_push_alert_sends_internal_token():
     client.push_alert({"event_id": "evt_1", "stream_id": "classroom_01", "event_type": "phone_usage"})
 
     assert session.headers == {"X-Internal-Token": "secret"}
+
+
+def test_push_alert_serializes_numpy_values_from_face_detection():
+    session = FakeSession()
+    client = AlertClient(base_url="http://spring", session=session)
+    event = {
+        "event_id": "evt_stranger",
+        "stream_id": "classroom_01",
+        "event_type": "stranger_detected",
+        "confidence": np.float32(0.91),
+        "target": {
+            "track_id": "face_1",
+            "bbox": np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float32),
+        },
+    }
+
+    client.push_alert(event)
+
+    json.dumps(session.payload)
+    assert session.payload["confidence"] == np.float32(0.91).item()
+    assert session.payload["target_info"]["bbox"] == [10.0, 20.0, 30.0, 40.0]
 

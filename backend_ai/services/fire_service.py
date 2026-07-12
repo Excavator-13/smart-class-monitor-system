@@ -14,11 +14,13 @@ class FireService:
         confidence_threshold: float = 0.25,
         max_detections: int = 20,
         min_bbox_area: int = 1000,
+        device: str | None = None,
     ):
         self.model = model
         self.confidence_threshold = confidence_threshold
         self.max_detections = max_detections
         self.min_bbox_area = min_bbox_area
+        self.device = device
         self._total_detections = 0
 
     @property
@@ -45,7 +47,13 @@ class FireService:
         cooldown = float(rule.get("cooldown_seconds", 10))
         threshold_seconds = float(rule.get("threshold_seconds", 0))
 
-        results = self.model(frame, verbose=False)
+        if hasattr(self.model, "predict"):
+            predict_args: dict[str, Any] = {"verbose": False}
+            if self.device:
+                predict_args["device"] = self.device
+            results = self.model.predict(frame, **predict_args)
+        else:
+            results = self.model(frame, verbose=False)
         detections: list[dict[str, Any]] = []
 
         for r in results:
@@ -94,5 +102,6 @@ class FireService:
             "confidence_threshold": self.confidence_threshold,
             "max_detections": self.max_detections,
             "min_bbox_area": self.min_bbox_area,
+            "device": self.device,
             "total_detections": self._total_detections,
         }

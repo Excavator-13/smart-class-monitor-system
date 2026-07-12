@@ -4,6 +4,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
+import cv2
 import numpy as np
 
 
@@ -61,7 +62,7 @@ class AntiSpoofService:
             state = self._states[track_id]
 
             # --- 眨眼检测 ---
-            if landmarks and len(landmarks) >= 68:
+            if landmarks is not None and len(landmarks) >= 68:
                 left_eye = landmarks[36:42]
                 right_eye = landmarks[42:48]
                 left_ear = self._eye_aspect_ratio(left_eye)
@@ -107,7 +108,7 @@ class AntiSpoofService:
                 )
 
             # --- 纹理分析 + CNN 换脸检测 ---
-            if frame is not None and bbox:
+            if frame is not None and bbox is not None and len(bbox) > 0:
                 x1, y1, x2, y2 = [int(v) for v in bbox]
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)

@@ -91,6 +91,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     )
     if not (overrides or {}).get("face_service"):
         face_service.load_model(face_settings)
+        if face_service.loaded:
+            print(f"[Face] InsightFace 模型加载成功: {face_service.model_name}, providers={face_service.providers}, ctx_id={face_service.ctx_id}")
+        else:
+            print(f"[Face] InsightFace 模型加载失败: {face_service.model_name}, error={face_service.last_error}")
     zone_service = (overrides or {}).get("zone_service") if overrides else None
     zone_service = zone_service or ZoneService()
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
@@ -101,6 +105,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     )
     if not (overrides or {}).get("behavior_service"):
         behavior_service.load_model(behavior_settings, BASE_DIR)
+        if behavior_service.loaded:
+            print(f"[Behavior] YOLOv8 模型加载成功: {behavior_service.weights_path}, device={device_config}")
+        else:
+            print(f"[Behavior] YOLOv8 模型加载失败: {behavior_service.last_error}")
 
     fire_settings = (model_config.get("models") or {}).get("fire", {})
     fire_service = (overrides or {}).get("fire_service") if overrides else None
@@ -109,13 +117,16 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             from ultralytics import YOLO
             weights = fire_settings.get("weights", "models/yolo/yolo_fire.pt")
             fire_model = YOLO(BASE_DIR / weights if not Path(weights).is_absolute() else Path(weights))
+            if device_config:
+                fire_model.to(device_config)
             fire_service = FireService(
                 model=fire_model,
                 confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
                 max_detections=int(fire_settings.get("max_detections", 20)),
                 min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+                device=device_config,
             )
-            print(f"[Fire] 明火检测模型加载成功: {weights}")
+            print(f"[Fire] 明火检测模型加载成功: {weights}, device={device_config}")
         except Exception as exc:
             print(f"[Fire] 明火检测模型加载失败: {exc}")
             fire_service = FireService(model=None)
