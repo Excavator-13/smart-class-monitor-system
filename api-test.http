@@ -1,600 +1,204 @@
-### ============================================
-### 变量
-### ============================================
+### 智慧教室核心接口冒烟测试
+### 使用 VS Code REST Client 按顺序执行；修改示例 ID 后再执行写操作。
+
 @baseUrl = http://localhost:8080
-@aiUrl = http://localhost:5001
-@nginxUrl = http://39.106.209.208:9092
-@internalToken = smart-class-ai-internal-token-2026
-@jwt = {{login.response.body.data.token}}
+@aiUrl = http://localhost:5000
+@internalToken = replace-with-ai-internal-token
+@userId = 2
+@streamDbId = 1
+@streamId = classroom_01
+@alertId = 1
+@zoneId = 1
+@ruleId = 1
+@studentId = 1
 
-### ============================================
-### 0. 系统健康检查
-### ============================================
-
-### 健康检查（无需鉴权）
+### 1. 服务健康
 GET {{baseUrl}}/system/health
 
-### ============================================
-### 1. 认证（AuthController）
-### ============================================
-
-### 登录
+### 2. 管理员登录
 # @name login
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{"username":"admin","password":"admin123"}
+{
+  "username": "admin",
+  "password": "admin123"
+}
 
-### 注册
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
+### 登录后令牌
+@jwt = {{login.response.body.data.token}}
 
-{"username":"newuser","password":"123456","nickname":"新用户"}
-
-### 注册-用户名重复
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
-
-{"username":"admin","password":"123456"}
-
-### 注册-参数校验（用户名过短）
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
-
-{"username":"a","password":"123456"}
-
-### 注册-参数校验（密码过短）
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
-
-{"username":"testuser","password":"123"}
-
-### 获取当前用户信息
+### 3. 当前用户
 GET {{baseUrl}}/auth/info
 Authorization: Bearer {{jwt}}
 
-### 退出登录
-POST {{baseUrl}}/auth/logout
+### 4. 用户列表（仅管理员）
+GET {{baseUrl}}/users?page=1&pageSize=20
 Authorization: Bearer {{jwt}}
 
-### ============================================
-### 2. 用户管理（UserController, admin 专用）
-### ============================================
-
-### 用户列表
-GET {{baseUrl}}/users?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 用户列表-按角色筛选
-GET {{baseUrl}}/users?role=teacher&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 用户列表-按状态筛选
-GET {{baseUrl}}/users?status=enabled&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 用户详情（需替换真实 id）
-GET {{baseUrl}}/users/1
-Authorization: Bearer {{jwt}}
-
-### 编辑用户（昵称/头像）
-PUT {{baseUrl}}/users/2
+### 5. 修改其他用户角色（仅管理员）
+PUT {{baseUrl}}/users/{{userId}}/role
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"nickname":"张老师","avatarUrl":""}
+{
+  "role": "teacher"
+}
 
-### 变更用户角色（admin→teacher 或 teacher→admin）
-PUT {{baseUrl}}/users/2/role
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"role":"teacher"}
-
-### 禁用用户
-PUT {{baseUrl}}/users/2/status
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"status":"disabled"}
-
-### 启用用户
-PUT {{baseUrl}}/users/2/status
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"status":"enabled"}
-
-### 删除用户（软删除，不能删除自己）
-DELETE {{baseUrl}}/users/2
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 3. RBAC 权限验证
-### ============================================
-
-### teacher 登录（用于权限对比测试）
-# @name teacherLogin
-POST {{baseUrl}}/auth/login
-Content-Type: application/json
-
-{"username":"teacher","password":"teacher123"}
-
-### teacher 读视频源（应 200）
-GET {{baseUrl}}/streams?page=1&pageSize=10
-Authorization: Bearer {{teacherLogin.response.body.data.token}}
-
-### teacher 新增视频源（应 403）
-POST {{baseUrl}}/streams
-Authorization: Bearer {{teacherLogin.response.body.data.token}}
-Content-Type: application/json
-
-{"streamName":"test","streamId":"test_01","rtmpUrl":"rtmp://localhost:9090/live/test_01","remark":""}
-
-### teacher 新增人员（应 403）
-POST {{baseUrl}}/students
-Authorization: Bearer {{teacherLogin.response.body.data.token}}
-Content-Type: application/json
-
-{"studentNo":"9999","name":"test","className":"test"}
-
-### teacher 查操作日志（应 403）
-GET {{baseUrl}}/operation-logs?page=1&pageSize=10
-Authorization: Bearer {{teacherLogin.response.body.data.token}}
-
-### teacher 访问用户管理（应 403）
-GET {{baseUrl}}/users?page=1&pageSize=10
-Authorization: Bearer {{teacherLogin.response.body.data.token}}
-
-### admin 新增视频源（应 200）
-POST {{baseUrl}}/streams
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"streamName":"test","streamId":"test_01","rtmpUrl":"rtmp://localhost:9090/live/test_01","remark":""}
-
-### admin 访问用户管理（应 200）
-GET {{baseUrl}}/users?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 4. 视频源（StreamController）
-### ============================================
-
-### 视频源列表（分页）
-GET {{baseUrl}}/streams?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 视频源列表-按状态筛选
-GET {{baseUrl}}/streams?status=enabled&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 视频源列表-按关键词搜索
-GET {{baseUrl}}/streams?keyword=教室&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 已启用视频源（不分页）
+### 6. 已启用视频源
 GET {{baseUrl}}/streams/enabled
 Authorization: Bearer {{jwt}}
 
-### 视频源详情（需替换真实数据库主键 id）
-GET {{baseUrl}}/streams/1
-Authorization: Bearer {{jwt}}
-
-### 新增视频源（admin）
+### 7. 新增视频源（仅管理员）
 POST {{baseUrl}}/streams
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"streamName":"3号教室","streamId":"classroom_03","rtmpUrl":"rtmp://localhost:9090/live/classroom_03","remark":""}
+{
+  "stream_id": "classroom_test",
+  "stream_name": "测试教室摄像头",
+  "rtmp_url": "rtmp://localhost:9090/live/classroom_test",
+  "remark": "接口联调"
+}
 
-### 编辑视频源（admin, 需替换真实数据库主键 id）
-PUT {{baseUrl}}/streams/1
+### 8. 视频源状态
+GET {{baseUrl}}/streams/{{streamId}}/status
+Authorization: Bearer {{jwt}}
+
+### 9. 告警列表（查询参数按 Controller 使用 camelCase）
+GET {{baseUrl}}/alerts?streamId={{streamId}}&status=unhandled&page=1&pageSize=20
+Authorization: Bearer {{jwt}}
+
+### 10. 处理告警
+PUT {{baseUrl}}/alerts/{{alertId}}/status
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"streamName":"3号教室-更新","rtmpUrl":"rtmp://localhost:9090/live/classroom_03","status":"enabled","remark":"更新备注"}
+{
+  "status": "handled",
+  "handler_id": 1,
+  "remark": "已人工复核"
+}
 
-### 删除视频源（admin, 需替换真实数据库主键 id）
-DELETE {{baseUrl}}/streams/1
-Authorization: Bearer {{jwt}}
-
-### 推流状态（路径参数为 stream_id 业务标识）
-GET {{baseUrl}}/streams/classroom_01/status
-Authorization: Bearer {{jwt}}
-
-### 播放地址（路径参数为 stream_id 业务标识）
-GET {{baseUrl}}/streams/classroom_01/preview-url
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 5. 告警事件（AlertController）
-### ============================================
-
-### 告警列表（分页）
-GET {{baseUrl}}/alerts?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警列表-按视频源筛选
-GET {{baseUrl}}/alerts?streamId=classroom_01&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警列表-按类型筛选
-GET {{baseUrl}}/alerts?alertType=head_down&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警列表-按状态筛选
-GET {{baseUrl}}/alerts?status=unhandled&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警列表-按等级筛选
-GET {{baseUrl}}/alerts?level=high&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警列表-按时间范围筛选
-GET {{baseUrl}}/alerts?startTime=2026-07-01T00:00:00&endTime=2026-07-12T23:59:59&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 告警详情（需替换真实数据库主键 id）
-GET {{baseUrl}}/alerts/1
-Authorization: Bearer {{jwt}}
-
-### 更新告警状态（需替换真实数据库主键 id）
-PUT {{baseUrl}}/alerts/1/status
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"status":"processing","handlerId":1,"remark":"正在处理"}
-
-### 告警统计
+### 11. 告警统计
 GET {{baseUrl}}/alert-stats
 Authorization: Bearer {{jwt}}
 
-### ============================================
-### 6. 区域配置（ZoneController）
-### ============================================
-
-### 区域列表
-GET {{baseUrl}}/zones
+### 12. 当前视频源区域
+GET {{baseUrl}}/zones?streamId={{streamId}}
 Authorization: Bearer {{jwt}}
 
-### 区域列表-按视频源筛选
-GET {{baseUrl}}/zones?streamId=classroom_01
-Authorization: Bearer {{jwt}}
-
-### 区域列表-按类型筛选
-GET {{baseUrl}}/zones?zoneType=danger
-Authorization: Bearer {{jwt}}
-
-### 区域详情（需替换真实数据库主键 id）
-GET {{baseUrl}}/zones/1
-Authorization: Bearer {{jwt}}
-
-### 新增区域
+### 13. 新增区域（coordinates 是 JSON 字符串）
 POST {{baseUrl}}/zones
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"streamId":"classroom_01","zoneName":"讲台危险区","zoneType":"danger","coordinates":"[{\"x\":0.1,\"y\":0.1},{\"x\":0.5,\"y\":0.1},{\"x\":0.5,\"y\":0.5},{\"x\":0.1,\"y\":0.5}]","thresholdSeconds":2,"safeDistance":0.05}
+{
+  "stream_id": "{{streamId}}",
+  "zone_name": "测试危险区",
+  "zone_type": "danger",
+  "coordinates": "[{\"x\":0.10,\"y\":0.10},{\"x\":0.45,\"y\":0.10},{\"x\":0.45,\"y\":0.50},{\"x\":0.10,\"y\":0.50}]",
+  "threshold_seconds": 3,
+  "safe_distance": 0.05
+}
 
-### 修改区域（需替换真实数据库主键 id）
-PUT {{baseUrl}}/zones/1
+### 14. 修改区域名称、类型和阈值
+PUT {{baseUrl}}/zones/{{zoneId}}
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"zoneName":"讲台危险区-更新","coordinates":"[{\"x\":0.1,\"y\":0.1},{\"x\":0.6,\"y\":0.1},{\"x\":0.6,\"y\":0.6},{\"x\":0.1,\"y\":0.6}]","thresholdSeconds":5,"safeDistance":0.08,"enabled":true}
+{
+  "zone_name": "测试座位区",
+  "zone_type": "seat",
+  "threshold_seconds": 5,
+  "safe_distance": 0,
+  "enabled": true
+}
 
-### 删除区域（需替换真实数据库主键 id）
-DELETE {{baseUrl}}/zones/1
+### 15. 启停区域
+PUT {{baseUrl}}/zones/{{zoneId}}/toggle?enabled=true
 Authorization: Bearer {{jwt}}
 
-### 切换区域开关（teacher 可调用）
-PUT {{baseUrl}}/zones/1/toggle?enabled=false
-Authorization: Bearer {{jwt}}
-
-### 获取视频源全部区域
-GET {{baseUrl}}/streams/classroom_01/zones
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 7. 行为规则（RuleController）
-### ============================================
-
-### 规则列表
+### 16. 规则列表
 GET {{baseUrl}}/rules
 Authorization: Bearer {{jwt}}
 
-### 规则列表-按类型筛选
-GET {{baseUrl}}/rules?ruleType=phone_usage
+### 17. 启停规则
+PUT {{baseUrl}}/rules/{{ruleId}}/toggle?enabled=true
 Authorization: Bearer {{jwt}}
 
-### 规则详情（需替换真实数据库主键 id）
-GET {{baseUrl}}/rules/1
+### 18. 告警评分配置
+GET {{baseUrl}}/score-config
 Authorization: Bearer {{jwt}}
 
-### 新增规则（admin）
-POST {{baseUrl}}/rules
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"ruleType":"danger_zone","ruleName":"危险区域检测","enabled":true,"thresholdSeconds":2,"confidenceThreshold":0.6,"cooldownSeconds":45,"level":"warning","configJson":"{\"safe_distance\":0.05}"}
-
-### 更新规则（admin, 需替换真实数据库主键 id）
-PUT {{baseUrl}}/rules/1
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"ruleName":"危险区域检测-更新","thresholdSeconds":5,"confidenceThreshold":0.8,"cooldownSeconds":60,"level":"high","enabled":true,"configJson":"{\"safe_distance\":0.05}"}
-
-### 删除规则（admin, 需替换真实数据库主键 id）
-DELETE {{baseUrl}}/rules/1
+### 19. 人员列表
+GET {{baseUrl}}/students?page=1&pageSize=20
 Authorization: Bearer {{jwt}}
 
-### 切换规则开关（teacher 可调用）
-PUT {{baseUrl}}/rules/1/toggle?enabled=false
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 8. 人员管理（StudentController）
-### ============================================
-
-### 人员列表（分页）
-GET {{baseUrl}}/students?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 人员列表-按班级筛选
-GET {{baseUrl}}/students?className=计科1班&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 人员列表-按关键词搜索
-GET {{baseUrl}}/students?keyword=张三&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 人员列表-按人脸注册状态筛选
-GET {{baseUrl}}/students?faceRegistered=true&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 人员详情（需替换真实数据库主键 id）
-GET {{baseUrl}}/students/1
-Authorization: Bearer {{jwt}}
-
-### 新增人员（admin）
+### 20. 新增人员（仅管理员）
 POST {{baseUrl}}/students
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"studentNo":"2024001","name":"张三","className":"软件工程1班"}
+{
+  "student_no": "TEST-001",
+  "name": "测试人员",
+  "class_name": "联调班"
+}
 
-### 编辑人员（admin, 需替换真实数据库主键 id）
-PUT {{baseUrl}}/students/1
+### 21. 注册人脸（替换为真实 Base64）
+POST {{baseUrl}}/students/{{studentId}}/face
 Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"name":"张三-更新","className":"软件工程2班","status":"enabled","remark":"已确认"}
-
-### 删除人员（admin, 需替换真实数据库主键 id）
-DELETE {{baseUrl}}/students/1
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 9. 人脸特征（FaceController）
-### ============================================
-
-### 人脸注册（admin, 需替换真实人员 id 和 base64 图片）
-POST {{baseUrl}}/students/1/face
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-{"image":"/9j/4AAQSkZJRgABAQEAYABgAAD"}
-
-### 查看人脸特征记录（不含特征向量）
-GET {{baseUrl}}/students/1/face-features
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 10. 告警评分配置（ScoreConfigController）
-### ============================================
-
-### 查询告警评分配置
-GET {{baseUrl}}/score-config
-Authorization: Bearer {{jwt}}
-
-### 修改评分配置-仅修改分数（admin, 需替换真实数据库主键 id）
-PUT {{baseUrl}}/score-config/1?score=95
-Authorization: Bearer {{jwt}}
-
-### 修改评分配置-修改标签和分数（admin, 需替换真实数据库主键 id）
-PUT {{baseUrl}}/score-config/1?label=明火检测&score=95&note=最高危，发现后立即拉高综合分
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 11. 录像文件（RecordingController）
-### ============================================
-
-### 录像列表（分页）
-GET {{baseUrl}}/recordings?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 录像列表-按视频源筛选
-GET {{baseUrl}}/recordings?streamId=classroom_01&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 录像列表-按事件ID筛选
-GET {{baseUrl}}/recordings?eventId=evt_20260710143000001&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 录像列表-按时间范围筛选
-GET {{baseUrl}}/recordings?startTime=2026-07-01T00:00:00&endTime=2026-07-12T23:59:59&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 12. 操作日志（OperationLogController, admin 专用）
-### ============================================
-
-### 操作日志（分页）
-GET {{baseUrl}}/operation-logs?page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 操作日志-按用户筛选
-GET {{baseUrl}}/operation-logs?userId=1&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 操作日志-按动作筛选
-GET {{baseUrl}}/operation-logs?action=LOGIN&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 操作日志-按目标类型筛选
-GET {{baseUrl}}/operation-logs?targetType=student&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 操作日志-按目标ID筛选
-GET {{baseUrl}}/operation-logs?targetType=student&targetId=1&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### 操作日志-按时间范围筛选
-GET {{baseUrl}}/operation-logs?startTime=2026-07-01T00:00:00&endTime=2026-07-12T23:59:59&page=1&pageSize=10
-Authorization: Bearer {{jwt}}
-
-### ============================================
-### 13. 日报（ReportController, 无需鉴权）
-### ============================================
-
-### 获取最新日报
-GET {{baseUrl}}/report/latest
-
-### 手动生成日报（admin, 传入告警列表）
-POST {{baseUrl}}/report/generate
-Authorization: Bearer {{jwt}}
-Content-Type: application/json
-
-[
-  {"alertType":"head_down","level":"warning","streamId":"classroom_01","snapshotUrl":""},
-  {"alertType":"stranger_detected","level":"high","streamId":"classroom_01","snapshotUrl":""}
-]
-
-### 日报历史
-GET {{baseUrl}}/report/history
-
-### ============================================
-### 14. 系统设置（SettingsController, 无需鉴权）
-### ============================================
-
-### 获取系统设置
-GET {{baseUrl}}/api/settings
-
-### 更新系统设置
-PUT {{baseUrl}}/api/settings
 Content-Type: application/json
 
 {
-  "contacts": [
-    {"name":"项重善","mobile":"18601033435"},
-    {"name":"章志超","mobile":"15270985055"}
-  ],
-  "responsible": "项重善",
-  "reportTime": "18:00"
+  "image": "<base64-image>"
 }
 
-### ============================================
-### 15. AI 内部接口 → Spring Boot（带 X-Internal-Token）
-### ============================================
+### 22. 录像列表
+GET {{baseUrl}}/recordings?streamId={{streamId}}&page=1&pageSize=20
+Authorization: Bearer {{jwt}}
 
-### 视频流列表
-GET {{baseUrl}}/streams
-X-Internal-Token: {{internalToken}}
+### 23. 操作日志（仅管理员）
+GET {{baseUrl}}/operation-logs?page=1&pageSize=20
+Authorization: Bearer {{jwt}}
 
-### 区域列表
-GET {{baseUrl}}/zones?streamId=classroom_01
-X-Internal-Token: {{internalToken}}
-
-### 规则列表
-GET {{baseUrl}}/rules
-X-Internal-Token: {{internalToken}}
-
-### 获取全量人脸特征（含特征向量，禁止前端访问）
-GET {{baseUrl}}/students/face-features
-X-Internal-Token: {{internalToken}}
-
-### AI 告警入库（event_id 幂等）
-POST {{baseUrl}}/alerts/ai
-X-Internal-Token: {{internalToken}}
-Content-Type: application/json
-
-{
-  "eventId": "evt_20260710143000001",
-  "streamId": "classroom_01",
-  "alertType": "danger_zone_intrusion",
-  "alertName": "危险区域入侵",
-  "level": "warning",
-  "confidence": 0.85,
-  "occurredAt": "2026-07-10T14:30:00+08:00",
-  "durationSeconds": 3.5,
-  "studentId": null,
-  "targetInfo": {"track_id":1,"bbox":[100,200,150,300]},
-  "zoneId": 1,
-  "snapshotPath": "/snapshots/evt_xxx.jpg",
-  "recordPath": null,
-  "eventTimeOffset": null,
-  "extra": {"source":"backend_ai"}
-}
-
-### AI 告警入库-明火检测
-POST {{baseUrl}}/alerts/ai
-X-Internal-Token: {{internalToken}}
-Content-Type: application/json
-
-{
-  "eventId": "evt_20260710143000002",
-  "streamId": "classroom_01",
-  "alertType": "fire_detected",
-  "alertName": "明火检测",
-  "level": "high",
-  "confidence": 0.92,
-  "occurredAt": "2026-07-10T14:35:00+08:00",
-  "durationSeconds": 1.5,
-  "studentId": null,
-  "targetInfo": {"track_id":2,"bbox":[200,100,300,250]},
-  "zoneId": null,
-  "snapshotPath": "/snapshots/evt_fire_001.jpg",
-  "recordPath": null,
-  "eventTimeOffset": null,
-  "extra": {"source":"backend_ai","model":"yolov8"}
-}
-
-### AI 告警入库-重复 event_id 幂等测试
-POST {{baseUrl}}/alerts/ai
-X-Internal-Token: {{internalToken}}
-Content-Type: application/json
-
-{
-  "eventId": "evt_20260710143000001",
-  "streamId": "classroom_01",
-  "alertType": "danger_zone_intrusion",
-  "alertName": "危险区域入侵",
-  "level": "warning",
-  "confidence": 0.85,
-  "occurredAt": "2026-07-10T14:30:00+08:00"
-}
-
-### ============================================
-### 16. AI 服务接口（Flask）
-### ============================================
-
-### 分析摘要
-GET {{aiUrl}}/analysis/summary/classroom_01
-
-### 触发 AI 重载配置
-POST {{aiUrl}}/config/reload
-
-### 重载人脸特征
-POST {{aiUrl}}/face/features/reload
-
-### AI 模型状态（含 snapshot_pusher 是否启用）
+### 24. AI 模型状态
 GET {{aiUrl}}/model/status
 
-### ============================================
-### 17. 截图 & 证据（Nginx 静态资源）
-### ============================================
+### 25. AI 事件
+GET {{aiUrl}}/analysis/events?stream_id={{streamId}}&limit=20
 
-### 云服务器 Nginx 截图（生产环境，前端实际访问路径）
-GET {{nginxUrl}}/snapshots/20260712/evt_b10caf1f1fe840f3.jpg
+### 26. 通知 AI 重新加载区域配置
+POST {{aiUrl}}/config/reload
+Content-Type: application/json
+
+{
+  "stream_id": "{{streamId}}",
+  "reload_items": ["zones"]
+}
+
+### 27. AI 告警写入 SpringBoot（内部接口，event_id 幂等）
+POST {{baseUrl}}/alerts/ai
+X-Internal-Token: {{internalToken}}
+Content-Type: application/json
+
+{
+  "event_id": "http-test-event-001",
+  "stream_id": "{{streamId}}",
+  "alert_type": "danger_zone_intrusion",
+  "alert_name": "危险区域入侵",
+  "level": "high",
+  "confidence": 0.91,
+  "occurred_at": "2026-07-12T12:00:00+08:00",
+  "duration_seconds": 2.4,
+  "target_info": {
+    "bbox": [120, 80, 220, 300]
+  },
+  "zone_id": {{zoneId}},
+  "snapshot_path": "/snapshots/http-test-event-001.jpg"
+}
+
+### 28. 删除测试区域（谨慎执行）
+DELETE {{baseUrl}}/zones/{{zoneId}}
+Authorization: Bearer {{jwt}}
