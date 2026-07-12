@@ -1,0 +1,8 @@
+- [x] 创建 RegisterRequest DTO（username、password、nickname 字段 + 校验注解）
+- [x] AuthService 新增 register 方法（校验用户名唯一 → BCrypt 加密 → 插入 → 生成 JWT → 返回 LoginResponse）
+- [x] AuthController 新增 POST /auth/register 端点
+- [x] JwtAuthenticationInterceptor 的 EXCLUDE_PATHS 添加 /auth/register
+- [x] GlobalExceptionHandler 捕获 DuplicateKeyException 转为 409（已有实现，无需修改）
+- [ ] 验证注册成功返回 JWT + 用户信息
+- [ ] 验证用户名重复返回 409
+- [ ] 验证参数校验（用户名/密码为空、长度越界）

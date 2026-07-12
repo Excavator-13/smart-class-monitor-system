@@ -59,6 +59,33 @@ public class AuthService {
         return resp;
     }
 
+    public LoginResponse register(String username, String password, String nickname) {
+        User existing = userMapper.findByUsername(username);
+        if (existing != null) {
+            throw new BusinessException(409, "用户名已存在");
+        }
+
+        User user = new User();
+        user.setUsername(username);
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setRole("teacher");
+        user.setNickname(nickname);
+        user.setStatus("enabled");
+
+        userMapper.insert(user);
+
+        String token = jwtTokenProvider.generate(user.getId(), user.getUsername(), user.getRole());
+
+        LoginResponse resp = new LoginResponse();
+        resp.setToken(token);
+        resp.setUserId(user.getId());
+        resp.setUsername(user.getUsername());
+        resp.setRole(user.getRole());
+        resp.setNickname(user.getNickname());
+        resp.setAvatarUrl(user.getAvatarUrl());
+        return resp;
+    }
+
     public UserInfoVO getCurrentUser(Long userId) {
         User user = userMapper.findById(userId);
         if (user == null) {

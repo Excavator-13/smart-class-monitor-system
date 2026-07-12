@@ -17,6 +17,15 @@ application-dev.yml
 # =========================
 # Python / Flask / AI
 # =========================
+# pytest
+.pytest_cache/
+
+# Ultralytics
+backend_ai/config/ultralytics/
+
+# AI models
+backend_ai/models/
+
 __pycache__/
 *.pyc
 *.pyo
@@ -124,3 +133,4 @@ backend_ai/.env
 mock_springboot/.env
 frontend/.env
 frontend/.env.production
+frontend/public/runtime-config.js

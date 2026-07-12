@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import json
 import time
 from dataclasses import dataclass, field
@@ -51,6 +52,12 @@ class ConfigClient:
         self.session = session or requests.Session()
         self.internal_token = internal_token
         self.cache = ConfigCache()
+        self.last_error: str | None = None
+        self._poll_stop = threading.Event()
+        self._poll_thread: threading.Thread | None = None
+
+    def _headers(self) -> dict[str, str] | None:
+        return {"X-Internal-Token": self.internal_token} if self.internal_token else None
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         headers = {}
@@ -132,3 +139,53 @@ class ConfigClient:
 
     def get_face_features(self) -> dict[str, dict[str, Any]]:
         return self.cache.face_features
+
+    def bootstrap(self) -> dict[str, Any]:
+        result: dict[str, Any] = {"updated_at": time.time()}
+        try:
+            result.update(self.reload(reload_items=["streams", "zones", "rules"]))
+            result["face_features_loaded"] = self.load_face_features()
+            self.last_error = None
+        except Exception as exc:
+            self.last_error = str(exc)
+            result["error"] = self.last_error
+        return result
+
+    def start_polling(self, intervals: dict[str, Any] | None = None) -> None:
+        if self._poll_thread and self._poll_thread.is_alive():
+            return
+        cfg = intervals or {}
+        streams_seconds = float(cfg.get("streams_poll_seconds", 60))
+        zones_seconds = float(cfg.get("zones_poll_seconds", 120))
+        rules_seconds = float(cfg.get("rules_poll_seconds", 120))
+        face_seconds = float(cfg.get("face_features_poll_seconds", 300))
+
+        def due(last_at: float, seconds: float) -> bool:
+            return time.time() - last_at >= seconds
+
+        def loop() -> None:
+            last_streams = last_zones = last_rules = last_face = 0.0
+            while not self._poll_stop.is_set():
+                try:
+                    if due(last_streams, streams_seconds):
+                        self.load_streams()
+                        last_streams = time.time()
+                    if due(last_zones, zones_seconds):
+                        self.load_zones()
+                        last_zones = time.time()
+                    if due(last_rules, rules_seconds):
+                        self.load_rules()
+                        last_rules = time.time()
+                    if due(last_face, face_seconds):
+                        self.load_face_features()
+                        last_face = time.time()
+                    self.last_error = None
+                except Exception as exc:
+                    self.last_error = str(exc)
+                self._poll_stop.wait(1.0)
+
+        self._poll_thread = threading.Thread(target=loop, daemon=True)
+        self._poll_thread.start()
+
+    def stop_polling(self) -> None:
+        self._poll_stop.set()

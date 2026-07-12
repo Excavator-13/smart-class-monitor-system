@@ -68,6 +68,7 @@ class FakeStreamManager:
 
 class FakeBehaviorService:
     model = None
+    loaded = False
 
     def detect_objects(self, frame):
         return []

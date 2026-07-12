@@ -20,6 +20,30 @@ Content-Type: application/json
 
 {"username":"admin","password":"admin123"}
 
+### 注册
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"username":"newuser","password":"123456","nickname":"新用户"}
+
+### 注册-用户名重复
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"username":"admin","password":"123456"}
+
+### 注册-参数校验（用户名过短）
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"username":"a","password":"123456"}
+
+### 注册-参数校验（密码过短）
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{"username":"testuser","password":"123"}
+
 ### 获取当前用户信息
 GET {{baseUrl}}/auth/info
 Authorization: Bearer {{jwt}}
@@ -86,7 +110,7 @@ POST {{baseUrl}}/streams
 Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
-{"stream_name":"2号教室","stream_id":"classroom_02","rtmp_url":"rtmp://localhost:9090/live/classroom_02","remark":""}
+{"stream_name":"3号教室","stream_id":"classroom_03","rtmp_url":"rtmp://localhost:9090/live/classroom_03","remark":""}
 
 ### 推流状态
 GET {{baseUrl}}/streams/classroom_01/status
