@@ -44,7 +44,7 @@ public class ZoneController {
 
     @PutMapping("/zones/{id}")
     @Operation(summary = "修改区域", description = "更新区域配置，修改后自动通知 AI 刷新")
-    public ApiResponse<Void> update(@PathVariable Long id, @RequestBody ZoneUpdateRequest request) {
+    public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody ZoneUpdateRequest request) {
         zoneService.updateZone(id, request);
         return ApiResponse.success();
     }

@@ -58,6 +58,7 @@ public class ZoneService {
         if (entity == null) throw new BusinessException(404, "区域不存在");
 
         if (req.getZoneName() != null) entity.setZoneName(req.getZoneName());
+        if (req.getZoneType() != null) entity.setZoneType(req.getZoneType());
         if (req.getCoordinates() != null) entity.setCoordinates(req.getCoordinates());
         if (req.getThresholdSeconds() != null) entity.setThresholdSeconds(req.getThresholdSeconds());
         if (req.getSafeDistance() != null) entity.setSafeDistance(req.getSafeDistance());

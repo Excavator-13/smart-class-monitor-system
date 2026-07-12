@@ -197,6 +197,19 @@ export function normalizeStudent(item = {}) {
   };
 }
 
+export function normalizeUserRecord(item = {}) {
+  return {
+    id: optional(item.id, item.user_id ?? item.userId),
+    username: optional(item.username, ""),
+    nickname: optional(item.nickname, item.name || ""),
+    role: optional(item.role, "teacher"),
+    status: optional(item.status, "enabled"),
+    avatar_url: optional(item.avatar_url, item.avatarUrl || ""),
+    last_login_at: optional(item.last_login_at, item.lastLoginAt || ""),
+    created_at: optional(item.created_at, item.createdAt || ""),
+  };
+}
+
 function parseCoordinates(value) {
   if (Array.isArray(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -390,9 +403,9 @@ export async function createStream(payload) {
     method: "post",
     url: "/streams",
     data: {
-      streamId: payload.stream_id,
-      streamName: payload.stream_name,
-      rtmpUrl: payload.rtmp_url,
+      stream_id: payload.stream_id,
+      stream_name: payload.stream_name,
+      rtmp_url: payload.rtmp_url,
       remark: payload.location || payload.remark || "",
     },
   });
@@ -557,13 +570,34 @@ export async function createStudent(payload) {
     url: "/students",
     data: {
       student_no: payload.student_no,
-      studentNo: payload.student_no,
       name: payload.name,
       class_name: payload.class_name,
-      className: payload.class_name,
     },
   });
   return normalizeStudent(data);
+}
+
+export function fetchUsers(params = {}) {
+  return getWithMock(
+    apiClient,
+    "/users",
+    {
+      role: params.role,
+      status: params.status,
+      page: params.page,
+      pageSize: params.pageSize ?? params.page_size,
+    },
+    { records: [] },
+    (payload) => normalizePage(payload, normalizeUserRecord),
+  );
+}
+
+export async function updateUserRole(id, role) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/users/${id}/role`,
+    data: { role },
+  });
 }
 
 export async function registerStudentFace(id, image) {

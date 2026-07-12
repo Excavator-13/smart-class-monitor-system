@@ -2,6 +2,7 @@ package com.smartclass.monitor.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 @Schema(description = "新增区域请求")
 public class ZoneCreateRequest {
@@ -13,6 +14,7 @@ public class ZoneCreateRequest {
     private String zoneName;
 
     @NotBlank @Schema(description = "区域类型: danger/seat/phone_forbidden/roi", example = "danger")
+    @Pattern(regexp = "^(danger|seat|phone_forbidden|roi)$", message = "区域类型必须为 danger、seat、phone_forbidden 或 roi")
     private String zoneType;
 
     @Schema(description = "归一化坐标 JSON (0-1 比例)", example = "[{\"x\":0.1,\"y\":0.2},{\"x\":0.5,\"y\":0.2},{\"x\":0.5,\"y\":0.5},{\"x\":0.1,\"y\":0.5}]")
