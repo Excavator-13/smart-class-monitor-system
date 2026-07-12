@@ -36,4 +36,9 @@ public class ReportController {
     public Map<String, Object> generate(@RequestBody List<Map<String, Object>> alerts) {
         return reportService.generateReport(alerts);
     }
+
+    @GetMapping("/history")
+    public List<Map<String, Object>> history() {
+        return reportService.getHistory();
+    }
 }

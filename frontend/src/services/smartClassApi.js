@@ -219,8 +219,14 @@ export function normalizeZone(item = {}) {
       item.zoneName || item.name || "未命名区域",
     ),
     zone_type: optional(item.zone_type, item.zoneType || item.type || ""),
+    shape_type: optional(item.shape_type, item.shapeType || "polygon"),
     coordinates: parseCoordinates(item.coordinates || item.points),
-    enabled: item.enabled ?? item.status === "enabled",
+    threshold_seconds: Number(
+      item.threshold_seconds ?? item.thresholdSeconds ?? 0,
+    ),
+    safe_distance: Number(item.safe_distance ?? item.safeDistance ?? 0),
+    enabled:
+      item.enabled ?? (item.status ? item.status === "enabled" : true),
   };
 }
 
@@ -459,6 +465,29 @@ export function fetchStreamZones(streamId) {
     [],
     (payload) => asArray(payload).map(normalizeZone),
   );
+}
+
+export async function createZone(payload) {
+  const data = await requestData(apiClient, {
+    method: "post",
+    url: "/zones",
+    data: {
+      stream_id: payload.stream_id,
+      zone_name: payload.zone_name,
+      zone_type: payload.zone_type,
+      coordinates: JSON.stringify(payload.coordinates || []),
+      threshold_seconds: payload.threshold_seconds,
+      safe_distance: payload.safe_distance,
+    },
+  });
+  return normalizeZone(data);
+}
+
+export async function deleteZone(id) {
+  return requestData(apiClient, {
+    method: "delete",
+    url: `/zones/${id}`,
+  });
 }
 
 export function fetchStudents(params = {}) {

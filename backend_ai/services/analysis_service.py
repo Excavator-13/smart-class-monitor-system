@@ -14,11 +14,13 @@ from backend_ai.utils.logger import get_logger
 
 
 class AnalysisService:
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
         self.fire_service = fire_service
+        self.anti_spoof_service = anti_spoof_service
+        self.audio_service = audio_service
         self.event_service = event_service
         self.config_client = config_client
         self.alert_client = alert_client
@@ -27,7 +29,7 @@ class AnalysisService:
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
 
-    def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None, audio_chunk: np.ndarray | None = None) -> list[dict[str, Any]]:
         enabled = modules or {"face", "zone", "behavior"}
         detected: list[dict[str, Any]] = []
 
@@ -37,6 +39,14 @@ class AnalysisService:
             self._observe_latency("face", started)
             detected.extend(face_detections)
             self._draw_detections(frame, face_detections, color=(80, 220, 80))
+
+            if "anti_spoof" in enabled and self.anti_spoof_service is not None:
+                faces_with_bbox = [
+                    {"track_id": r.get("target", {}).get("track_id", f"face_{i}"),
+                     "bbox": r.get("target", {}).get("bbox")}
+                    for i, r in enumerate(face_detections)
+                ]
+                detected.extend(self.anti_spoof_service.detect(stream_id, faces_with_bbox, frame))
 
         object_list = objects if objects is not None else []
         needs_objects = "behavior" in enabled or "zone" in enabled
@@ -78,6 +88,9 @@ class AnalysisService:
                     {k: v for k, v in self.config_client.cache.rules.items()},
                 )
             )
+
+        if "audio" in enabled and self.audio_service is not None:
+            detected.extend(self.audio_service.process_audio(stream_id, audio_chunk))
 
         events = []
         for item in detected:
