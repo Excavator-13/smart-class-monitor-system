@@ -18,7 +18,7 @@ class ZoneService:
         safe_distance = float(config.get("safe_distance", 0.05))
         for person in persons:
             bbox = person.get("bbox")
-            if not bbox:
+            if bbox is None or len(bbox) == 0:
                 continue
             foot = bbox_foot_point(bbox)
             track_id = person.get("track_id") or f"person_{len(detections) + 1}"
