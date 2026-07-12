@@ -225,8 +225,7 @@ export function normalizeZone(item = {}) {
       item.threshold_seconds ?? item.thresholdSeconds ?? 0,
     ),
     safe_distance: Number(item.safe_distance ?? item.safeDistance ?? 0),
-    enabled:
-      item.enabled ?? (item.status ? item.status === "enabled" : true),
+    enabled: item.enabled ?? (item.status ? item.status === "enabled" : true),
   };
 }
 
@@ -451,6 +450,26 @@ export function fetchRules(params = {}) {
   );
 }
 
+export async function toggleRule(id, enabled) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/rules/${id}/toggle`,
+    params: { enabled },
+  });
+}
+
+export async function fetchScoreConfig() {
+  return requestData(apiClient, { method: "get", url: "/score-config" });
+}
+
+export async function updateScoreConfig(id, params) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/score-config/${id}`,
+    params,
+  });
+}
+
 export function fetchZones(params = {}) {
   return getWithMock(apiClient, "/zones", params, [], (payload) =>
     asArray(payload).map(normalizeZone),
@@ -481,6 +500,32 @@ export async function createZone(payload) {
     },
   });
   return normalizeZone(data);
+}
+
+export async function updateZone(id, payload) {
+  const data = await requestData(apiClient, {
+    method: "put",
+    url: `/zones/${id}`,
+    data: {
+      zone_name: payload.zone_name,
+      zone_type: payload.zone_type,
+      coordinates: payload.coordinates
+        ? JSON.stringify(payload.coordinates)
+        : undefined,
+      threshold_seconds: payload.threshold_seconds,
+      safe_distance: payload.safe_distance,
+      enabled: payload.enabled,
+    },
+  });
+  return normalizeZone(data);
+}
+
+export async function toggleZone(id, enabled) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/zones/${id}/toggle`,
+    params: { enabled },
+  });
 }
 
 export async function deleteZone(id) {

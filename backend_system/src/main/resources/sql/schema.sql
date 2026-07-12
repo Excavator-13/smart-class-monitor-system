@@ -198,3 +198,16 @@ CREATE TABLE IF NOT EXISTS `operation_log` (
     KEY `idx_operation_log_action_time` (`action`, `created_at`),
     KEY `idx_operation_log_target` (`target_type`, `target_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作审计日志表';
+
+-- score_config 告警评分配置表
+CREATE TABLE IF NOT EXISTS `score_config` (
+    `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `alert_type` VARCHAR(64)     NOT NULL COMMENT '告警类型',
+    `label`      VARCHAR(64)     NOT NULL COMMENT '显示名称',
+    `score`      INT             NOT NULL DEFAULT 50 COMMENT '评分权重 0-100',
+    `note`       VARCHAR(255)    DEFAULT NULL COMMENT '说明',
+    `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_score_config_type` (`alert_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警评分配置表';

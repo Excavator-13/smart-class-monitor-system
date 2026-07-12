@@ -75,6 +75,14 @@ public class ZoneService {
         aiClient.reloadConfig(entity.getStreamId(), RELOAD_ITEMS);
     }
 
+    public void toggleZone(Long id, boolean enabled) {
+        DangerZone entity = mapper.findById(id);
+        if (entity == null) throw new BusinessException(404, "区域不存在");
+        entity.setEnabled(enabled);
+        mapper.update(entity);
+        aiClient.reloadConfig(entity.getStreamId(), RELOAD_ITEMS);
+    }
+
     public List<ZoneVO> getZonesByStreamId(String streamId) {
         return mapper.findByStreamId(streamId).stream().map(this::toVO).collect(Collectors.toList());
     }
