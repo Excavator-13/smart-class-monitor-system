@@ -197,6 +197,19 @@ export function normalizeStudent(item = {}) {
   };
 }
 
+export function normalizeUserRecord(item = {}) {
+  return {
+    id: optional(item.id, item.user_id ?? item.userId),
+    username: optional(item.username, ""),
+    nickname: optional(item.nickname, item.name || ""),
+    role: optional(item.role, "teacher"),
+    status: optional(item.status, "enabled"),
+    avatar_url: optional(item.avatar_url, item.avatarUrl || ""),
+    last_login_at: optional(item.last_login_at, item.lastLoginAt || ""),
+    created_at: optional(item.created_at, item.createdAt || ""),
+  };
+}
+
 function parseCoordinates(value) {
   if (Array.isArray(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -225,8 +238,7 @@ export function normalizeZone(item = {}) {
       item.threshold_seconds ?? item.thresholdSeconds ?? 0,
     ),
     safe_distance: Number(item.safe_distance ?? item.safeDistance ?? 0),
-    enabled:
-      item.enabled ?? (item.status ? item.status === "enabled" : true),
+    enabled: item.enabled ?? (item.status ? item.status === "enabled" : true),
   };
 }
 
@@ -391,9 +403,9 @@ export async function createStream(payload) {
     method: "post",
     url: "/streams",
     data: {
-      streamId: payload.stream_id,
-      streamName: payload.stream_name,
-      rtmpUrl: payload.rtmp_url,
+      stream_id: payload.stream_id,
+      stream_name: payload.stream_name,
+      rtmp_url: payload.rtmp_url,
       remark: payload.location || payload.remark || "",
     },
   });
@@ -451,6 +463,26 @@ export function fetchRules(params = {}) {
   );
 }
 
+export async function toggleRule(id, enabled) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/rules/${id}/toggle`,
+    params: { enabled },
+  });
+}
+
+export async function fetchScoreConfig() {
+  return requestData(apiClient, { method: "get", url: "/score-config" });
+}
+
+export async function updateScoreConfig(id, params) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/score-config/${id}`,
+    params,
+  });
+}
+
 export function fetchZones(params = {}) {
   return getWithMock(apiClient, "/zones", params, [], (payload) =>
     asArray(payload).map(normalizeZone),
@@ -483,6 +515,32 @@ export async function createZone(payload) {
   return normalizeZone(data);
 }
 
+export async function updateZone(id, payload) {
+  const data = await requestData(apiClient, {
+    method: "put",
+    url: `/zones/${id}`,
+    data: {
+      zone_name: payload.zone_name,
+      zone_type: payload.zone_type,
+      coordinates: payload.coordinates
+        ? JSON.stringify(payload.coordinates)
+        : undefined,
+      threshold_seconds: payload.threshold_seconds,
+      safe_distance: payload.safe_distance,
+      enabled: payload.enabled,
+    },
+  });
+  return normalizeZone(data);
+}
+
+export async function toggleZone(id, enabled) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/zones/${id}/toggle`,
+    params: { enabled },
+  });
+}
+
 export async function deleteZone(id) {
   return requestData(apiClient, {
     method: "delete",
@@ -512,13 +570,34 @@ export async function createStudent(payload) {
     url: "/students",
     data: {
       student_no: payload.student_no,
-      studentNo: payload.student_no,
       name: payload.name,
       class_name: payload.class_name,
-      className: payload.class_name,
     },
   });
   return normalizeStudent(data);
+}
+
+export function fetchUsers(params = {}) {
+  return getWithMock(
+    apiClient,
+    "/users",
+    {
+      role: params.role,
+      status: params.status,
+      page: params.page,
+      pageSize: params.pageSize ?? params.page_size,
+    },
+    { records: [] },
+    (payload) => normalizePage(payload, normalizeUserRecord),
+  );
+}
+
+export async function updateUserRole(id, role) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/users/${id}/role`,
+    data: { role },
+  });
 }
 
 export async function registerStudentFace(id, image) {

@@ -57,4 +57,11 @@ public class RuleController {
         ruleService.deleteRule(id);
         return ApiResponse.success();
     }
+
+    @PutMapping("/rules/{id}/toggle")
+    @Operation(summary = "切换规则开关", description = "仅切换 enabled 状态，teacher 可调用")
+    public ApiResponse<Void> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
+        ruleService.toggleRule(id, enabled);
+        return ApiResponse.success();
+    }
 }

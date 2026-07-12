@@ -223,7 +223,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": nalysis_service.avg_latency_ms("fire")},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]

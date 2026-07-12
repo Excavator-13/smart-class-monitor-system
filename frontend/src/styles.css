@@ -1480,84 +1480,35 @@ textarea {
 }
 
 .zone-action:disabled,
-.zone-delete-button:disabled {
+.zone-draft-input:disabled,
+.zone-draft-select:disabled {
   cursor: wait;
   opacity: 0.62;
 }
 
-.zone-manager {
-  position: absolute;
-  z-index: 8;
-  top: 92px;
-  right: 14px;
-  width: min(230px, calc(100% - 28px));
-  max-height: 190px;
-  overflow: hidden;
+.zone-draft-input,
+.zone-draft-select {
+  height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 7px;
-  background: rgba(6, 18, 26, 0.82);
+  background: rgba(6, 18, 26, 0.86);
   color: #fff;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(9px);
-}
-
-.zone-manager-title,
-.zone-manager-item {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.zone-manager-title {
-  min-height: 34px;
-  padding: 0 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  outline: none;
   font-size: 12px;
 }
 
-.zone-manager-title span {
-  color: rgba(222, 238, 246, 0.68);
+.zone-draft-input {
+  width: 150px;
+  padding: 0 9px;
 }
 
-.zone-manager-list {
-  max-height: 154px;
-  overflow-y: auto;
-  padding: 5px;
+.zone-draft-input::placeholder {
+  color: rgba(222, 238, 246, 0.58);
 }
 
-.zone-manager-item {
-  min-height: 32px;
-  padding: 3px 5px 3px 7px;
-  border-radius: 5px;
-}
-
-.zone-manager-item:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.zone-manager-item > span {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.zone-delete-button {
-  flex: 0 0 auto;
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid rgba(255, 112, 112, 0.46);
-  border-radius: 5px;
-  background: rgba(146, 40, 46, 0.64);
-  color: #fff;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-.zone-delete-button:hover:not(:disabled) {
-  background: rgba(177, 48, 55, 0.82);
+.zone-draft-select {
+  width: 112px;
+  padding: 0 7px;
 }
 
 .video-expanded-mask {
@@ -1805,6 +1756,10 @@ textarea {
 
 .tracking-overview {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.tracking-overview > .panel {
+  min-height: 500px;
 }
 
 .module-grid {

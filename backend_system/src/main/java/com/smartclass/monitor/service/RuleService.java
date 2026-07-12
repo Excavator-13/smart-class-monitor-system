@@ -76,6 +76,14 @@ public class RuleService {
         aiClient.reloadConfig(null, RELOAD_ITEMS);
     }
 
+    public void toggleRule(Long id, boolean enabled) {
+        BehaviorRule entity = mapper.findById(id);
+        if (entity == null) throw new BusinessException(404, "规则不存在");
+        entity.setEnabled(enabled);
+        mapper.update(entity);
+        aiClient.reloadConfig(null, RELOAD_ITEMS);
+    }
+
     private RuleVO toVO(BehaviorRule e) {
         RuleVO vo = new RuleVO();
         vo.setId(e.getId());
