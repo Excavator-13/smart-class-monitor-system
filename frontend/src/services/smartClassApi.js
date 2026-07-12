@@ -1,4 +1,11 @@
-import { aiClient, apiClient, isMockEnabled, joinAiUrl, requestData, unwrapResponse } from "./http";
+import {
+  aiClient,
+  apiClient,
+  isMockEnabled,
+  joinAiUrl,
+  requestData,
+  unwrapResponse,
+} from "./http";
 import {
   mockAlerts,
   mockAnalysisEvents,
@@ -27,7 +34,7 @@ function normalizePage(payload, mapper = (item) => item) {
     records,
     page: payload?.page ?? 1,
     page_size: payload?.page_size ?? records.length,
-    total: payload?.total ?? records.length
+    total: payload?.total ?? records.length,
   };
 }
 
@@ -56,37 +63,84 @@ export function normalizeStream(item = {}) {
   return {
     id: optional(item.id, item.stream_id ?? item.streamId),
     stream_id: optional(item.stream_id, item.streamId || ""),
-    stream_name: optional(item.stream_name, item.streamName || item.name || item.stream_id || item.streamId || "未命名视频源"),
+    stream_name: optional(
+      item.stream_name,
+      item.streamName ||
+        item.name ||
+        item.stream_id ||
+        item.streamId ||
+        "未命名视频源",
+    ),
     location: optional(item.location, item.remark || ""),
     status: optional(status, "unknown"),
     rtmp_url: optional(item.rtmp_url, item.rtmpUrl || ""),
     hls_url: optional(item.hls_url, item.hlsUrl || ""),
     mjpeg_url: optional(item.mjpeg_url, item.mjpegUrl || ""),
-    remark: optional(item.remark)
+    remark: optional(item.remark),
   };
 }
 
 export function normalizeAlert(item = {}) {
-  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || null);
+  const target = parseMaybeJson(
+    item.target || item.target_info || item.targetInfo || null,
+  );
   return {
     id: optional(item.id, item.event_id),
     event_id: optional(item.event_id, item.eventUid || item.event_uid || ""),
     stream_id: optional(item.stream_id, item.streamId || ""),
     stream_name: optional(item.stream_name, item.streamName || ""),
-    student_id: item.student_id ?? item.studentId ?? target?.student_id ?? target?.studentId ?? null,
-    student_name: optional(item.student_name, item.studentName || target?.student_name || target?.studentName || ""),
-    alert_type: optional(item.alert_type, item.alertType || item.event_type || item.eventType || item.event_name || "unknown"),
-    alert_name: optional(item.alert_name, item.alertName || item.event_name || item.eventName || item.alert_type || ""),
+    student_id:
+      item.student_id ??
+      item.studentId ??
+      target?.student_id ??
+      target?.studentId ??
+      null,
+    student_name: optional(
+      item.student_name,
+      item.studentName || target?.student_name || target?.studentName || "",
+    ),
+    alert_type: optional(
+      item.alert_type,
+      item.alertType ||
+        item.event_type ||
+        item.eventType ||
+        item.event_name ||
+        "unknown",
+    ),
+    alert_name: optional(
+      item.alert_name,
+      item.alertName ||
+        item.event_name ||
+        item.eventName ||
+        item.alert_type ||
+        "",
+    ),
     level: optional(item.level, "info"),
-    status: optional(item.status, item.alert_status || item.alertStatus || item.event_status || "unhandled"),
+    status: optional(
+      item.status,
+      item.alert_status || item.alertStatus || item.event_status || "unhandled",
+    ),
     confidence: item.confidence ?? target?.confidence ?? null,
-    snapshot_url: optional(item.snapshot_url, item.snapshotUrl || item.snapshot_path || item.snapshotPath),
-    record_url: optional(item.record_url, item.recordUrl || item.video_path || item.videoPath || item.record_path || item.recordPath),
-    occurred_at: optional(item.occurred_at, item.occurredAt || item.time || item.created_at || item.createdAt || ""),
+    snapshot_url: optional(
+      item.snapshot_url,
+      item.snapshotUrl || item.snapshot_path || item.snapshotPath,
+    ),
+    record_url: optional(
+      item.record_url,
+      item.recordUrl ||
+        item.video_path ||
+        item.videoPath ||
+        item.record_path ||
+        item.recordPath,
+    ),
+    occurred_at: optional(
+      item.occurred_at,
+      item.occurredAt || item.time || item.created_at || item.createdAt || "",
+    ),
     handled_at: optional(item.handled_at, item.handledAt),
     remark: optional(item.remark, item.description || item.summary || ""),
     target,
-    zone: parseMaybeJson(item.zone || null)
+    zone: parseMaybeJson(item.zone || null),
   };
 }
 
@@ -94,13 +148,28 @@ export function normalizeRule(item = {}) {
   return {
     id: optional(item.id, item.rule_id),
     rule_type: optional(item.rule_type, item.ruleType || item.type || ""),
-    name: optional(item.name, item.rule_name || item.ruleName || item.rule_type || item.ruleType || "未命名规则"),
+    name: optional(
+      item.name,
+      item.rule_name ||
+        item.ruleName ||
+        item.rule_type ||
+        item.ruleType ||
+        "未命名规则",
+    ),
     enabled: item.enabled ?? item.status === "enabled",
-    threshold_seconds: item.threshold_seconds ?? item.thresholdSeconds ?? item.duration_threshold ?? 1,
-    confidence_threshold: item.confidence_threshold ?? item.confidenceThreshold ?? item.confidence ?? null,
+    threshold_seconds:
+      item.threshold_seconds ??
+      item.thresholdSeconds ??
+      item.duration_threshold ??
+      1,
+    confidence_threshold:
+      item.confidence_threshold ??
+      item.confidenceThreshold ??
+      item.confidence ??
+      null,
     cooldown_seconds: item.cooldown_seconds ?? item.cooldownSeconds ?? null,
     zone_type: optional(item.zone_type, item.zoneType || ""),
-    summary: optional(item.summary, item.description || "")
+    summary: optional(item.summary, item.description || ""),
   };
 }
 
@@ -108,12 +177,36 @@ export function normalizeStudent(item = {}) {
   return {
     id: optional(item.id, item.student_id ?? item.studentId),
     student_no: optional(item.student_no, item.studentNo || ""),
-    name: optional(item.name, item.student_name || item.studentName || "未命名人员"),
+    name: optional(
+      item.name,
+      item.student_name || item.studentName || "未命名人员",
+    ),
     class_name: optional(item.class_name, item.className || ""),
     status: optional(item.status, "active"),
-    face_registered: Boolean(item.face_registered ?? item.faceRegistered ?? item.has_face ?? item.hasFace ?? item.feature_count),
-    last_seen: optional(item.last_seen, item.lastSeen || item.last_seen_at || item.lastSeenAt || "")
+    face_registered: Boolean(
+      item.face_registered ??
+      item.faceRegistered ??
+      item.has_face ??
+      item.hasFace ??
+      item.feature_count,
+    ),
+    last_seen: optional(
+      item.last_seen,
+      item.lastSeen || item.last_seen_at || item.lastSeenAt || "",
+    ),
   };
+}
+
+function parseCoordinates(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 export function normalizeZone(item = {}) {
@@ -121,55 +214,105 @@ export function normalizeZone(item = {}) {
     id: optional(item.id, item.zone_id),
     zone_id: optional(item.zone_id, item.zoneId || item.id),
     stream_id: optional(item.stream_id, item.streamId || ""),
-    zone_name: optional(item.zone_name, item.zoneName || item.name || "未命名区域"),
+    zone_name: optional(
+      item.zone_name,
+      item.zoneName || item.name || "未命名区域",
+    ),
     zone_type: optional(item.zone_type, item.zoneType || item.type || ""),
-    coordinates: item.coordinates || item.points || [],
-    enabled: item.enabled ?? item.status === "enabled"
+    coordinates: parseCoordinates(item.coordinates || item.points),
+    enabled: item.enabled ?? item.status === "enabled",
   };
 }
 
 export function normalizeAiEvent(item = {}) {
-  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || null);
+  const target = parseMaybeJson(
+    item.target || item.target_info || item.targetInfo || null,
+  );
   return {
     event_id: optional(item.event_id, item.eventId || item.id || ""),
     stream_id: optional(item.stream_id, item.streamId || ""),
-    event_type: optional(item.event_type, item.eventType || item.alert_type || item.alertType || ""),
-    event_name: optional(item.event_name, item.eventName || item.alert_name || item.alertName || item.alert_type || ""),
+    event_type: optional(
+      item.event_type,
+      item.eventType || item.alert_type || item.alertType || "",
+    ),
+    event_name: optional(
+      item.event_name,
+      item.eventName ||
+        item.alert_name ||
+        item.alertName ||
+        item.alert_type ||
+        "",
+    ),
     level: optional(item.level, "info"),
-    event_status: optional(item.event_status, item.eventStatus || item.status || ""),
+    event_status: optional(
+      item.event_status,
+      item.eventStatus || item.status || "",
+    ),
     confidence: item.confidence ?? target?.confidence ?? null,
     occurred_at: optional(item.occurred_at, item.occurredAt || item.time || ""),
     duration_seconds: item.duration_seconds ?? item.durationSeconds ?? null,
     target,
     zone: parseMaybeJson(item.zone || null),
-    snapshot_path: optional(item.snapshot_path, item.snapshotPath || item.snapshot_url || item.snapshotUrl)
+    snapshot_path: optional(
+      item.snapshot_path,
+      item.snapshotPath || item.snapshot_url || item.snapshotUrl,
+    ),
   };
 }
 
 export function normalizeModelStatus(payload = {}) {
   const models = Array.isArray(payload.models) ? payload.models : [];
   const streams = Array.isArray(payload.streams) ? payload.streams : [];
-  const firstLoadedModel = models.find((item) => item.loaded) || models[0] || {};
-  const inferValues = models.map((item) => Number(item.avg_infer_ms ?? item.avgInferMs)).filter(Number.isFinite);
+  const firstLoadedModel =
+    models.find((item) => item.loaded) || models[0] || {};
+  const inferValues = models
+    .map((item) => Number(item.avg_infer_ms ?? item.avgInferMs))
+    .filter(Number.isFinite);
   return {
-    service_status: optional(payload.service_status, payload.serviceStatus || (payload.loaded ? "running" : "unknown")),
+    service_status: optional(
+      payload.service_status,
+      payload.serviceStatus || (payload.loaded ? "running" : "unknown"),
+    ),
     models,
     streams,
-    loaded: models.length ? models.some((item) => item.loaded) : Boolean(payload.loaded),
+    loaded: models.length
+      ? models.some((item) => item.loaded)
+      : Boolean(payload.loaded),
     version: optional(firstLoadedModel.version, payload.version || ""),
-    model_name: optional(firstLoadedModel.model_name, firstLoadedModel.modelName || payload.model_name || payload.modelName || ""),
+    model_name: optional(
+      firstLoadedModel.model_name,
+      firstLoadedModel.modelName ||
+        payload.model_name ||
+        payload.modelName ||
+        "",
+    ),
     inference_ms: inferValues.length
-      ? Math.round(inferValues.reduce((sum, value) => sum + value, 0) / inferValues.length)
-      : payload.inference_ms ?? payload.inferenceMs
+      ? Math.round(
+          inferValues.reduce((sum, value) => sum + value, 0) /
+            inferValues.length,
+        )
+      : (payload.inference_ms ?? payload.inferenceMs),
   };
 }
 
 export function normalizeHealth(payload = {}) {
   return {
-    api: optional(payload.api, payload.backend || payload.service_status || payload.serviceStatus || "unknown"),
+    api: optional(
+      payload.api,
+      payload.backend ||
+        payload.service_status ||
+        payload.serviceStatus ||
+        "unknown",
+    ),
     database: optional(payload.database, payload.mysql || "unknown"),
-    ai: optional(payload.ai, payload.ai_service || payload.aiService || "unknown"),
-    rtmp: optional(payload.rtmp, payload.nginx || payload.nginx_rtmp || payload.nginxRtmp || "unknown")
+    ai: optional(
+      payload.ai,
+      payload.ai_service || payload.aiService || "unknown",
+    ),
+    rtmp: optional(
+      payload.rtmp,
+      payload.nginx || payload.nginx_rtmp || payload.nginxRtmp || "unknown",
+    ),
   };
 }
 
@@ -179,8 +322,8 @@ export async function login(payload) {
     url: "/auth/login",
     data: {
       username: payload.username,
-      password: payload.password
-    }
+      password: payload.password,
+    },
   });
   return unwrapResponse(data);
 }
@@ -189,9 +332,25 @@ export async function fetchCurrentUser() {
   return requestData(apiClient, { method: "get", url: "/auth/info" });
 }
 
+export async function register(payload) {
+  const data = await requestData(apiClient, {
+    method: "post",
+    url: "/auth/register",
+    data: {
+      username: payload.username,
+      password: payload.password,
+      nickname: payload.nickname || undefined,
+    },
+  });
+  return unwrapResponse(data);
+}
+
 export async function logout() {
   try {
-    return await requestData(apiClient, { method: "post", url: "/auth/logout" });
+    return await requestData(apiClient, {
+      method: "post",
+      url: "/auth/logout",
+    });
   } catch {
     return { success: true, local_only: true };
   }
@@ -207,10 +366,18 @@ export function getVideoFeedUrl(streamId, options = {}) {
 }
 
 export function fetchStreams(params = {}) {
-  return getWithMock(apiClient, "/streams/enabled", params, mockStreams, (payload) => {
-    const records = asArray(payload).map(normalizeStream);
-    return Array.isArray(payload) ? records : normalizePage(payload, normalizeStream);
-  });
+  return getWithMock(
+    apiClient,
+    "/streams/enabled",
+    params,
+    mockStreams,
+    (payload) => {
+      const records = asArray(payload).map(normalizeStream);
+      return Array.isArray(payload)
+        ? records
+        : normalizePage(payload, normalizeStream);
+    },
+  );
 }
 
 export async function createStream(payload) {
@@ -221,8 +388,8 @@ export async function createStream(payload) {
       streamId: payload.stream_id,
       streamName: payload.stream_name,
       rtmpUrl: payload.rtmp_url,
-      remark: payload.location || payload.remark || ""
-    }
+      remark: payload.location || payload.remark || "",
+    },
   });
   return normalizeStream(data);
 }
@@ -245,10 +412,10 @@ export function fetchAlerts(params = {}) {
       status: params.status,
       level: params.level,
       page: params.page,
-      pageSize: params.pageSize ?? params.page_size
+      pageSize: params.pageSize ?? params.page_size,
     },
     { records: mockAlerts },
-    (payload) => normalizePage(payload, normalizeAlert)
+    (payload) => normalizePage(payload, normalizeAlert),
   );
 }
 
@@ -258,34 +425,40 @@ export async function updateAlertStatus(id, payload) {
     url: `/alerts/${id}/status`,
     data: {
       status: payload.status,
-      remark: payload.remark || ""
-    }
+      remark: payload.remark || "",
+    },
   });
 }
 
 export function fetchAlertStats(params = {}) {
-  return getWithMock(
-    apiClient,
-    "/alert-stats",
-    params,
-    {
-      today_total: mockAlerts.length,
-      unhandled_count: mockAlerts.filter((item) => item.status !== "handled").length,
-      by_type: []
-    }
-  );
+  return getWithMock(apiClient, "/alert-stats", params, {
+    today_total: mockAlerts.length,
+    unhandled_count: mockAlerts.filter((item) => item.status !== "handled")
+      .length,
+    by_type: [],
+  });
 }
 
 export function fetchRules(params = {}) {
-  return getWithMock(apiClient, "/rules", params, mockRules, (payload) => asArray(payload).map(normalizeRule));
+  return getWithMock(apiClient, "/rules", params, mockRules, (payload) =>
+    asArray(payload).map(normalizeRule),
+  );
 }
 
 export function fetchZones(params = {}) {
-  return getWithMock(apiClient, "/zones", params, [], (payload) => asArray(payload).map(normalizeZone));
+  return getWithMock(apiClient, "/zones", params, [], (payload) =>
+    asArray(payload).map(normalizeZone),
+  );
 }
 
 export function fetchStreamZones(streamId) {
-  return getWithMock(apiClient, `/streams/${streamId}/zones`, {}, [], (payload) => asArray(payload).map(normalizeZone));
+  return getWithMock(
+    apiClient,
+    `/streams/${streamId}/zones`,
+    {},
+    [],
+    (payload) => asArray(payload).map(normalizeZone),
+  );
 }
 
 export function fetchStudents(params = {}) {
@@ -297,10 +470,10 @@ export function fetchStudents(params = {}) {
       keyword: params.keyword,
       faceRegistered: params.faceRegistered ?? params.face_registered,
       page: params.page,
-      pageSize: params.pageSize ?? params.page_size
+      pageSize: params.pageSize ?? params.page_size,
     },
     { records: mockStudents },
-    (payload) => normalizePage(payload, normalizeStudent)
+    (payload) => normalizePage(payload, normalizeStudent),
   );
 }
 
@@ -313,8 +486,8 @@ export async function createStudent(payload) {
       studentNo: payload.student_no,
       name: payload.name,
       class_name: payload.class_name,
-      className: payload.class_name
-    }
+      className: payload.class_name,
+    },
   });
   return normalizeStudent(data);
 }
@@ -323,7 +496,7 @@ export async function registerStudentFace(id, image) {
   return requestData(apiClient, {
     method: "post",
     url: `/students/${id}/face`,
-    data: { image }
+    data: { image },
   });
 }
 
@@ -334,23 +507,46 @@ export async function extractFaceFeature(image, studentId = "preview") {
     data: {
       image,
       student_id: studentId,
-      image_type: "base64"
-    }
+      image_type: "base64",
+    },
   });
 }
 
 export function fetchSystemHealth() {
-  return getWithMock(apiClient, "/system/health", {}, mockHealth, normalizeHealth);
+  return getWithMock(
+    apiClient,
+    "/system/health",
+    {},
+    mockHealth,
+    normalizeHealth,
+  );
 }
 
 export function fetchAnalysisEvents(params = {}) {
-  return getWithMock(aiClient, "/analysis/events", params, { items: [] }, (payload) => asArray(payload).map(normalizeAiEvent));
+  return getWithMock(
+    aiClient,
+    "/analysis/events",
+    params,
+    { items: [] },
+    (payload) => asArray(payload).map(normalizeAiEvent),
+  );
 }
 
 export function fetchAnalysisSummary(streamId) {
-  return getWithMock(aiClient, `/analysis/summary/${streamId}`, {}, mockSummary);
+  return getWithMock(
+    aiClient,
+    `/analysis/summary/${streamId}`,
+    {},
+    mockSummary,
+  );
 }
 
 export function fetchModelStatus() {
-  return getWithMock(aiClient, "/model/status", {}, { service_status: "unknown", models: [], streams: [] }, normalizeModelStatus);
+  return getWithMock(
+    aiClient,
+    "/model/status",
+    {},
+    { service_status: "unknown", models: [], streams: [] },
+    normalizeModelStatus,
+  );
 }

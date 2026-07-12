@@ -33,10 +33,18 @@ import {
   getVideoFeedUrl,
   login,
   logout,
+  register,
   registerStudentFace,
-  updateAlertStatus
+  updateAlertStatus,
 } from "./services/smartClassApi";
-import { clearAuthSession, getStoredToken, getStoredUser, isMockEnabled, joinResourceUrl, storeAuthSession } from "./services/http";
+import {
+  clearAuthSession,
+  getStoredToken,
+  getStoredUser,
+  isMockEnabled,
+  joinResourceUrl,
+  storeAuthSession,
+} from "./services/http";
 import lineDogGif from "./assets/line-dog.gif";
 
 const activePage = ref("monitor");
@@ -55,12 +63,9 @@ const authForm = ref({
   remember: true,
 });
 const registerForm = ref({
-  phone: "",
-  name: "",
-  role: "teacher",
+  username: "",
   password: "",
-  confirmPassword: "",
-  remark: "",
+  nickname: "",
 });
 const personDialogVisible = ref(false);
 const streamDialogVisible = ref(false);
@@ -78,7 +83,7 @@ const newPersonFaceValidationMessage = ref("");
 const newPersonFaceValidationLoading = ref(false);
 const alertProcessForm = ref({
   status: "handled",
-  remark: ""
+  remark: "",
 });
 const personForm = ref({
   student_no: "",
@@ -133,9 +138,14 @@ const activeAlertStatus = ref("全部");
 // ── 钉钉 & AI 日报设置（存 localStorage）─────────────────
 const SETTINGS_KEY = "smart_class_alert_settings";
 const loadSettings = () => {
-  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; }
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
+  } catch {
+    return {};
+  }
 };
-const saveSettings = (s) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+const saveSettings = (s) =>
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 const saved = loadSettings();
 const alertSettings = ref({
   dingtalkEnabled: saved.dingtalkEnabled ?? true,
@@ -158,15 +168,32 @@ const showContactModal = ref(false);
 const newContact = ref({ name: "", mobile: "" });
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
-  if (!name.trim()) { alert("请输入姓名"); return; }
-  if (!/^1\d{10}$/.test(mobile.trim())) { alert("请输入有效的 11 位手机号"); return; }
-  if (alertSettings.value.contacts.some(c => c.name === name.trim())) { alert("已存在"); return; }
-  alertSettings.value.contacts.push({ name: name.trim(), mobile: mobile.trim() });
+  if (!name.trim()) {
+    alert("请输入姓名");
+    return;
+  }
+  if (!/^1\d{10}$/.test(mobile.trim())) {
+    alert("请输入有效的 11 位手机号");
+    return;
+  }
+  if (alertSettings.value.contacts.some((c) => c.name === name.trim())) {
+    alert("已存在");
+    return;
+  }
+  alertSettings.value.contacts.push({
+    name: name.trim(),
+    mobile: mobile.trim(),
+  });
   newContact.value = { name: "", mobile: "" };
 };
 const removeContact = (name) => {
-  if (name === "项重善" || name === "章志超") { alert("默认负责人不能删除"); return; }
-  alertSettings.value.contacts = alertSettings.value.contacts.filter(c => c.name !== name);
+  if (name === "项重善" || name === "章志超") {
+    alert("默认负责人不能删除");
+    return;
+  }
+  alertSettings.value.contacts = alertSettings.value.contacts.filter(
+    (c) => c.name !== name,
+  );
 };
 
 // 日报
@@ -174,7 +201,7 @@ const showReportModal = ref(false);
 const generateAiReport = async () => {
   alertSettings.value.generating = true;
   try {
-    const alertsData = displayAlerts.value.slice(0, 50).map(a => ({
+    const alertsData = displayAlerts.value.slice(0, 50).map((a) => ({
       alertType: a.alert_type || a.type || "未知",
       level: a.level || "info",
       streamId: a.stream_id || a.location || "",
@@ -182,14 +209,15 @@ const generateAiReport = async () => {
     let report;
     try {
       const resp = await fetch("http://127.0.0.1:8080/report/generate", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(alertsData),
       });
       if (resp.ok) report = await resp.json();
     } catch {}
     if (!report) {
       report = {
-        date: new Date().toISOString().slice(0,10),
+        date: new Date().toISOString().slice(0, 10),
         time: new Date().toLocaleString("zh-CN"),
         summary: "日报生成失败，请检查后端服务",
         alertsCount: 0,
@@ -313,20 +341,26 @@ const alertLevelOptions = [
   { label: "高", value: "high" },
   { label: "警告", value: "warning" },
   { label: "中", value: "medium" },
-  { label: "低", value: "low" }
+  { label: "低", value: "low" },
 ];
 
 const alertTypeOptions = computed(() => {
   const seen = new Map();
   displayAlerts.value.forEach((item) => {
     const value = item.alert_type || item.event_type || "unknown";
-    if (!seen.has(value)) seen.set(value, item.alert_name || alertTypeText(value));
+    if (!seen.has(value))
+      seen.set(value, item.alert_name || alertTypeText(value));
   });
-  return [{ label: "全部类型", value: "全部" }, ...Array.from(seen, ([value, label]) => ({ label, value }))];
+  return [
+    { label: "全部类型", value: "全部" },
+    ...Array.from(seen, ([value, label]) => ({ label, value })),
+  ];
 });
 
 const activeStreamZones = computed(() =>
-  zones.value.filter((item) => !activeStreamId.value || item.stream_id === activeStreamId.value),
+  zones.value.filter(
+    (item) => !activeStreamId.value || item.stream_id === activeStreamId.value,
+  ),
 );
 
 const zoneRows = computed(() => {
@@ -339,7 +373,7 @@ const zoneRows = computed(() => {
       stream_id: activeStreamId.value,
       coordinates: forbiddenZoneCoordinates.value,
       enabled: true,
-      source: "实时画面绘制"
+      source: "实时画面绘制",
     });
   }
   return rows;
@@ -366,25 +400,40 @@ const enabledRuleCount = computed(() => {
       (hasConfirmedForbiddenZone.value || !isPhoneRelated(item)),
   ).length;
 });
-const registeredStudentCount = computed(() => students.value.filter((item) => item.face_registered).length);
-const strangerCount = computed(() => students.value.filter((item) => !item.face_registered).length);
+const registeredStudentCount = computed(
+  () => students.value.filter((item) => item.face_registered).length,
+);
+const strangerCount = computed(
+  () => students.value.filter((item) => !item.face_registered).length,
+);
 const modelStreamStatusRecords = computed(() => {
-  return Array.isArray(modelStatus.value?.streams) ? modelStatus.value.streams : [];
+  return Array.isArray(modelStatus.value?.streams)
+    ? modelStatus.value.streams
+    : [];
 });
 const allStreamStatusRecords = computed(() => {
   const records = [...streams.value];
   modelStreamStatusRecords.value.forEach((item) => {
     const streamId = item.stream_id || item.streamId;
-    if (!streamId || records.some((stream) => stream.stream_id === streamId)) return;
+    if (!streamId || records.some((stream) => stream.stream_id === streamId))
+      return;
     records.push({
       stream_id: streamId,
       stream_name: item.stream_name || item.name || streamId,
-      status: item.status || item.stream_status || item.online_status || (item.online ? "online" : "unknown")
+      status:
+        item.status ||
+        item.stream_status ||
+        item.online_status ||
+        (item.online ? "online" : "unknown"),
     });
   });
   return records;
 });
-const onlineStreamCount = computed(() => allStreamStatusRecords.value.filter((item) => isOnlineStatus(item.status)).length);
+const onlineStreamCount = computed(
+  () =>
+    allStreamStatusRecords.value.filter((item) => isOnlineStatus(item.status))
+      .length,
+);
 
 const healthItems = computed(() => [
   { label: "RTMP 流媒体", value: health.value.rtmp || "unknown" },
@@ -411,9 +460,21 @@ const metricCards = computed(() => [
 const filteredAlerts = computed(() => {
   const keyword = alertKeyword.value.trim().toLowerCase();
   return displayAlerts.value.filter((item) => {
-    if (activeAlertStatus.value !== "全部" && item.status !== activeAlertStatus.value) return false;
-    if (activeAlertLevel.value !== "全部" && item.level !== activeAlertLevel.value) return false;
-    if (activeAlertType.value !== "全部" && item.alert_type !== activeAlertType.value) return false;
+    if (
+      activeAlertStatus.value !== "全部" &&
+      item.status !== activeAlertStatus.value
+    )
+      return false;
+    if (
+      activeAlertLevel.value !== "全部" &&
+      item.level !== activeAlertLevel.value
+    )
+      return false;
+    if (
+      activeAlertType.value !== "全部" &&
+      item.alert_type !== activeAlertType.value
+    )
+      return false;
     if (!keyword) return true;
     return [
       item.alert_type,
@@ -424,7 +485,7 @@ const filteredAlerts = computed(() => {
       item.remark,
       item.event_id,
       statusText(item.status),
-      levelText(item.level)
+      levelText(item.level),
     ]
       .filter(Boolean)
       .join(" ")
@@ -440,16 +501,18 @@ const highPriorityAlerts = computed(() => {
 });
 
 const activeRiskEvents = computed(() => {
-  return uniqueEvents([...alerts.value, ...analysisEvents.value])
-    .filter((item) => {
-      if (!isPhoneRelated(item)) return true;
-      return isPhoneItemInForbiddenZone(item);
-    })
-    .map((item) => ({
-      ...item,
-      risk_type: classifyRiskType(item),
-      risk_score: calculateEventRiskScore(item),
-    }))
+  return deduplicateCrossSourceEvents(
+    uniqueEvents([...alerts.value, ...analysisEvents.value])
+      .filter((item) => {
+        if (!isPhoneRelated(item)) return true;
+        return isPhoneItemInForbiddenZone(item);
+      })
+      .map((item) => ({
+        ...item,
+        risk_type: classifyRiskType(item),
+        risk_score: calculateEventRiskScore(item),
+      })),
+  )
     .filter((item) => item.risk_score > 0)
     .sort((a, b) => b.risk_score - a.risk_score)
     .slice(0, 8);
@@ -556,61 +619,32 @@ const peoplePageCards = computed(() => [
 ]);
 
 const systemPageCards = computed(() => [
-  { label: "在线视频源", value: `${onlineStreamCount.value}/${allStreamStatusRecords.value.length || 0}`, tone: "ok" },
-  { label: "模型版本", value: modelStatus.value.version || modelStatus.value.model_name || "--", tone: "brand" },
-  { label: "推理耗时", value: modelStatus.value.inference_ms ? `${modelStatus.value.inference_ms} ms` : "--", tone: "warn" },
-  { label: "服务状态", value: healthItems.value.every((item) => item.value === "online") ? "正常" : "需关注", tone: "ok" }
+  {
+    label: "在线视频源",
+    value: `${onlineStreamCount.value}/${allStreamStatusRecords.value.length || 0}`,
+    tone: "ok",
+  },
+  {
+    label: "模型版本",
+    value: modelStatus.value.version || modelStatus.value.model_name || "--",
+    tone: "brand",
+  },
+  {
+    label: "推理耗时",
+    value: modelStatus.value.inference_ms
+      ? `${modelStatus.value.inference_ms} ms`
+      : "--",
+    tone: "warn",
+  },
+  {
+    label: "服务状态",
+    value: healthItems.value.every((item) => item.value === "online")
+      ? "正常"
+      : "需关注",
+    tone: "ok",
+  },
 ]);
 
-const activeModules = [
-  {
-    title: "实时视频与 AI 标注",
-    text: "通过 Flask MJPEG 流展示实时画面，标注来自 AI 事件坐标。",
-  },
-  {
-    title: "异常行为与安全告警",
-    text: "告警列表来自 SpringBoot /alerts，状态按接口枚举展示。",
-  },
-  {
-    title: "区域与规则配置",
-    text: "区域坐标按 /zones 契约输出，规则来自 /rules。",
-  },
-  {
-    title: "告警追踪与处置",
-    text: "截图和录像使用后端返回的相对路径拼接 Nginx 地址。",
-  },
-];
-
-const handlingGuides = [
-  { title: "先看等级", text: "critical 和 high 优先进入人工确认。" },
-  { title: "再看证据", text: "截图、录像片段和事件坐标用于复核目标与区域。" },
-  { title: "最后闭环", text: "处理、误报或忽略后保留完整追溯记录。" },
-];
-
-const ruleTemplates = [
-  { title: "课堂禁用手机", text: "先确认动态禁用区，再按阈值触发。" },
-  { title: "入口陌生人", text: "绑定入口区域，识别失败后进入身份核验。" },
-  { title: "危险源识别", text: "高优先级规则应缩短复核窗口并保留证据。" },
-];
-
-const registrationSteps = computed(() => [
-  { title: "档案同步", value: `${students.value.length} 条人员记录` },
-  { title: "人脸采集", value: `${registeredStudentCount.value} 人完成` },
-  { title: "异常核验", value: `${strangerCount.value} 条待确认` },
-]);
-
-const dependencySteps = [
-  { title: "摄像头推流", text: "RTMP 写入云端 Nginx 流媒体服务。" },
-  { title: "AI 推理", text: "Flask 拉流并输出视频流、事件和摘要。" },
-  { title: "后端入库", text: "SpringBoot 管理告警、规则、人员和视频源数据。" },
-  { title: "前端展示", text: "Vue 只展示接口返回结果，不伪造业务状态。" },
-];
-
-const operationLogs = [
-  "自动刷新告警列表，失败时显示接口错误。",
-  "视频流不可达时展示空状态，不替换成业务结果。",
-  "只有显式开启 mock 模式时才使用本地演示数据。",
-];
 const activeForbiddenRect = computed(() => {
   if (
     isDrawingForbiddenZone.value &&
@@ -729,7 +763,9 @@ function zoneTypeText(type) {
       seat: "座位区",
       phone_forbidden: "手机禁用区",
       roi: "识别区域",
-    }[type] || type || "未分类"
+    }[type] ||
+    type ||
+    "未分类"
   );
 }
 
@@ -748,52 +784,56 @@ function zoneCoordinateText(zone = {}) {
 }
 
 function evidenceSummary(row = {}) {
-  const snapshot = Boolean(row.snapshot_url);
-  const record = Boolean(row.record_url);
-  if (snapshot && record) return "截图与录像片段已关联";
-  if (snapshot) return "已保存告警截图";
-  if (record) return "已关联录像路径";
+  if (row.snapshot_url) return "已保存告警截图";
   return "未生成证据文件";
 }
 
 function statusType(status) {
-  return {
-    unhandled: "danger",
-    processing: "warning",
-    handled: "success",
-    false_alarm: "info",
-    ignored: "info",
-    online: "success",
-    enabled: "success",
-    running: "success",
-    active: "success",
-    connected: "success",
-    offline: "danger",
-    disabled: "info",
-    unknown: "info"
-  }[status] || "info";
+  return (
+    {
+      unhandled: "danger",
+      processing: "warning",
+      handled: "success",
+      false_alarm: "info",
+      ignored: "info",
+      online: "success",
+      enabled: "success",
+      running: "success",
+      active: "success",
+      connected: "success",
+      offline: "danger",
+      disabled: "info",
+      unknown: "info",
+    }[status] || "info"
+  );
 }
 
 function isOnlineStatus(status) {
-  return ["online", "enabled", "running", "active", "connected", true].includes(status);
+  return ["online", "enabled", "running", "active", "connected", true].includes(
+    status,
+  );
 }
 
 function statusText(status) {
-  return {
-    unhandled: "未处理",
-    processing: "处理中",
-    handled: "已处理",
-    false_alarm: "误报",
-    ignored: "已忽略",
-    online: "在线",
-    running: "运行中",
-    active: "活跃",
-    connected: "已连接",
-    offline: "离线",
-    enabled: "已启用",
-    disabled: "已停用",
-    unknown: "未知"
-  }[status] || status || "--";
+  return (
+    {
+      unhandled: "未处理",
+      processing: "处理中",
+      handled: "已处理",
+      false_alarm: "误报",
+      ignored: "已忽略",
+      online: "在线",
+      running: "运行中",
+      active: "活跃",
+      connected: "已连接",
+      offline: "离线",
+      enabled: "已启用",
+      disabled: "已停用",
+      unknown: "未知",
+    }[status] ||
+    status ||
+    "--"
+  );
 }
 
 function alertTypeText(type) {
@@ -888,14 +928,16 @@ function parseMaybeJson(value) {
 }
 
 function eventIdentity(item = {}) {
-  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || {});
+  const target = parseMaybeJson(
+    item.target || item.target_info || item.targetInfo || {},
+  );
   const bbox = target?.bbox || item.bbox || item.box || "";
   return [
     item.event_id || item.event_uid || item.id || "",
     item.alert_type || item.event_type || "",
     item.stream_id || "",
     item.occurred_at || item.time || "",
-    Array.isArray(bbox) ? bbox.join(",") : JSON.stringify(bbox)
+    Array.isArray(bbox) ? bbox.join(",") : JSON.stringify(bbox),
   ].join("|");
 }
 
@@ -907,6 +949,43 @@ function uniqueEvents(items = []) {
     seen.add(key);
     return true;
   });
+}
+
+function crossSourceEventKey(item = {}) {
+  const type = item.alert_type || item.event_type || "";
+  const streamId = item.stream_id || "";
+  const occurredAt = item.occurred_at || item.time || "";
+  const timeFloor = occurredAt
+    ? new Date(occurredAt).getTime() - (new Date(occurredAt).getTime() % 5000)
+    : "";
+  return `${type}|${streamId}|${timeFloor}`;
+}
+
+function deduplicateCrossSourceEvents(events = []) {
+  const groups = new Map();
+  for (const event of events) {
+    const key = crossSourceEventKey(event);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(event);
+  }
+  const result = [];
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      result.push(group[0]);
+      continue;
+    }
+    const withScore = group.filter(
+      (item) => (item.risk_score ?? calculateEventRiskScore(item)) > 0,
+    );
+    if (withScore.length > 0) {
+      withScore.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+      result.push(withScore[0]);
+    } else {
+      group.sort((a, b) => (b.confidence ?? 0) - (a.confidence ?? 0));
+      result.push(group[0]);
+    }
+  }
+  return result;
 }
 
 function getRiskText(item = {}) {
@@ -1087,9 +1166,25 @@ function rectFromBbox(bbox = [], source = {}) {
     };
   }
 
-  const target = parseMaybeJson(source.target || source.target_info || source.targetInfo || {});
-  const frameWidth = Number(source.frame_width || source.width || source.video_width || target?.frame_width || target?.frameWidth || 640);
-  const frameHeight = Number(source.frame_height || source.height || source.video_height || target?.frame_height || target?.frameHeight || 360);
+  const target = parseMaybeJson(
+    source.target || source.target_info || source.targetInfo || {},
+  );
+  const frameWidth = Number(
+    source.frame_width ||
+      source.width ||
+      source.video_width ||
+      target?.frame_width ||
+      target?.frameWidth ||
+      640,
+  );
+  const frameHeight = Number(
+    source.frame_height ||
+      source.height ||
+      source.video_height ||
+      target?.frame_height ||
+      target?.frameHeight ||
+      360,
+  );
 
   return {
     x: clampUnit(Math.min(x1, x2) / frameWidth),
@@ -1100,7 +1195,9 @@ function rectFromBbox(bbox = [], source = {}) {
 }
 
 function normalizeDetectionRect(item = {}) {
-  const target = parseMaybeJson(item.target || item.target_info || item.targetInfo || {});
+  const target = parseMaybeJson(
+    item.target || item.target_info || item.targetInfo || {},
+  );
   const candidate =
     item.bbox ||
     target.bbox ||
@@ -1116,7 +1213,8 @@ function normalizeDetectionRect(item = {}) {
   const parsedCandidate = parseMaybeJson(candidate);
 
   if (Array.isArray(parsedCandidate)) {
-    return parsedCandidate.length === 4 && parsedCandidate.every((value) => Number.isFinite(Number(value)))
+    return parsedCandidate.length === 4 &&
+      parsedCandidate.every((value) => Number.isFinite(Number(value)))
       ? rectFromBbox(parsedCandidate, { ...item, target })
       : rectFromCoordinates(parsedCandidate);
   }
@@ -1312,26 +1410,31 @@ async function submitDeveloperLogin() {
   await enterAuthenticatedApp(user, "dev-local-token", false);
 }
 
-function submitRegisterRequest() {
-  const phonePattern = /^1[3-9]\d{9}$/;
-  if (!phonePattern.test(registerForm.value.phone)) {
-    setAuthNotice("请输入有效的 11 位手机号。", "warning");
+async function submitRegister() {
+  if (!registerForm.value.username || registerForm.value.username.length < 2) {
+    setAuthNotice("用户名至少 2 个字符。", "warning");
     return;
   }
-  if (!registerForm.value.name || !registerForm.value.password) {
-    setAuthNotice("请填写姓名和密码。", "warning");
+  if (!registerForm.value.password || registerForm.value.password.length < 6) {
+    setAuthNotice("密码至少 6 个字符。", "warning");
     return;
   }
-  if (registerForm.value.password !== registerForm.value.confirmPassword) {
-    setAuthNotice("两次输入的密码不一致。", "warning");
-    return;
+  authLoading.value = true;
+  setAuthNotice("");
+  try {
+    const payload = await register(registerForm.value);
+    const token = payload?.token || payload?.access_token || payload?.jwt || "";
+    const user = normalizeUser(payload, registerForm.value.username);
+    if (!token) throw new Error("注册响应缺少 token");
+    await enterAuthenticatedApp(user, token, true);
+  } catch (error) {
+    setAuthNotice(
+      error?.message || "注册请求失败，请确认后端服务可用。",
+      "error",
+    );
+  } finally {
+    authLoading.value = false;
   }
-  setAuthNotice(
-    "手机号注册接口尚未在后端文档中确认，当前仅保留前端申请流程。请联系管理员创建账号。",
-    "info",
-  );
-  authMode.value = "login";
-  authForm.value.username = registerForm.value.phone;
 }
 
 async function handleLogout() {
@@ -1502,12 +1605,15 @@ async function savePerson() {
     class_name: form.class_name.trim() || "未分组",
     status: "active",
     face_registered: false,
-    last_seen: "--"
+    last_seen: "--",
   };
   let savedPerson = localPerson;
   try {
     const created = await createStudent(localPerson);
-    savedPerson = { ...created, face_registered: Boolean(created.face_registered) };
+    savedPerson = {
+      ...created,
+      face_registered: Boolean(created.face_registered),
+    };
   } catch (error) {
     if (!isMockEnabled()) {
       ElMessage.error(error?.message || "新增人员接口请求失败。");
@@ -1521,14 +1627,19 @@ async function savePerson() {
       ElMessage.warning("人员已新增，但后端未返回人员 ID，暂时无法注册人脸。");
     } else {
       try {
-        await registerStudentFace(savedPerson.id, newPersonFaceImageBase64.value);
+        await registerStudentFace(
+          savedPerson.id,
+          newPersonFaceImageBase64.value,
+        );
         savedPerson = { ...savedPerson, face_registered: true };
         ElMessage.success("人员信息和人脸图片已提交。");
       } catch (error) {
         if (!isMockEnabled()) {
           students.value = [savedPerson, ...students.value];
           personDialogVisible.value = false;
-          ElMessage.error(error?.message || "人员已新增，但人脸注册接口请求失败。");
+          ElMessage.error(
+            error?.message || "人员已新增，但人脸注册接口请求失败。",
+          );
           return;
         }
         savedPerson = { ...savedPerson, face_registered: true };
@@ -1555,7 +1666,11 @@ function openStreamDialog() {
 
 async function saveStream() {
   const form = streamForm.value;
-  if (!form.stream_id.trim() || !form.stream_name.trim() || !form.rtmp_url.trim()) {
+  if (
+    !form.stream_id.trim() ||
+    !form.stream_name.trim() ||
+    !form.rtmp_url.trim()
+  ) {
     ElMessage.warning("请填写视频源编号、名称和 RTMP 地址。");
     return;
   }
@@ -1611,7 +1726,8 @@ function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("图片解析失败，请选择常见格式的人脸照片。"));
+    image.onerror = () =>
+      reject(new Error("图片解析失败，请选择常见格式的人脸照片。"));
     image.src = dataUrl;
   });
 }
@@ -1736,7 +1852,12 @@ async function handleFaceFileChange(event) {
   faceValidationMessage.value = "正在检测图片清晰度和人脸特征...";
   faceValidationLoading.value = true;
   try {
-    const validated = await validateFaceFile(file, selectedStudent.value?.student_no || selectedStudent.value?.id || "preview");
+    const validated = await validateFaceFile(
+      file,
+      selectedStudent.value?.student_no ||
+        selectedStudent.value?.id ||
+        "preview",
+    );
     faceImageBase64.value = validated.base64;
     faceImageName.value = validated.name;
     faceValidationMessage.value = "已识别到清晰人脸，可提交注册。";
@@ -1758,13 +1879,18 @@ async function handleNewPersonFaceFileChange(event) {
   newPersonFaceValidationMessage.value = "正在检测图片清晰度和人脸特征...";
   newPersonFaceValidationLoading.value = true;
   try {
-    const validated = await validateFaceFile(file, personForm.value.student_no || "preview");
+    const validated = await validateFaceFile(
+      file,
+      personForm.value.student_no || "preview",
+    );
     newPersonFaceImageBase64.value = validated.base64;
     newPersonFaceImageName.value = validated.name;
-    newPersonFaceValidationMessage.value = "已识别到清晰人脸，保存人员后会自动注册。";
+    newPersonFaceValidationMessage.value =
+      "已识别到清晰人脸，保存人员后会自动注册。";
     ElMessage.success("人脸图片校验通过。");
   } catch (error) {
-    newPersonFaceValidationMessage.value = error?.message || "人脸图片校验失败。";
+    newPersonFaceValidationMessage.value =
+      error?.message || "人脸图片校验失败。";
     ElMessage.error(newPersonFaceValidationMessage.value);
   } finally {
     newPersonFaceValidationLoading.value = false;
@@ -1784,7 +1910,9 @@ async function saveFaceRegistration() {
   try {
     await registerStudentFace(selectedStudent.value.id, faceImageBase64.value);
     students.value = students.value.map((item) =>
-      item.id === selectedStudent.value.id ? { ...item, face_registered: true } : item
+      item.id === selectedStudent.value.id
+        ? { ...item, face_registered: true }
+        : item,
     );
     faceDialogVisible.value = false;
     ElMessage.success("人脸注册成功。");
@@ -1794,7 +1922,9 @@ async function saveFaceRegistration() {
       return;
     }
     students.value = students.value.map((item) =>
-      item.id === selectedStudent.value.id ? { ...item, face_registered: true } : item
+      item.id === selectedStudent.value.id
+        ? { ...item, face_registered: true }
+        : item,
     );
     faceDialogVisible.value = false;
     ElMessage.warning("接口不可用，已在开发模式下标记为已注册。");
@@ -1805,7 +1935,7 @@ function openAlertProcessDialog(row, status = "handled") {
   selectedAlert.value = row;
   alertProcessForm.value = {
     status,
-    remark: row.remark || ""
+    remark: row.remark || "",
   };
   alertProcessDialogVisible.value = true;
 }
@@ -1819,8 +1949,13 @@ async function saveAlertProcess() {
     await updateAlertStatus(selectedAlert.value.id, alertProcessForm.value);
     alerts.value = alerts.value.map((item) =>
       item.id === selectedAlert.value.id
-        ? { ...item, status: alertProcessForm.value.status, remark: alertProcessForm.value.remark, handled_at: new Date().toISOString() }
-        : item
+        ? {
+            ...item,
+            status: alertProcessForm.value.status,
+            remark: alertProcessForm.value.remark,
+            handled_at: new Date().toISOString(),
+          }
+        : item,
     );
     alertProcessDialogVisible.value = false;
     ElMessage.success("告警状态已更新。");
@@ -1831,8 +1966,13 @@ async function saveAlertProcess() {
     }
     alerts.value = alerts.value.map((item) =>
       item.id === selectedAlert.value.id
-        ? { ...item, status: alertProcessForm.value.status, remark: alertProcessForm.value.remark, handled_at: new Date().toISOString() }
-        : item
+        ? {
+            ...item,
+            status: alertProcessForm.value.status,
+            remark: alertProcessForm.value.remark,
+            handled_at: new Date().toISOString(),
+          }
+        : item,
     );
     alertProcessDialogVisible.value = false;
     ElMessage.warning("接口不可用，已在开发模式下临时更新状态。");
@@ -1923,17 +2063,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           type="button"
           @click="authMode = 'register'"
         >
-          手机号注册
+          用户注册
         </button>
       </div>
 
       <div class="auth-title">
-        <h2>{{ authMode === "login" ? "登录系统" : "手机号注册预留" }}</h2>
+        <h2>{{ authMode === "login" ? "登录系统" : "用户注册" }}</h2>
         <p>
           {{
             authMode === "login"
               ? "使用后端已确定的 /auth/login 接口进入系统。"
-              : "后端文档尚未确认手机号注册接口，当前仅保留前端申请流程。"
+              : "注册成功后自动登录，默认角色为教师。"
           }}
         </p>
       </div>
@@ -1993,60 +2133,40 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         v-else
         class="auth-form"
         label-position="top"
-        @submit.prevent="submitRegisterRequest"
+        @submit.prevent="submitRegister"
       >
-        <el-form-item label="手机号">
+        <el-form-item label="用户名">
           <el-input
-            v-model="registerForm.phone"
-            placeholder="请输入 11 位手机号"
-          />
-        </el-form-item>
-        <el-form-item label="姓名">
-          <el-input v-model="registerForm.name" placeholder="请输入真实姓名" />
-        </el-form-item>
-        <el-form-item label="申请角色">
-          <el-segmented
-            v-model="registerForm.role"
-            :options="[
-              { label: '教师', value: 'teacher' },
-              { label: '管理员', value: 'admin' },
-            ]"
+            v-model="registerForm.username"
+            placeholder="至少 2 个字符"
           />
         </el-form-item>
         <el-form-item label="密码">
           <el-input
             v-model="registerForm.password"
-            placeholder="设置密码"
+            placeholder="至少 6 个字符"
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认密码">
+        <el-form-item label="昵称（可选）">
           <el-input
-            v-model="registerForm.confirmPassword"
-            placeholder="再次输入密码"
-            show-password
-          />
-        </el-form-item>
-        <el-form-item label="申请说明">
-          <el-input
-            v-model="registerForm.remark"
-            type="textarea"
-            :rows="2"
-            placeholder="例如任课班级、管理范围或申请原因"
+            v-model="registerForm.nickname"
+            placeholder="显示名称，可不填"
           />
         </el-form-item>
         <el-button
           class="auth-submit"
           type="primary"
-          @click="submitRegisterRequest"
-          >提交注册申请</el-button
+          :loading="authLoading"
+          @click="submitRegister"
+          >注册并登录</el-button
         >
       </el-form>
 
       <div class="auth-contract">
         <b>接口契约</b>
         <span
-          >已确定：`POST /auth/login`、`GET
+          >已确定：`POST /auth/login`、`POST /auth/register`、`GET
           /auth/info`。开发者模式仅本地调试使用，不会创建真实后端会话。</span
         >
       </div>
@@ -2111,9 +2231,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
-          <el-button :icon="Setting" @click="activePage = 'rules'"
-            >规则配置</el-button
-          >
           <div class="user-chip" :title="userRoleName">
             <el-icon><User /></el-icon>
             <span>{{ userDisplayName }}</span>
@@ -2363,24 +2480,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </el-table-column>
               </el-table>
             </div>
-
-            <div class="panel">
-              <div class="panel-head compact">
-                <h2>前端呈现模块</h2>
-                <el-button
-                  size="small"
-                  :icon="User"
-                  @click="activePage = 'people'"
-                  >注册人脸</el-button
-                >
-              </div>
-              <div class="module-grid">
-                <article v-for="module in activeModules" :key="module.title">
-                  <b>{{ module.title }}</b>
-                  <span>{{ module.text }}</span>
-                </article>
-              </div>
-            </div>
           </section>
         </div>
 
@@ -2535,72 +2634,262 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
 
         <!-- 通知 & 日报 紧凑栏 -->
-        <div class="module-board" style="margin-bottom:6px">
-          <section class="panel span-12" style="padding:8px 20px;display:flex;gap:50px;align-items:center">
-            <label style="display:flex;align-items:center;gap:10px">
+        <div class="module-board" style="margin-bottom: 6px">
+          <section
+            class="panel span-12"
+            style="
+              padding: 8px 20px;
+              display: flex;
+              gap: 50px;
+              align-items: center;
+            "
+          >
+            <label style="display: flex; align-items: center; gap: 10px">
               <el-switch v-model="alertSettings.dingtalkEnabled" />
               <b>钉钉通知</b>
-              <span v-if="alertSettings.dingtalkEnabled" style="font-size:13px;color:#67c23a">● {{ alertSettings.responsible }}</span>
-              <el-button v-if="alertSettings.dingtalkEnabled" size="small" @click="showContactModal=true">管理联系人</el-button>
+              <span
+                v-if="alertSettings.dingtalkEnabled"
+                style="font-size: 13px; color: #67c23a"
+                >● {{ alertSettings.responsible }}</span
+              >
+              <el-button
+                v-if="alertSettings.dingtalkEnabled"
+                size="small"
+                @click="showContactModal = true"
+                >管理联系人</el-button
+              >
             </label>
-            <label style="display:flex;align-items:center;gap:10px">
+            <label style="display: flex; align-items: center; gap: 10px">
               <el-switch v-model="alertSettings.aiReportEnabled" />
               <b>AI日报</b>
-              <el-time-select v-if="alertSettings.aiReportEnabled" v-model="alertSettings.reportTime" start="00:00" end="23:59" step="00:30" size="small" style="width:100px"/>
-              <el-button v-if="alertSettings.aiReportEnabled" size="small" type="primary" :loading="alertSettings.generating" @click="generateAiReport">生成日报</el-button>
-              <el-button v-if="alertSettings.latestReport" size="small" @click="showReportModal=true">往期日报</el-button>
+              <el-time-select
+                v-if="alertSettings.aiReportEnabled"
+                v-model="alertSettings.reportTime"
+                start="00:00"
+                end="23:59"
+                step="00:30"
+                size="small"
+                style="width: 100px"
+              />
+              <el-button
+                v-if="alertSettings.aiReportEnabled"
+                size="small"
+                type="primary"
+                :loading="alertSettings.generating"
+                @click="generateAiReport"
+                >生成日报</el-button
+              >
+              <el-button
+                v-if="alertSettings.latestReport"
+                size="small"
+                @click="showReportModal = true"
+                >往期日报</el-button
+              >
             </label>
           </section>
         </div>
 
         <!-- 最新日报卡片 -->
-        <div v-if="alertSettings.latestReport" class="module-board" style="margin-bottom:6px">
-          <section class="panel span-12" style="padding:12px 20px;background:#f0f9ff;border-left:3px solid #409EFF">
-            <div style="display:flex;justify-content:space-between;align-items:center">
+        <div
+          v-if="alertSettings.latestReport"
+          class="module-board"
+          style="margin-bottom: 6px"
+        >
+          <section
+            class="panel span-12"
+            style="
+              padding: 12px 20px;
+              background: #f0f9ff;
+              border-left: 3px solid #409eff;
+            "
+          >
+            <div
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+              "
+            >
               <b>最新日报 — {{ alertSettings.latestReport.date }}</b>
-              <span style="font-size:12px;color:#909399">{{ alertSettings.latestReport.time }}</span>
+              <span style="font-size: 12px; color: #909399">{{
+                alertSettings.latestReport.time
+              }}</span>
             </div>
-            <p style="margin:6px 0 0;font-size:14px;line-height:1.7;white-space:pre-wrap">{{ alertSettings.latestReport.summary }}</p>
+            <p
+              style="
+                margin: 6px 0 0;
+                font-size: 14px;
+                line-height: 1.7;
+                white-space: pre-wrap;
+              "
+            >
+              {{ alertSettings.latestReport.summary }}
+            </p>
           </section>
         </div>
 
         <!-- 联系人弹窗 -->
-        <div v-if="showContactModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;justify-content:center;align-items:center" @click.self="showContactModal=false">
-          <div style="background:#fff;padding:28px;border-radius:10px;width:550px;max-height:75vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.12)">
-            <h2 style="margin:0 0 20px;font-size:18px">联系人管理</h2>
-            <div v-for="c in alertSettings.contacts" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0">
+        <div
+          v-if="showContactModal"
+          style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          "
+          @click.self="showContactModal = false"
+        >
+          <div
+            style="
+              background: #fff;
+              padding: 28px;
+              border-radius: 10px;
+              width: 550px;
+              max-height: 75vh;
+              overflow-y: auto;
+              box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            "
+          >
+            <h2 style="margin: 0 0 20px; font-size: 18px">联系人管理</h2>
+            <div
+              v-for="c in alertSettings.contacts"
+              style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid #f0f0f0;
+              "
+            >
               <div>
-                <span v-if="c.name===alertSettings.responsible" style="color:#67c23a;margin-right:6px">●</span>
+                <span
+                  v-if="c.name === alertSettings.responsible"
+                  style="color: #67c23a; margin-right: 6px"
+                  >●</span
+                >
                 <b>{{ c.name }}</b>
-                <span style="color:#909399;font-size:13px;margin-left:8px">{{ c.mobile }}</span>
+                <span
+                  style="color: #909399; font-size: 13px; margin-left: 8px"
+                  >{{ c.mobile }}</span
+                >
               </div>
-              <div style="display:flex;gap:8px">
-                <el-button v-if="c.name!==alertSettings.responsible" size="small" type="primary" plain @click="alertSettings.responsible=c.name">设为负责人</el-button>
-                <el-button v-if="c.name!=='项重善'&&c.name!=='章志超'" size="small" type="danger" plain @click="removeContact(c.name)">删除</el-button>
+              <div style="display: flex; gap: 8px">
+                <el-button
+                  v-if="c.name !== alertSettings.responsible"
+                  size="small"
+                  type="primary"
+                  plain
+                  @click="alertSettings.responsible = c.name"
+                  >设为负责人</el-button
+                >
+                <el-button
+                  v-if="c.name !== '项重善' && c.name !== '章志超'"
+                  size="small"
+                  type="danger"
+                  plain
+                  @click="removeContact(c.name)"
+                  >删除</el-button
+                >
               </div>
             </div>
-            <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
-              <input v-model="newContact.name" placeholder="姓名" style="flex:1;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px"/>
-              <input v-model="newContact.mobile" placeholder="手机号" style="flex:2;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px"/>
-              <el-button type="primary" size="default" @click="doAddContact">添加</el-button>
+            <div
+              style="
+                display: flex;
+                gap: 10px;
+                margin-top: 16px;
+                align-items: center;
+              "
+            >
+              <input
+                v-model="newContact.name"
+                placeholder="姓名"
+                style="
+                  flex: 1;
+                  padding: 8px 12px;
+                  border: 1px solid #dcdfe6;
+                  border-radius: 6px;
+                  font-size: 14px;
+                "
+              />
+              <input
+                v-model="newContact.mobile"
+                placeholder="手机号"
+                style="
+                  flex: 2;
+                  padding: 8px 12px;
+                  border: 1px solid #dcdfe6;
+                  border-radius: 6px;
+                  font-size: 14px;
+                "
+              />
+              <el-button type="primary" size="default" @click="doAddContact"
+                >添加</el-button
+              >
             </div>
-            <div style="text-align:right;margin-top:20px">
-              <el-button @click="showContactModal=false">关闭</el-button>
+            <div style="text-align: right; margin-top: 20px">
+              <el-button @click="showContactModal = false">关闭</el-button>
             </div>
           </div>
         </div>
 
         <!-- 往期日报弹窗 -->
-        <div v-if="showReportModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;justify-content:center;align-items:center" @click.self="showReportModal=false">
-          <div style="background:#fff;padding:28px;border-radius:10px;width:650px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.12)">
-            <h2 style="margin:0 0 20px;font-size:18px">往期日报（{{ alertSettings.reportHistory.length }} 条）</h2>
-            <div v-if="alertSettings.reportHistory.length===0" style="color:#909399;text-align:center;padding:40px">暂无日报</div>
-            <div v-for="(r,i) in alertSettings.reportHistory" style="padding:14px 0;border-bottom:1px solid #f0f0f0">
-              <div style="font-size:12px;color:#909399;margin-bottom:4px">{{ r.date }} {{ r.time?.slice(11,16)||'' }}</div>
-              <div style="font-size:14px;line-height:1.7;white-space:pre-wrap">{{ r.summary }}</div>
+        <div
+          v-if="showReportModal"
+          style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+          "
+          @click.self="showReportModal = false"
+        >
+          <div
+            style="
+              background: #fff;
+              padding: 28px;
+              border-radius: 10px;
+              width: 650px;
+              max-height: 80vh;
+              overflow-y: auto;
+              box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            "
+          >
+            <h2 style="margin: 0 0 20px; font-size: 18px">
+              往期日报（{{ alertSettings.reportHistory.length }} 条）
+            </h2>
+            <div
+              v-if="alertSettings.reportHistory.length === 0"
+              style="color: #909399; text-align: center; padding: 40px"
+            >
+              暂无日报
             </div>
-            <div style="text-align:right;margin-top:20px">
-              <el-button @click="showReportModal=false">关闭</el-button>
+            <div
+              v-for="(r, i) in alertSettings.reportHistory"
+              style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
+            >
+              <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
+                {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
+              </div>
+              <div
+                style="font-size: 14px; line-height: 1.7; white-space: pre-wrap"
+              >
+                {{ r.summary }}
+              </div>
+            </div>
+            <div style="text-align: right; margin-top: 20px">
+              <el-button @click="showReportModal = false">关闭</el-button>
             </div>
           </div>
         </div>
@@ -2616,15 +2905,48 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >
               </div>
               <div class="alert-filter-bar">
-                <el-input v-model="alertKeyword" class="search-box" :prefix-icon="Search" clearable placeholder="搜索类型、说明或视频源" />
-                <el-select v-model="activeAlertType" class="filter-select" placeholder="告警类型">
-                  <el-option v-for="item in alertTypeOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-input
+                  v-model="alertKeyword"
+                  class="search-box"
+                  :prefix-icon="Search"
+                  clearable
+                  placeholder="搜索类型、说明或视频源"
+                />
+                <el-select
+                  v-model="activeAlertType"
+                  class="filter-select"
+                  placeholder="告警类型"
+                >
+                  <el-option
+                    v-for="item in alertTypeOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
-                <el-select v-model="activeAlertLevel" class="filter-select" placeholder="告警等级">
-                  <el-option v-for="item in alertLevelOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-select
+                  v-model="activeAlertLevel"
+                  class="filter-select"
+                  placeholder="告警等级"
+                >
+                  <el-option
+                    v-for="item in alertLevelOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
-                <el-select v-model="activeAlertStatus" class="filter-select" placeholder="处理状态">
-                  <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
+                <el-select
+                  v-model="activeAlertStatus"
+                  class="filter-select"
+                  placeholder="处理状态"
+                >
+                  <el-option
+                    v-for="item in statusOptions"
+                    :key="item.value"
+                    :label="item.label"
+                    :value="item.value"
+                  />
                 </el-select>
               </div>
             </div>
@@ -2679,7 +3001,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                         tag="a"
                         target="_blank"
                         :disabled="!row.snapshot_url"
-                        :href="row.snapshot_url ? resourceUrl(row.snapshot_url) : undefined"
+                        :href="
+                          row.snapshot_url
+                            ? resourceUrl(row.snapshot_url)
+                            : undefined
+                        "
                         >截图</el-button
                       >
                       <el-button
@@ -2688,7 +3014,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                         tag="a"
                         target="_blank"
                         :disabled="!row.record_url"
-                        :href="row.record_url ? resourceUrl(row.record_url) : undefined"
+                        :href="
+                          row.record_url
+                            ? resourceUrl(row.record_url)
+                            : undefined
+                        "
                         >录像</el-button
                       >
                     </div>
@@ -2697,9 +3027,25 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </el-table-column>
               <el-table-column label="处理" width="190" fixed="right">
                 <template #default="{ row }">
-                  <el-button size="small" type="primary" text @click="openAlertProcessDialog(row, 'handled')">处理</el-button>
-                  <el-button size="small" text @click="openAlertProcessDialog(row, 'false_alarm')">误报</el-button>
-                  <el-button size="small" text @click="openAlertProcessDialog(row, 'ignored')">忽略</el-button>
+                  <el-button
+                    size="small"
+                    type="primary"
+                    text
+                    @click="openAlertProcessDialog(row, 'handled')"
+                    >处理</el-button
+                  >
+                  <el-button
+                    size="small"
+                    text
+                    @click="openAlertProcessDialog(row, 'false_alarm')"
+                    >误报</el-button
+                  >
+                  <el-button
+                    size="small"
+                    text
+                    @click="openAlertProcessDialog(row, 'ignored')"
+                    >忽略</el-button
+                  >
                 </template>
               </el-table-column>
             </el-table>
@@ -2725,62 +3071,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </article>
             </div>
           </section>
-
-          <section class="panel span-5">
-            <div class="panel-head compact">
-              <h2>处置建议</h2>
-            </div>
-            <div class="info-list alert-guide-list">
-              <article
-                v-for="guide in handlingGuides"
-                :key="guide.title"
-                class="info-item"
-              >
-                <b>{{ guide.title }}</b>
-                <span>{{ guide.text }}</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>证据链概览</h2>
-            </div>
-            <div class="evidence-grid">
-              <article>
-                <b>截图</b>
-                <span>目标框、区域、时间戳</span>
-              </article>
-              <article>
-                <b>片段</b>
-                <span>触发前后短视频</span>
-              </article>
-              <article>
-                <b>记录</b>
-                <span>状态、备注、处理人</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>处理节奏</h2>
-            </div>
-            <div class="flow-steps compact-flow">
-              <article>
-                <b>接收</b>
-                <span>AI 候选事件入队</span>
-              </article>
-              <article>
-                <b>确认</b>
-                <span>人工复核证据</span>
-              </article>
-              <article>
-                <b>闭环</b>
-                <span>状态和备注入库</span>
-              </article>
-            </div>
-          </section>
         </div>
       </section>
 
@@ -2803,7 +3093,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div>
                 <h2>区域规则配置</h2>
                 <span
-                  >规则来自 `/rules`，区域来自 `/zones`；数值表示触发前需要持续命中的秒数。</span
+                  >规则来自 `/rules`，区域来自
+                  `/zones`；数值表示触发前需要持续命中的秒数。</span
                 >
               </div>
             </div>
@@ -2830,23 +3121,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </section>
 
-          <section class="panel zone-panel span-6">
-            <div class="panel-head compact">
-              <h2>
-                {{
-                  currentStream.stream_name || activeStreamId || "当前视频源"
-                }}
-                区域示意
-              </h2>
-            </div>
-            <div class="zone-canvas compact-zone">
-              <div class="canvas-board">讲台 / 黑板</div>
-              <div class="seat-zone s1">座位区</div>
-              <div class="seat-zone s2">动态禁用区</div>
-              <div class="seat-zone s3">危险区</div>
-            </div>
-          </section>
-
           <section class="panel span-6">
             <div class="panel-head compact">
               <h2>当前已设定区域</h2>
@@ -2859,7 +3133,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </el-table-column>
               <el-table-column label="类型" width="110">
                 <template #default="{ row }">
-                  <el-tag effect="plain">{{ zoneTypeText(row.zone_type) }}</el-tag>
+                  <el-tag effect="plain">{{
+                    zoneTypeText(row.zone_type)
+                  }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column label="状态" width="90">
@@ -2875,65 +3151,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </template>
               </el-table-column>
             </el-table>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>实时禁用区坐标</h2>
-            </div>
-            <div class="coordinate-export">
-              <p>后续提交给其他模块的矩形区域使用以下四角归一化坐标。</p>
-              <pre>{{
-                JSON.stringify(
-                  hasConfirmedForbiddenZone
-                    ? forbiddenZonePayload
-                    : {
-                        status: hasPendingForbiddenZone
-                          ? "pending_confirm"
-                          : "empty",
-                        message: "禁用区确认后才输出坐标",
-                      },
-                  null,
-                  2,
-                )
-              }}</pre>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>推荐模板</h2>
-            </div>
-            <div class="info-list">
-              <article
-                v-for="item in ruleTemplates"
-                :key="item.title"
-                class="info-item"
-              >
-                <b>{{ item.title }}</b>
-                <span>{{ item.text }}</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>规则联动</h2>
-            </div>
-            <div class="flow-steps compact-flow">
-              <article>
-                <b>区域命中</b>
-                <span>目标进入 ROI</span>
-              </article>
-              <article>
-                <b>阈值复核</b>
-                <span>持续时间达标</span>
-              </article>
-              <article>
-                <b>生成告警</b>
-                <span>写入事件队列</span>
-              </article>
-            </div>
           </section>
         </div>
       </section>
@@ -2986,55 +3203,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <el-table-column prop="last_seen" label="最近出现" width="110" />
               <el-table-column label="操作" width="130" fixed="right">
                 <template #default="{ row }">
-                  <el-button size="small" type="primary" text @click="openFaceDialog(row)">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    text
+                    @click="openFaceDialog(row)"
+                  >
                     {{ row.face_registered ? "重新注册" : "注册人脸" }}
                   </el-button>
                 </template>
               </el-table-column>
             </el-table>
-          </section>
-
-          <section class="panel span-4">
-            <div class="panel-head compact">
-              <h2>陌生人核验</h2>
-            </div>
-            <div class="identity-preview">
-              <div class="face-placeholder">
-                <el-icon><User /></el-icon>
-              </div>
-              <b>发现未登记人员</b>
-              <p>
-                系统保留最近一次截图与视频片段，等待管理员确认身份或加入访客名单。
-              </p>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>注册进度</h2>
-            </div>
-            <div class="progress-stack">
-              <article v-for="item in registrationSteps" :key="item.title">
-                <b>{{ item.title }}</b>
-                <span>{{ item.value }}</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>身份策略</h2>
-            </div>
-            <div class="info-list two-info">
-              <article class="info-item">
-                <b>学生档案</b>
-                <span>用于课堂识别、到场记录和行为关联。</span>
-              </article>
-              <article class="info-item">
-                <b>访客名单</b>
-                <span>经人工确认后可临时加入白名单。</span>
-              </article>
-            </div>
           </section>
         </div>
       </section>
@@ -3066,12 +3245,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               >
             </div>
             <div class="stream-list">
-              <article v-for="stream in allStreamStatusRecords" :key="stream.stream_id">
+              <article
+                v-for="stream in allStreamStatusRecords"
+                :key="stream.stream_id"
+              >
                 <div>
                   <b>{{ stream.stream_name }}</b>
                   <span>{{ stream.rtmp_url }}</span>
                 </div>
-                <el-tag :type="statusType(stream.status)">{{ statusText(stream.status) }}</el-tag>
+                <el-tag :type="statusType(stream.status)">{{
+                  statusText(stream.status)
+                }}</el-tag>
               </article>
             </div>
           </section>
@@ -3098,34 +3282,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     ? `${modelStatus.inference_ms} ms`
                     : "--"
                 }}</b>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-8">
-            <div class="panel-head compact">
-              <h2>依赖调用链路</h2>
-            </div>
-            <div class="flow-steps">
-              <article v-for="item in dependencySteps" :key="item.title">
-                <b>{{ item.title }}</b>
-                <span>{{ item.text }}</span>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel span-4">
-            <div class="panel-head compact">
-              <h2>运行提示</h2>
-            </div>
-            <div class="info-list">
-              <article
-                v-for="item in operationLogs"
-                :key="item"
-                class="info-item"
-              >
-                <b>状态</b>
-                <span>{{ item }}</span>
               </article>
             </div>
           </section>
@@ -3179,12 +3335,18 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             {{ newPersonFaceValidationMessage }}
           </p>
           <p class="dialog-hint">
-            图片需通过清晰度校验和 `/face/feature/extract` 人脸特征提取后才会被使用。
+            图片需通过清晰度校验和 `/face/feature/extract`
+            人脸特征提取后才会被使用。
           </p>
         </el-form>
         <template #footer>
           <el-button @click="personDialogVisible = false">取消</el-button>
-          <el-button type="primary" :disabled="newPersonFaceValidationLoading" @click="savePerson">确定新增</el-button>
+          <el-button
+            type="primary"
+            :disabled="newPersonFaceValidationLoading"
+            @click="savePerson"
+            >确定新增</el-button
+          >
         </template>
       </el-dialog>
 
@@ -3235,11 +3397,20 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </template>
       </el-dialog>
 
-      <el-dialog v-model="alertProcessDialogVisible" title="处理告警" width="480px" class="local-edit-dialog">
+      <el-dialog
+        v-model="alertProcessDialogVisible"
+        title="处理告警"
+        width="480px"
+        class="local-edit-dialog"
+      >
         <el-form class="local-edit-form" label-position="top">
           <el-form-item label="告警">
             <el-input
-              :model-value="selectedAlert ? `${selectedAlert.alert_name || alertTypeText(selectedAlert.alert_type)} / ${selectedAlert.stream_name || selectedAlert.stream_id}` : ''"
+              :model-value="
+                selectedAlert
+                  ? `${selectedAlert.alert_name || alertTypeText(selectedAlert.alert_type)} / ${selectedAlert.stream_name || selectedAlert.stream_id}`
+                  : ''
+              "
               disabled
             />
           </el-form-item>
@@ -3250,24 +3421,43 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 { label: '已处理', value: 'handled' },
                 { label: '误报', value: 'false_alarm' },
                 { label: '忽略', value: 'ignored' },
-                { label: '处理中', value: 'processing' }
+                { label: '处理中', value: 'processing' },
               ]"
             />
           </el-form-item>
           <el-form-item label="处理备注">
-            <el-input v-model="alertProcessForm.remark" type="textarea" :rows="3" placeholder="填写复核结论、处理人或现场处置说明" />
+            <el-input
+              v-model="alertProcessForm.remark"
+              type="textarea"
+              :rows="3"
+              placeholder="填写复核结论、处理人或现场处置说明"
+            />
           </el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="alertProcessDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="saveAlertProcess">保存处理结果</el-button>
+          <el-button type="primary" @click="saveAlertProcess"
+            >保存处理结果</el-button
+          >
         </template>
       </el-dialog>
 
-      <el-dialog v-model="faceDialogVisible" title="注册人脸" width="480px" class="local-edit-dialog">
+      <el-dialog
+        v-model="faceDialogVisible"
+        title="注册人脸"
+        width="480px"
+        class="local-edit-dialog"
+      >
         <el-form class="local-edit-form" label-position="top">
           <el-form-item label="人员">
-            <el-input :model-value="selectedStudent ? `${selectedStudent.name} / ${selectedStudent.student_no}` : ''" disabled />
+            <el-input
+              :model-value="
+                selectedStudent
+                  ? `${selectedStudent.name} / ${selectedStudent.student_no}`
+                  : ''
+              "
+              disabled
+            />
           </el-form-item>
           <el-form-item label="人脸图片">
             <label class="file-picker">
@@ -3291,15 +3481,27 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           >
             {{ faceValidationMessage }}
           </p>
-          <p class="dialog-hint">图片需先通过 `/face/feature/extract` 识别出清晰人脸，再提交到 `/students/{id}/face`。</p>
+          <p class="dialog-hint">
+            图片需先通过 `/face/feature/extract` 识别出清晰人脸，再提交到
+            `/students/{id}/face`。
+          </p>
         </el-form>
         <template #footer>
           <el-button @click="faceDialogVisible = false">取消</el-button>
-          <el-button type="primary" :disabled="faceValidationLoading || !faceImageBase64" @click="saveFaceRegistration">提交注册</el-button>
+          <el-button
+            type="primary"
+            :disabled="faceValidationLoading || !faceImageBase64"
+            @click="saveFaceRegistration"
+            >提交注册</el-button
+          >
         </template>
       </el-dialog>
 
-      <div v-if="isVideoExpanded" class="video-expanded-mask" @click.self="closeExpandedVideo">
+      <div
+        v-if="isVideoExpanded"
+        class="video-expanded-mask"
+        @click.self="closeExpandedVideo"
+      >
         <section class="video-expanded-panel">
           <header class="video-expanded-head">
             <div>
