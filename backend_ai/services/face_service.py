@@ -154,7 +154,7 @@ class FaceService:
             resized[: min(embedding.size, self.feature_dim)] = embedding[: self.feature_dim]
             embedding = resized
         bbox_source = face["bbox"] if isinstance(face, dict) else face.bbox
-        bbox = [float(v) for v in np.asarray(bbox_source).tolist()]
+        bbox = [int(v) for v in np.asarray(bbox_source).tolist()]
         return {
             "face_count": 1,
             "feature_dim": self.feature_dim,
