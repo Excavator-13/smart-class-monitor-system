@@ -1,6 +1,5 @@
 package com.smartclass.monitor.controller;
 
-import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.ReportService;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,9 +31,9 @@ public class ReportController {
     }
 
     @PostMapping("/generate")
-    @RequireRole("admin")
-    public Map<String, Object> generate(@RequestBody List<Map<String, Object>> alerts) {
-        return reportService.generateReport(alerts);
+    public Map<String, Object> generate(@RequestBody(required = false) List<Map<String, Object>> alerts) {
+        // 始终读数据库（含真实截图）
+        return reportService.generateReport(reportService.queryTodayAlerts());
     }
 
     @GetMapping("/history")

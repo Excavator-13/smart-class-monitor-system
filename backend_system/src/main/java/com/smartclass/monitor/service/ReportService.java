@@ -1,6 +1,7 @@
 package com.smartclass.monitor.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartclass.monitor.vo.AlertVO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,10 +26,10 @@ public class ReportService {
 
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
 
-    @Value("${report.qwen.url:https://ws-bwonuhgq62ys3o1g.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions}")
+    @Value("${report.qwen.url:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}")
     private String qwenUrl;
 
-    @Value("${report.qwen.key:sk-ws-H.EMXPMID.91yA.MEUCIQC6JxHW4VNET1qOKTBSr18mHMtU8QFBk-LsyK2OmWOPygIgPuLCk8dpBFHYLsIEO4tNeigdh5RPhMj4hm9lUTtY0iY}")
+    @Value("${report.qwen.key:sk-ws-H.EMXXLXM.TIDu.MEUCIGRQZ3OvMC3v_ytNOc4xIGCz_OeoLA3UF-YDoJ-k4rzhAiEAlUk0V2EexJVsnxduEsMYkOqdFrUxVhHRYx7AaZamLyg}")
     private String qwenKey;
 
     @Value("${report.qwen.model:qwen3.7-plus}")
@@ -38,7 +39,12 @@ public class ReportService {
     private boolean aiEnabled;
 
     private final RestTemplate restTemplate = new RestTemplate();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final AlertService alertService;
+
+    public ReportService(AlertService alertService) {
+        this.alertService = alertService;
+    }
 
     /** 前端传来的设置 */
     private volatile Map<String, Object> settings = new LinkedHashMap<>();
@@ -52,7 +58,7 @@ public class ReportService {
         if (now.length() >= 5) now = now.substring(0, 5);
         if (now.equals(setTime)) {
             log.info("定时生成日报 {} ", now);
-            generateReport(Collections.emptyList());
+            generateReport(queryTodayAlerts());
         }
     }
 
@@ -60,6 +66,9 @@ public class ReportService {
 
     /** 最新的日报缓存 */
     private volatile Map<String, Object> latestReport;
+
+    /** 日报历史 */
+    private final List<Map<String, Object>> history = new ArrayList<>();
 
     /**
      * 根据告警列表生成日报
@@ -100,12 +109,27 @@ public class ReportService {
 
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("date", today());
+        report.put("time", java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         report.put("summary", summary);
         report.put("alertsCount", total);
-        report.put("alerts", alerts.size() > 10 ? alerts.subList(0, 10) : alerts);
         report.put("raw", Map.of("high", high, "warning", warning, "types", types));
 
+        // VL 分析每张截图
+        List<Map<String, Object>> details = new ArrayList<>();
+        for (Map<String, Object> a : alerts.size() > 10 ? alerts.subList(0, 10) : alerts) {
+            Map<String, Object> d = new LinkedHashMap<>(a);
+            String snap = String.valueOf(a.getOrDefault("snapshotUrl", a.getOrDefault("snapshot_path", "")));
+            if (!snap.isBlank()) {
+                d.put("snapshotUrl", snap);
+                String desc = analyzeImage(snap, String.valueOf(a.getOrDefault("alertType", "")));
+                if (desc != null && !desc.isBlank()) d.put("vlAnalysis", desc);
+            }
+            details.add(d);
+        }
+        report.put("alerts", details);
+
         latestReport = report;
+        history.add(0, report);
         return report;
     }
 
@@ -114,22 +138,19 @@ public class ReportService {
     }
 
     public List<Map<String, Object>> getHistory() {
-        if (latestReport == null) {
-            return Collections.emptyList();
-        }
-        return Collections.singletonList(latestReport);
+        return history;
     }
 
     /** 调用千问 API */
     private String callQwen(List<Map<String, Object>> alerts, String fallback) {
+        String apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
         try {
             StringBuilder data = new StringBuilder();
             for (Map<String, Object> a : alerts.subList(0, Math.min(alerts.size(), 30))) {
-                data.append(String.format("- [%s] %s (%s, 置信度 %.0f%%)\n",
+                data.append(String.format("- [%s] %s (%s)\n",
                         a.getOrDefault("occurredAt", a.getOrDefault("time", "")),
                         a.getOrDefault("alertType", a.getOrDefault("type", "未知")),
-                        a.getOrDefault("streamId", a.getOrDefault("location", "")),
-                        toPercent(a.get("confidence"))));
+                        a.getOrDefault("streamId", a.getOrDefault("location", ""))));
             }
 
             Map<String, Object> body = new LinkedHashMap<>();
@@ -145,19 +166,83 @@ public class ReportService {
             headers.setBearerAuth(qwenKey);
 
             ResponseEntity<Map> resp = restTemplate.exchange(
-                    qwenUrl, HttpMethod.POST,
+                    apiUrl, HttpMethod.POST,
                     new HttpEntity<>(body, headers), Map.class
             );
 
             List<Map> choices = (List<Map>) resp.getBody().get("choices");
             if (choices != null && !choices.isEmpty()) {
                 Map message = (Map) choices.get(0).get("message");
-                return String.valueOf(message.getOrDefault("content", fallback));
+                Object content = message.get("content");
+                if (content != null) return content.toString();
             }
         } catch (Exception e) {
-            log.warn("千问 API 调用失败，使用模板: {}", e.getMessage());
+            log.warn("千问 API 调用失败，使用模板: {} msg: {}", e.getClass().getSimpleName(), e.getMessage());
         }
         return fallback;
+    }
+
+    public List<Map<String, Object>> queryTodayAlerts() {
+        try {
+            var page = alertService.listAlerts(null, null, null, null, null, null, 1, 500);
+            var records = page.getRecords();
+            log.info("queryTodayAlerts: 查到 {} 条告警，第一条 streamId={}", records.size(),
+                     records.isEmpty() ? "无" : records.get(0).getStreamId());
+            return records.stream().map(a -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("alertType", a.getAlertType());
+                m.put("level", a.getLevel());
+                m.put("streamId", a.getStreamId());
+                m.put("snapshotUrl", a.getSnapshotUrl());
+                m.put("occurredAt", String.valueOf(a.getOccurredAt()));
+                m.put("confidence", a.getConfidence());
+                return m;
+            }).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("查询今日告警失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Value("${report.snapshot-base-url:http://39.106.209.208:9092}")
+    private String snapshotBaseUrl;
+
+    /** 调 VL 模型分析单张截图 */
+    private String analyzeImage(String imageUrl, String alertType) {
+        if (imageUrl == null || imageUrl.isBlank()) return null;
+        // 相对路径补全
+        String fullUrl = imageUrl.startsWith("/") ? snapshotBaseUrl + imageUrl : imageUrl;
+        try {
+            // 下载图片 → base64
+            byte[] imgBytes = restTemplate.getForObject(fullUrl, byte[].class);
+            String b64 = imgBytes != null ? Base64.getEncoder().encodeToString(imgBytes) : "";
+            if (b64.isEmpty()) return null;
+
+            String vlUrl = qwenUrl;
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", "qwen-vl-plus");
+            body.put("messages", List.of(
+                Map.of("role", "user", "content", List.of(
+                    Map.of("type", "image_url", "image_url", Map.of("url", "data:image/jpeg;base64," + b64)),
+                    Map.of("type", "text", "text", "请描述画面内容（人物行为、位置、异常情况），30字以内")
+                ))
+            ));
+            body.put("max_tokens", 100);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(qwenKey);
+            ResponseEntity<Map> resp = restTemplate.exchange(
+                vlUrl, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+            List<Map> choices = (List<Map>) resp.getBody().get("choices");
+            if (choices != null && !choices.isEmpty()) {
+                Map msg = (Map) choices.get(0).get("message");
+                Object c = msg.get("content");
+                if (c != null) return c.toString();
+            }
+        } catch (Exception e) {
+            log.warn("VL分析失败 {}: {}", imageUrl, e.getMessage());
+        }
+        return null;
     }
 
     private String today() {
