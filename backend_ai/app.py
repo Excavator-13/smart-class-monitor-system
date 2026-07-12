@@ -18,6 +18,7 @@ from backend_ai.services.config_client import ConfigClient
 from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
 from backend_ai.services.fire_service import FireService
+from backend_ai.utils import resolve_device
 from backend_ai.services.snapshot_push import SnapshotPusher
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
@@ -77,7 +78,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         max_items=int(events_cfg.get("max_items", 500)),
         default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
     )
-    device_config = model_config.get("device")
+    device_config = resolve_device(model_config.get("device"))
     face_settings = (model_config.get("models") or {}).get("face", {})
     face_service = (overrides or {}).get("face_service") if overrides else None
     face_service = face_service or FaceService(

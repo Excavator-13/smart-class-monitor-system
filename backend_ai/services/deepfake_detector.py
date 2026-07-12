@@ -72,7 +72,8 @@ class DeepfakeDetector:
     INPUT_SIZE = 256
 
     def __init__(self, weights_path: str | None = None):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        from backend_ai.utils import resolve_device
+        self.device = torch.device(resolve_device())
         self.model = Meso4().to(self.device)
         self.model.eval()
         self._cnn_loaded = False

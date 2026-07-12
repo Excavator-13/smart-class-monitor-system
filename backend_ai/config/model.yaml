@@ -1,4 +1,4 @@
-device: cuda
+device: auto
 models:
   face:
     enabled: true
