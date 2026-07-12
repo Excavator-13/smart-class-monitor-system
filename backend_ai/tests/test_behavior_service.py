@@ -1,6 +1,38 @@
 from backend_ai.services.behavior_service import BehaviorService
 
 
+class FakeYoloModel:
+    def predict(self, frame, conf=0.6, verbose=False):
+        class Box:
+            cls = [67]
+            conf = [0.91]
+            xyxy = [[10, 20, 30, 40]]
+
+        class Result:
+            names = {67: "cell phone"}
+            boxes = [Box()]
+
+        return [Result()]
+
+
+def test_behavior_model_missing_weights_sets_status(tmp_path):
+    service = BehaviorService()
+
+    service.load_model({"enabled": True, "weights": "models/yolo/missing.pt"}, tmp_path)
+
+    assert service.loaded is False
+    assert service.model is None
+    assert "weights not found" in service.last_error
+
+
+def test_detect_objects_uses_yolo_predict_api():
+    service = BehaviorService(model=FakeYoloModel(), confidence_threshold=0.7)
+
+    detections = service.detect_objects(frame=object())
+
+    assert detections == [{"class_name": "cell phone", "confidence": 0.91, "bbox": [10.0, 20.0, 30.0, 40.0]}]
+
+
 def test_phone_usage_from_mock_objects():
     service = BehaviorService()
     objects = [
@@ -45,4 +77,3 @@ def test_crowd_gathering_from_mock_person_density():
     )
 
     assert detections[0]["event_type"] == "crowd_gathering"
-

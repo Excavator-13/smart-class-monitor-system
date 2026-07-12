@@ -10,18 +10,18 @@ logger = logging.getLogger(__name__)
 
 class AlertClient:
     def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0,
-                 session: Any | None = None, dingtalk: Any | None = None):
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-        self.session = session or requests.Session()
-        self.dingtalk = dingtalk
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None, internal_token: str | None = None):
+                 session: Any | None = None, internal_token: str | None = None,
+                 dingtalk: Any | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
         self.internal_token = internal_token
+        self.dingtalk = dingtalk
 
-    def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
+    def _headers(self) -> dict[str, str] | None:
+        return {"X-Internal-Token": self.internal_token} if self.internal_token else None
+
+    def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None, event_time_offset: float | None = None) -> dict[str, Any]:
         target = event.get("target") or {}
         zone = event.get("zone") or {}
         target_info = {
@@ -46,6 +46,7 @@ class AlertClient:
             "zone_id": zone.get("zone_id"),
             "snapshot_path": event.get("snapshot_path"),
             "record_path": record_path,
+            "event_time_offset": event_time_offset,
             "extra": {"source": "backend_ai"},
         }
 
@@ -65,7 +66,5 @@ class AlertClient:
                 self.dingtalk(f"{alert_name} | 摄像头：{stream}")
             except Exception:
                 logger.exception("钉钉通知失败")
-
-        return response.json()
 
         return response.json()

@@ -29,162 +29,128 @@ export const ALERT_TYPE_MAP = {
 
 export const mockStreams = [
   {
+    id: 1,
     stream_id: "classroom_01",
-    stream_name: "教室1",
-    location: "教学楼一层",
-    status: "online",
-    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_01",
-    remark: "默认演示视频源",
+    stream_name: "Classroom 01 Main Camera",
+    location: "Teaching Building A101",
+    status: "enabled",
+    latency: "1.8s",
+    rtmp_url: "rtmp://media-server/live/classroom_01",
+    remark: "Local mock stream"
   },
   {
+    id: 2,
     stream_id: "classroom_02",
-    stream_name: "教室2",
-    location: "教学楼二层",
-    status: "online",
-    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_02",
-    remark: "用于多路扩展",
-  },
-  {
-    stream_id: "classroom_03",
-    stream_name: "教室3",
-    location: "教学楼三层",
-    status: "offline",
-    rtmp_url: "rtmp://39.106.209.208:9090/live/classroom_03",
-    remark: "等待推流",
-  },
+    stream_name: "Classroom 02 Rear Camera",
+    location: "Teaching Building B203",
+    status: "enabled",
+    latency: "2.4s",
+    rtmp_url: "rtmp://media-server/live/classroom_02",
+    remark: "Reserved stream"
+  }
 ];
 
-export const mockAlerts = [
-  {
-    id: 1001,
-    alert_type: "flame_detected",
-    level: "high",
-    alert_status: "unhandled",
-    stream_id: "classroom_01",
-    confidence: 0.91,
-    occurred_at: "2026-07-09T10:28:19+08:00",
-    snapshot_url: "/snapshots/20260709/evt_001.jpg",
-    record_url: "/classroom_01-2026-07-09-10_28_00.mp4",
-  },
-  {
-    id: 1002,
-    alert_type: "phone_usage",
-    level: "warning",
-    alert_status: "processing",
-    stream_id: "classroom_01",
-    confidence: 0.86,
-    occurred_at: "2026-07-09T10:22:41+08:00",
-    snapshot_url: "/snapshots/20260709/evt_002.jpg",
-    record_url: "/classroom_01-2026-07-09-10_22_00.mp4",
-  },
-  {
-    id: 1003,
-    alert_type: "stranger_detected",
-    level: "warning",
-    alert_status: "handled",
-    stream_id: "classroom_01",
-    confidence: 0.72,
-    occurred_at: "2026-07-09T09:58:07+08:00",
-    snapshot_url: "/snapshots/20260709/evt_003.jpg",
-    record_url: "/classroom_01-2026-07-09-09_58_00.mp4",
-  },
-  {
-    id: 1004,
-    alert_type: "head_down",
-    level: "info",
-    alert_status: "false_alarm",
-    stream_id: "classroom_01",
-    confidence: 0.65,
-    occurred_at: "2026-07-09T09:34:12+08:00",
-    snapshot_url: "/snapshots/20260709/evt_004.jpg",
-    record_url: "/classroom_01-2026-07-09-09_34_00.mp4",
-  },
-];
+// Keep mock alerts empty by default. AI scoring should appear only after a real
+// alert/event is returned by the service or injected by integration testing.
+export const mockAlerts = [];
 
 export const mockRules = [
   {
     id: 1,
-    rule_type: "danger_zone",
-    name: "危险区域检测",
+    rule_type: "phone_usage",
+    name: "Phone usage",
     enabled: true,
-    threshold_seconds: 2,
-    confidence_threshold: 0.6,
-    cooldown_seconds: 45,
+    threshold_seconds: 5,
+    confidence_threshold: 0.75,
+    cooldown_seconds: 30,
+    zone_type: "phone_forbidden",
+    summary: "Enabled only after forbidden zone confirmation"
   },
   {
     id: 2,
-    rule_type: "phone_usage",
-    name: "使用手机检测",
+    rule_type: "fire_detected",
+    name: "Fire detection",
     enabled: true,
     threshold_seconds: 3,
-    confidence_threshold: 0.6,
-    cooldown_seconds: 45,
+    confidence_threshold: 0.8,
+    cooldown_seconds: 20,
+    zone_type: "danger",
+    summary: "High-priority safety event"
   },
   {
     id: 3,
-    rule_type: "head_down",
-    name: "长时间低头检测",
+    rule_type: "fall_detected",
+    name: "Fall detection",
     enabled: true,
-    threshold_seconds: 5,
-    confidence_threshold: 0.6,
-    cooldown_seconds: 45,
+    threshold_seconds: 4,
+    confidence_threshold: 0.78,
+    cooldown_seconds: 20,
+    zone_type: "classroom",
+    summary: "Triggered after a sustained fall posture"
   },
   {
     id: 4,
-    rule_type: "crowd_gathering",
-    name: "异常人流聚集检测",
+    rule_type: "head_down",
+    name: "Head-down behavior",
     enabled: true,
-    threshold_seconds: 3,
-    confidence_threshold: 0.6,
+    threshold_seconds: 6,
+    confidence_threshold: 0.7,
     cooldown_seconds: 60,
-  },
+    zone_type: "seat",
+    summary: "Evaluated by seat area and duration"
+  }
 ];
 
 export const mockStudents = [
-  {
-    id: 1,
-    student_no: "2026001",
-    name: "张同学",
-    class_name: "高一 1 班",
-    face_registered: true,
-  },
-  {
-    id: 2,
-    student_no: "2026002",
-    name: "李同学",
-    class_name: "高一 1 班",
-    face_registered: true,
-  },
-  {
-    id: 3,
-    student_no: "VISITOR",
-    name: "陌生人记录",
-    class_name: "待核验",
-    face_registered: false,
-  },
+  { id: 1, student_no: "2026001", name: "Student Zhang", class_name: "Class 1", status: "active", face_registered: true, last_seen: "--" },
+  { id: 2, student_no: "2026002", name: "Student Li", class_name: "Class 1", status: "active", face_registered: true, last_seen: "--" }
 ];
 
 export const mockHealth = {
-  rtmp: "online",
-  ai: "online",
-  api: "online",
-  database: "online",
+  rtmp: "up",
+  ai: "up",
+  backend: "up",
+  database: "up",
 };
 
 export const mockSummary = {
-  stream_id: "classroom_01",
-  risk_score: 58,
-  risk_level: "warning",
-  title: "当前风险指数中高",
-  summary: "手机违规和低头行为在同一区域叠加出现，建议教师优先查看第三排右侧。",
-  actions: ["自动抓拍", "等待人工确认", "保留追踪记录"],
-  counts: {
-    phone_usage: 1,
-    head_down: 1,
-  },
+  risk_score: 0,
+  title: "Waiting for risk events",
+  summary: "The frontend calculates risk scores only after effective alerts or AI events are returned.",
+  actions: ["Monitor", "Review AI marks", "Keep evidence"],
   timeline: [
-    { time: "10:25", text: "行为识别模型完成目标复核" },
-    { time: "10:24", text: "截图、短视频和事件记录已完成关联" },
-    { time: "10:23", text: "建议优先确认手机违规与低头叠加事件" },
-  ],
+    { time: "Now", text: "Phone risk requires a confirmed forbidden zone hit." },
+    { time: "Now", text: "Fire and fall alerts can score independently once detected." }
+  ]
 };
+
+export const mockAnalysisEvents = [
+  {
+    event_id: "evt_a1b2c3d4e5f6g7h8",
+    stream_id: "classroom_01",
+    event_type: "stranger_detected",
+    event_name: "陌生人出现",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.78,
+    occurred_at: "2026-07-09T10:25:00+08:00",
+    duration_seconds: 5.2,
+    target: { track_id: "face_1", bbox: [100, 200, 300, 400] },
+    zone: null,
+    snapshot_path: null,
+  },
+  {
+    event_id: "evt_b2c3d4e5f6g7h8i9",
+    stream_id: "classroom_01",
+    event_type: "phone_usage",
+    event_name: "使用手机",
+    level: "warning",
+    event_status: "confirmed",
+    confidence: 0.85,
+    occurred_at: "2026-07-09T10:22:00+08:00",
+    duration_seconds: 3.1,
+    target: { track_id: "person_2", bbox: [150, 250, 350, 450] },
+    zone: null,
+    snapshot_path: null,
+  },
+];
