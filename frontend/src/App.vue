@@ -520,13 +520,6 @@ const activeRiskEvents = computed(() => {
 
 const hasActiveRiskEvents = computed(() => activeRiskEvents.value.length > 0);
 
-const aiEventFeed = computed(() => {
-  return activeRiskEvents.value.slice(0, 3).map((item) => ({
-    time: formatEventTime(item.occurred_at),
-    text: `${riskTypeText(item.risk_type)}：${item.alert_name || item.event_name || item.alert_type || item.event_type || "AI 事件"}`,
-  }));
-});
-
 const activeSummary = computed(() => {
   if (!activeRiskEvents.value.length) {
     return {
@@ -2433,7 +2426,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </section>
 
-          <section class="overview-grid">
+          <section class="overview-grid tracking-overview">
             <div class="panel">
               <div class="panel-head compact">
                 <h2>告警追踪记录</h2>
@@ -2514,15 +2507,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <span v-for="action in actionItems" :key="action">{{
                   action
                 }}</span>
-              </div>
-              <div class="event-feed">
-                <article
-                  v-for="item in aiEventFeed"
-                  :key="`${item.time}-${item.text}`"
-                >
-                  <time>{{ item.time }}</time>
-                  <span>{{ item.text }}</span>
-                </article>
               </div>
               <div class="timeline">
                 <div
@@ -3051,7 +3035,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </el-table>
           </section>
 
-          <section class="panel span-7">
+          <section class="panel span-12">
             <div class="panel-head compact">
               <h2>告警评分配置</h2>
             </div>
@@ -3074,7 +3058,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
       </section>
 
-      <section v-else-if="activePage === 'rules'" class="page-grid module-page">
+      <section
+        v-else-if="activePage === 'rules'"
+        class="page-grid module-page centered-module-page"
+      >
         <div class="page-kpis">
           <article
             v-for="item in rulePageCards"
@@ -3125,7 +3112,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head compact">
               <h2>当前已设定区域</h2>
             </div>
-            <el-table :data="zoneRows" height="260" class="clean-table">
+            <el-table :data="zoneRows" height="390" class="clean-table">
               <el-table-column label="区域名称" min-width="130">
                 <template #default="{ row }">
                   {{ row.zone_name || "未命名区域" }}
@@ -3157,7 +3144,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
       <section
         v-else-if="activePage === 'people'"
-        class="page-grid module-page"
+        class="page-grid module-page centered-module-page"
       >
         <div class="page-kpis">
           <article
@@ -3172,7 +3159,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
 
         <div class="module-board">
-          <section class="panel span-8">
+          <section class="panel span-12">
             <div class="panel-head">
               <div>
                 <h2>人员与人脸库</h2>
@@ -3185,7 +3172,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >新增人员</el-button
               >
             </div>
-            <el-table :data="students" height="320" class="clean-table">
+            <el-table :data="students" height="480" class="clean-table">
               <el-table-column prop="student_no" label="编号" width="110" />
               <el-table-column prop="name" label="姓名" width="120" />
               <el-table-column
@@ -3218,7 +3205,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
       </section>
 
-      <section v-else class="page-grid module-page">
+      <section v-else class="page-grid module-page centered-module-page">
         <div class="page-kpis">
           <article
             v-for="item in systemPageCards"
@@ -3232,7 +3219,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
 
         <div class="module-board">
-          <section class="panel span-7">
+          <section class="panel span-8">
             <div class="panel-head">
               <div>
                 <h2>视频源与服务状态</h2>
@@ -3260,7 +3247,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </section>
 
-          <section class="panel span-5">
+          <section class="panel span-4">
             <div class="panel-head compact">
               <h2>运行概览</h2>
             </div>
