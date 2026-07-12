@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import requests
 
+logger = logging.getLogger(__name__)
+
 
 class AlertClient:
-    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None):
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0,
+                 session: Any | None = None, dingtalk: Any | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
+        self.dingtalk = dingtalk
+    def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0, session: Any | None = None, internal_token: str | None = None):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+        self.session = session or requests.Session()
+        self.internal_token = internal_token
 
     def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         target = event.get("target") or {}
@@ -41,7 +51,21 @@ class AlertClient:
 
     def push_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         payload = self.map_event_to_alert(event, record_path=record_path)
-        response = self.session.post(f"{self.base_url}/alerts/ai", json=payload, timeout=self.timeout)
+        headers = {}
+        if self.internal_token:
+            headers["X-Internal-Token"] = self.internal_token
+        response = self.session.post(f"{self.base_url}/alerts/ai", json=payload, headers=headers, timeout=self.timeout)
         response.raise_for_status()
+
+        # 钉钉通知 + 逐级上报
+        if self.dingtalk:
+            try:
+                alert_name = event.get("event_type", "未知告警")
+                stream = event.get("stream_id", "")
+                self.dingtalk(f"{alert_name} | 摄像头：{stream}")
+            except Exception:
+                logger.exception("钉钉通知失败")
+
         return response.json()
 
+        return response.json()

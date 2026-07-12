@@ -1,0 +1,11 @@
+- [x] 创建 backend_ai/requirements-mac.txt
+- [x] 在 model.yaml 中新增可选 device 字段
+- [x] 修改 face_service.py 的 load_model() 根据 platform 自动选择 ONNX Provider 和 ctx_id
+- [x] 修改 face_service.py 支持从配置读取 device 覆盖自动检测
+- [x] 修改 behavior_service.py 模型加载时自动选择设备（cuda > mps > cpu）
+- [x] 修改 behavior_service.py 支持从配置读取 device 覆盖自动检测
+- [x] 修改 app.py 将 model.yaml 中的 device 配置传递给 FaceService 和 BehaviorService
+- [ ] 在 macOS arm64 环境验证 InsightFace 使用 CoreML/CPU 推理
+- [ ] 在 macOS arm64 环境验证 YOLO 使用 MPS 推理
+- [ ] 验证 device 配置手动覆盖为 cpu 时两个模型均走 CPU
+- [ ] 验证原 requirements.txt 在 NVIDIA 环境下行为不变

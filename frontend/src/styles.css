@@ -147,8 +147,16 @@ body,
 body {
   color: var(--ink);
   background:
-    radial-gradient(circle at 18% 8%, rgba(255, 226, 158, 0.46), transparent 28%),
-    radial-gradient(circle at 86% 18%, rgba(57, 169, 199, 0.18), transparent 32%),
+    radial-gradient(
+      circle at 18% 8%,
+      rgba(255, 226, 158, 0.46),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 86% 18%,
+      rgba(57, 169, 199, 0.18),
+      transparent 32%
+    ),
     linear-gradient(180deg, #fbfcf9 0%, var(--bg) 46%, #eef4f7 100%);
   font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
   letter-spacing: 0;
@@ -161,19 +169,66 @@ textarea {
 }
 
 .auth-shell {
+  position: relative;
   display: grid;
   min-height: 100vh;
   grid-template-columns: minmax(0, 1fr) 440px;
   gap: 28px;
   align-items: center;
   padding: 42px;
+  overflow: hidden;
   background:
-    radial-gradient(circle at 16% 12%, rgba(255, 226, 158, 0.42), transparent 30%),
-    radial-gradient(circle at 82% 20%, rgba(57, 169, 199, 0.2), transparent 28%),
+    radial-gradient(
+      circle at 16% 12%,
+      rgba(255, 226, 158, 0.42),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 82% 20%,
+      rgba(57, 169, 199, 0.2),
+      transparent 28%
+    ),
     linear-gradient(135deg, #f7fbfd 0%, #eef4f7 52%, #f9fbf5 100%);
 }
 
+.auth-bg-video,
+.auth-bg-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.auth-bg-video {
+  z-index: 0;
+  object-fit: cover;
+  filter: saturate(0.95) contrast(1.04);
+}
+
+.auth-bg-overlay {
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(4, 13, 22, 0.72),
+      rgba(8, 18, 28, 0.42) 52%,
+      rgba(5, 12, 18, 0.68)
+    ),
+    radial-gradient(
+      circle at 22% 18%,
+      rgba(81, 184, 212, 0.2),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 82% 22%,
+      rgba(215, 169, 75, 0.16),
+      transparent 28%
+    );
+}
+
 .auth-visual {
+  position: relative;
+  z-index: 2;
   display: grid;
   max-width: 760px;
   gap: 24px;
@@ -184,22 +239,23 @@ textarea {
   width: fit-content;
   align-items: center;
   gap: 12px;
-  color: #284659;
+  color: rgba(238, 248, 252, 0.94);
   font-weight: 800;
 }
 
 .auth-visual h1 {
   max-width: 740px;
   margin: 0;
-  color: #122838;
+  color: #f4fbff;
   font-size: 42px;
   line-height: 1.12;
+  text-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
 }
 
 .auth-visual p {
   max-width: 680px;
   margin: 0;
-  color: #5f7282;
+  color: rgba(223, 238, 244, 0.88);
   font-size: 16px;
   line-height: 1.75;
 }
@@ -217,36 +273,40 @@ textarea {
   gap: 10px;
   align-content: start;
   padding: 16px;
-  border: 1px solid rgba(215, 169, 75, 0.24);
+  border: 1px solid rgba(216, 233, 241, 0.18);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--shadow);
+  background: rgba(9, 23, 34, 0.48);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(12px);
 }
 
 .auth-feature-grid b,
 .auth-contract b {
-  color: #163245;
+  color: #f4fbff;
   font-size: 15px;
 }
 
 .auth-feature-grid span,
 .auth-contract span,
 .auth-row span {
-  color: var(--muted);
+  color: rgba(223, 238, 244, 0.78);
   font-size: 13px;
   line-height: 1.55;
 }
 
 .auth-panel {
+  position: relative;
+  z-index: 2;
   display: grid;
   gap: 18px;
   padding: 22px;
-  border: 1px solid rgba(215, 169, 75, 0.28);
+  border: 1px solid rgba(216, 233, 241, 0.2);
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(255, 247, 224, 0.72), rgba(255, 255, 255, 0.96) 34%, #fff),
-    #fff;
-  box-shadow: 0 18px 42px rgba(31, 47, 64, 0.12);
+    linear-gradient(145deg, rgba(18, 33, 46, 0.88), rgba(9, 19, 29, 0.9)),
+    rgba(11, 23, 34, 0.88);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(18px);
 }
 
 .auth-tabs {
@@ -301,6 +361,18 @@ textarea {
   gap: 2px;
 }
 
+.auth-panel .el-form-item__label,
+.auth-panel .el-checkbox,
+.auth-panel .el-segmented {
+  color: rgba(235, 246, 250, 0.88);
+}
+
+.auth-panel .el-input__wrapper,
+.auth-panel .el-textarea__inner {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(216, 233, 241, 0.2) inset;
+}
+
 .auth-row {
   display: flex;
   min-height: 32px;
@@ -328,7 +400,9 @@ textarea {
   display: grid;
   min-height: 100vh;
   grid-template-columns: 92px minmax(0, 1fr);
-  transition: background 0.24s ease, color 0.24s ease;
+  transition:
+    background 0.24s ease,
+    color 0.24s ease;
 }
 
 .eye-care-theme {
@@ -343,8 +417,16 @@ textarea {
   --shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
   color: var(--ink);
   background:
-    radial-gradient(circle at 20% 8%, rgba(81, 184, 212, 0.12), transparent 30%),
-    radial-gradient(circle at 88% 10%, rgba(215, 169, 75, 0.1), transparent 28%),
+    radial-gradient(
+      circle at 20% 8%,
+      rgba(81, 184, 212, 0.12),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 88% 10%,
+      rgba(215, 169, 75, 0.1),
+      transparent 28%
+    ),
     linear-gradient(180deg, #05090d 0%, #071017 48%, #05090d 100%);
 }
 
@@ -357,8 +439,7 @@ textarea {
   gap: 16px;
   padding: 16px 10px;
   background:
-    linear-gradient(180deg, rgba(255, 219, 142, 0.08), transparent 32%),
-    #102938;
+    linear-gradient(180deg, rgba(255, 219, 142, 0.08), transparent 32%), #102938;
   color: #d9e8ef;
 }
 
@@ -370,6 +451,14 @@ textarea {
   color: #bcd2dd;
 }
 
+.nav-stack {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
 .brand-mark {
   display: grid;
   width: 46px;
@@ -379,12 +468,15 @@ textarea {
   background: #35a2c3;
   color: #fff;
   font-weight: 800;
-  box-shadow: 0 0 0 6px rgba(53, 162, 195, 0.12), inset 0 0 0 1px rgba(255, 238, 180, 0.58);
+  box-shadow:
+    0 0 0 6px rgba(53, 162, 195, 0.12),
+    inset 0 0 0 1px rgba(255, 238, 180, 0.58);
 }
 
 .nav-button {
   display: grid;
   width: 64px;
+  height: 58px;
   min-height: 58px;
   place-items: center;
   gap: 4px;
@@ -407,10 +499,15 @@ textarea {
 
 .nav-button.active {
   background:
-    linear-gradient(145deg, rgba(255, 219, 142, 0.22), transparent 46%),
-    #1d6f8c;
+    linear-gradient(145deg, rgba(255, 219, 142, 0.22), transparent 46%), #1d6f8c;
   color: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 231, 166, 0.34);
+}
+
+.nav-button.active:first-child {
+  width: 68px;
+  height: 72px;
+  min-height: 72px;
 }
 
 .online-block {
@@ -453,7 +550,12 @@ textarea {
   padding: 12px 20px;
   border-bottom: 1px solid var(--gold-line);
   background:
-    linear-gradient(100deg, rgba(255, 239, 198, 0.62), rgba(255, 255, 255, 0.92) 28%, rgba(255, 255, 255, 0.86)),
+    linear-gradient(
+      100deg,
+      rgba(255, 239, 198, 0.62),
+      rgba(255, 255, 255, 0.92) 28%,
+      rgba(255, 255, 255, 0.86)
+    ),
     var(--panel);
   box-shadow: 0 10px 28px rgba(31, 47, 64, 0.05);
 }
@@ -514,16 +616,28 @@ textarea {
   padding: 6px 11px 6px 7px;
   border: 1px solid rgba(215, 169, 75, 0.3);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 244, 210, 0.82), rgba(255, 255, 255, 0.88));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 244, 210, 0.82),
+    rgba(255, 255, 255, 0.88)
+  );
   color: #385064;
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease, background 0.22s ease;
+  transition:
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease,
+    background 0.22s ease;
 }
 
 .sky-widget:hover {
   border-color: rgba(255, 185, 70, 0.72);
-  background: linear-gradient(135deg, rgba(255, 243, 190, 0.96), rgba(255, 255, 255, 0.94));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 243, 190, 0.96),
+    rgba(255, 255, 255, 0.94)
+  );
   box-shadow: 0 8px 24px rgba(230, 169, 60, 0.16);
   transform: translateY(-1px);
 }
@@ -534,39 +648,55 @@ textarea {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  transition: box-shadow 0.24s ease, transform 0.24s ease, background 0.24s ease;
+  transition:
+    box-shadow 0.24s ease,
+    transform 0.24s ease,
+    background 0.24s ease;
   animation: softFloat 3.2s ease-in-out infinite;
 }
 
 .sun-face {
   background:
-    radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.72), transparent 16%),
+    radial-gradient(
+      circle at 34% 32%,
+      rgba(255, 255, 255, 0.72),
+      transparent 16%
+    ),
     #ffd166;
-  box-shadow: 0 0 0 7px rgba(255, 209, 102, 0.18), 0 0 22px rgba(255, 186, 73, 0.38);
+  box-shadow:
+    0 0 0 7px rgba(255, 209, 102, 0.18),
+    0 0 22px rgba(255, 186, 73, 0.38);
 }
 
 .sun-face::before {
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  background:
-    conic-gradient(
-      from 0deg,
-      rgba(255, 184, 61, 0.58) 0 8deg,
-      transparent 8deg 32deg,
-      rgba(255, 184, 61, 0.58) 32deg 40deg,
-      transparent 40deg 72deg
-    );
+  background: conic-gradient(
+    from 0deg,
+    rgba(255, 184, 61, 0.58) 0 8deg,
+    transparent 8deg 32deg,
+    rgba(255, 184, 61, 0.58) 32deg 40deg,
+    transparent 40deg 72deg
+  );
   opacity: 0;
   content: "";
-  transition: opacity 0.24s ease, transform 0.24s ease;
+  transition:
+    opacity 0.24s ease,
+    transform 0.24s ease;
 }
 
 .moon-face {
   background:
-    radial-gradient(circle at 62% 28%, rgba(255, 255, 255, 0.8), transparent 12%),
+    radial-gradient(
+      circle at 62% 28%,
+      rgba(255, 255, 255, 0.8),
+      transparent 12%
+    ),
     linear-gradient(135deg, #f1f6ff, #d8e5ff);
-  box-shadow: 0 0 0 7px rgba(219, 231, 255, 0.15), 0 0 20px rgba(160, 184, 230, 0.24);
+  box-shadow:
+    0 0 0 7px rgba(219, 231, 255, 0.15),
+    0 0 20px rgba(160, 184, 230, 0.24);
 }
 
 .moon-face::before {
@@ -578,7 +708,9 @@ textarea {
   border-radius: 50%;
   background: rgba(47, 61, 96, 0.62);
   content: "";
-  transition: transform 0.24s ease, opacity 0.24s ease;
+  transition:
+    transform 0.24s ease,
+    opacity 0.24s ease;
 }
 
 .sky-eye {
@@ -590,7 +722,11 @@ textarea {
   border-radius: 50%;
   background: #5d4622;
   animation: skyBlink 5.2s ease-in-out infinite;
-  transition: height 0.2s ease, border-radius 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  transition:
+    height 0.2s ease,
+    border-radius 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
 }
 
 .sky-eye.left {
@@ -613,7 +749,9 @@ textarea {
   border-radius: 0 0 999px 999px;
   opacity: 0;
   transform: translateY(-2px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .sleep-note {
@@ -636,7 +774,9 @@ textarea {
 
 .sky-widget:hover .sun-face {
   transform: scale(1.07) rotate(8deg);
-  box-shadow: 0 0 0 10px rgba(255, 209, 102, 0.26), 0 0 38px rgba(255, 179, 46, 0.66);
+  box-shadow:
+    0 0 0 10px rgba(255, 209, 102, 0.26),
+    0 0 38px rgba(255, 179, 46, 0.66);
 }
 
 .sky-widget:hover .sun-face::before {
@@ -652,7 +792,9 @@ textarea {
 
 .sky-widget:hover .moon-face {
   transform: scale(1.04) rotate(-5deg);
-  box-shadow: 0 0 0 9px rgba(219, 231, 255, 0.18), 0 0 30px rgba(174, 196, 238, 0.34);
+  box-shadow:
+    0 0 0 9px rgba(219, 231, 255, 0.18),
+    0 0 30px rgba(174, 196, 238, 0.34);
 }
 
 .sky-widget:hover .moon-face::before {
@@ -678,13 +820,21 @@ textarea {
 
 .sky-widget.night {
   border-color: rgba(192, 205, 235, 0.3);
-  background: linear-gradient(135deg, rgba(18, 27, 42, 0.96), rgba(39, 54, 78, 0.88));
+  background: linear-gradient(
+    135deg,
+    rgba(18, 27, 42, 0.96),
+    rgba(39, 54, 78, 0.88)
+  );
   color: #edf3ff;
 }
 
 .sky-widget.night:hover {
   border-color: rgba(205, 218, 247, 0.46);
-  background: linear-gradient(135deg, rgba(32, 44, 72, 0.94), rgba(75, 88, 123, 0.84));
+  background: linear-gradient(
+    135deg,
+    rgba(32, 44, 72, 0.94),
+    rgba(75, 88, 123, 0.84)
+  );
   box-shadow: 0 8px 24px rgba(31, 45, 73, 0.2);
 }
 
@@ -706,7 +856,11 @@ textarea {
 
 .eye-care-theme .main-area {
   background:
-    radial-gradient(circle at 78% 16%, rgba(81, 184, 212, 0.08), transparent 28%),
+    radial-gradient(
+      circle at 78% 16%,
+      rgba(81, 184, 212, 0.08),
+      transparent 28%
+    ),
     linear-gradient(180deg, rgba(7, 16, 23, 0.94), rgba(5, 9, 13, 0.98));
 }
 
@@ -770,7 +924,11 @@ textarea {
 .eye-care-theme .panel-head,
 .eye-care-theme .featured-ai .panel-head {
   border-bottom-color: rgba(86, 103, 116, 0.42);
-  background: linear-gradient(90deg, rgba(24, 39, 50, 0.92), rgba(15, 26, 36, 0.88));
+  background: linear-gradient(
+    90deg,
+    rgba(24, 39, 50, 0.92),
+    rgba(15, 26, 36, 0.88)
+  );
 }
 
 .eye-care-theme .featured-ai {
@@ -832,7 +990,12 @@ textarea {
   border: 1px solid rgba(215, 169, 75, 0.25);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 245, 215, 0.7), rgba(255, 255, 255, 0.96) 34%, #fff),
+    linear-gradient(
+      135deg,
+      rgba(255, 245, 215, 0.7),
+      rgba(255, 255, 255, 0.96) 34%,
+      #fff
+    ),
     var(--panel);
   box-shadow: var(--shadow);
 }
@@ -880,7 +1043,12 @@ textarea {
   border: 1px solid rgba(215, 169, 75, 0.22);
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(255, 247, 224, 0.62), rgba(255, 255, 255, 0.96) 24%, #fff),
+    linear-gradient(
+      145deg,
+      rgba(255, 247, 224, 0.62),
+      rgba(255, 255, 255, 0.96) 24%,
+      #fff
+    ),
     var(--panel);
   box-shadow: var(--shadow);
 }
@@ -893,7 +1061,11 @@ textarea {
   gap: 12px;
   padding: 10px 12px;
   border-bottom: 1px solid rgba(215, 169, 75, 0.2);
-  background: linear-gradient(90deg, rgba(255, 248, 226, 0.75), rgba(255, 255, 255, 0.7));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 248, 226, 0.75),
+    rgba(255, 255, 255, 0.7)
+  );
 }
 
 .panel-head.compact {
@@ -956,7 +1128,11 @@ textarea {
   background: transparent;
   color: #5d7184;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
 }
 
 .tool-button .el-icon {
@@ -984,10 +1160,25 @@ textarea {
   overflow: hidden;
   border-radius: 8px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 70px 70px,
-    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 70px 70px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 /
+      70px 70px,
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 70px
+      70px,
     #26343d;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 30px rgba(19, 31, 40, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 12px 30px rgba(19, 31, 40, 0.16);
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.video-stage.drawing {
+  cursor: crosshair;
+}
+
+.video-stage.locked {
+  cursor: default;
 }
 
 .video-stream,
@@ -1001,12 +1192,17 @@ textarea {
 
 .video-stream {
   z-index: 1;
+  pointer-events: none;
 }
 
 .classroom-fallback {
   background:
     linear-gradient(180deg, rgba(69, 89, 96, 0.48), rgba(23, 33, 40, 0.78)),
-    radial-gradient(circle at 50% 22%, rgba(255, 255, 255, 0.16), transparent 32%);
+    radial-gradient(
+      circle at 50% 22%,
+      rgba(255, 255, 255, 0.16),
+      transparent 32%
+    );
 }
 
 .classroom-fallback.muted {
@@ -1091,6 +1287,160 @@ textarea {
   animation: zoneGlow 2.6s ease-in-out infinite;
 }
 
+.drawn-forbidden-zone {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  min-width: 18px;
+  min-height: 18px;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 8px;
+  border: 2px dashed rgba(255, 112, 112, 0.96);
+  background: rgba(255, 112, 112, 0.14);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+  animation: zoneGlow 2.6s ease-in-out infinite;
+}
+
+.drawn-forbidden-zone.drafting {
+  border-color: rgba(80, 201, 220, 0.96);
+  background: rgba(80, 201, 220, 0.12);
+  animation: none;
+}
+
+.drawn-forbidden-zone.confirmed {
+  border-color: rgba(255, 112, 112, 0.96);
+  background: rgba(255, 112, 112, 0.16);
+}
+
+.drawn-forbidden-zone span {
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.draw-hint {
+  position: absolute;
+  z-index: 5;
+  right: 14px;
+  top: 52px;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.54);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.draw-hint.muted {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.36);
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.zone-actions {
+  position: absolute;
+  z-index: 7;
+  top: 52px;
+  left: 14px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.zone-action {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.58);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.zone-action.primary {
+  border-color: rgba(80, 201, 220, 0.55);
+  background: rgba(15, 120, 154, 0.9);
+  color: #fff;
+}
+
+.zone-action:hover {
+  filter: brightness(1.08);
+}
+
+.video-expanded-mask {
+  position: fixed;
+  z-index: 3000;
+  inset: 0;
+  display: flex;
+  padding: 0;
+  background: #071018;
+}
+
+.video-expanded-panel {
+  display: grid;
+  width: 100vw;
+  height: 100vh;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: #101820;
+}
+
+.video-expanded-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(16, 28, 38, 0.96);
+}
+
+.video-expanded-head h2 {
+  margin: 0;
+  color: #f2fbff;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.video-expanded-head span {
+  display: block;
+  margin-top: 3px;
+  color: rgba(222, 238, 246, 0.68);
+  font-size: 12px;
+}
+
+.video-expanded-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 /
+      70px 70px,
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 70px
+      70px,
+    #26343d;
+}
+
 .heat-point {
   position: absolute;
   z-index: 3;
@@ -1098,7 +1448,9 @@ textarea {
   height: 14px;
   border-radius: 50%;
   background: rgba(255, 178, 66, 0.9);
-  box-shadow: 0 0 0 9px rgba(255, 178, 66, 0.14), 0 0 22px rgba(255, 178, 66, 0.5);
+  box-shadow:
+    0 0 0 9px rgba(255, 178, 66, 0.14),
+    0 0 22px rgba(255, 178, 66, 0.5);
   animation: alertPulse 2.8s ease-in-out infinite;
 }
 
@@ -1259,7 +1611,11 @@ textarea {
   padding: 10px;
   border: 1px solid rgba(215, 169, 75, 0.22);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 247, 224, 0.72), rgba(251, 253, 255, 0.98));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 247, 224, 0.72),
+    rgba(251, 253, 255, 0.98)
+  );
 }
 
 .module-grid b,
@@ -1285,10 +1641,14 @@ textarea {
   border: 1px solid var(--line);
   border-left: 4px solid var(--warn);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 250, 233, 0.72), rgba(255, 255, 255, 0.96));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 250, 233, 0.72),
+    rgba(255, 255, 255, 0.96)
+  );
 }
 
-.alert-card.critical {
+.alert-card.high {
   border-left-color: var(--danger);
 }
 
@@ -1318,14 +1678,23 @@ textarea {
 .featured-ai {
   border-color: rgba(200, 50, 50, 0.28);
   background:
-    linear-gradient(145deg, rgba(255, 241, 226, 0.86), rgba(255, 255, 255, 0.98) 42%, #fff),
+    linear-gradient(
+      145deg,
+      rgba(255, 241, 226, 0.86),
+      rgba(255, 255, 255, 0.98) 42%,
+      #fff
+    ),
     var(--panel);
   box-shadow: 0 16px 36px rgba(108, 52, 35, 0.12);
 }
 
 .featured-ai .panel-head {
   min-height: 58px;
-  background: linear-gradient(90deg, rgba(255, 231, 206, 0.9), rgba(255, 255, 255, 0.78));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 231, 206, 0.9),
+    rgba(255, 255, 255, 0.78)
+  );
 }
 
 .featured-ai .panel-head h2 {
@@ -1369,7 +1738,9 @@ textarea {
   color: var(--danger);
   font-size: 28px;
   font-weight: 800;
-  box-shadow: inset 0 0 0 1px rgba(200, 50, 50, 0.1), 0 10px 24px rgba(200, 50, 50, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 50, 50, 0.1),
+    0 10px 24px rgba(200, 50, 50, 0.12);
 }
 
 .action-pills {
@@ -1438,6 +1809,41 @@ textarea {
   border-bottom: 1px solid rgba(215, 169, 75, 0.18);
 }
 
+.zone-coordinate-card {
+  align-items: flex-start !important;
+}
+
+.zone-coordinate-card span {
+  word-break: break-all;
+}
+
+.coordinate-export {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.coordinate-export p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.coordinate-export pre {
+  max-height: 236px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(15, 120, 154, 0.18);
+  border-radius: 8px;
+  background: rgba(15, 120, 154, 0.06);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 .rule-list article:last-child,
 .rule-editor article:last-child,
 .stream-list article:last-child {
@@ -1472,7 +1878,8 @@ textarea {
   border: 0;
   background: transparent;
   cursor:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%230f789a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 13h13v9a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5z' fill='%23dff7ff'/%3E%3Cpath d='M20 14c4-4 7-4 9-1-3 0-5 2-7 4'/%3E%3Cpath d='M9 13V9h10v4'/%3E%3Cpath d='M12 9c0-3 4-4 5-1'/%3E%3Cpath d='M25 20l1.5 2.5L28 20' stroke='%2351b8d4'/%3E%3C/g%3E%3C/svg%3E") 4 28,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cg fill='none' stroke='%230f789a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 13h13v9a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5z' fill='%23dff7ff'/%3E%3Cpath d='M20 14c4-4 7-4 9-1-3 0-5 2-7 4'/%3E%3Cpath d='M9 13V9h10v4'/%3E%3Cpath d='M12 9c0-3 4-4 5-1'/%3E%3Cpath d='M25 20l1.5 2.5L28 20' stroke='%2351b8d4'/%3E%3C/g%3E%3C/svg%3E")
+      4 28,
     pointer;
   appearance: none;
 }
@@ -1489,7 +1896,11 @@ textarea {
   width: 112px;
   height: 24px;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(31, 47, 64, 0.15), transparent 70%);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(31, 47, 64, 0.15),
+    transparent 70%
+  );
   content: "";
 }
 
@@ -1503,7 +1914,9 @@ textarea {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 36%),
     linear-gradient(135deg, #d7a94b, #a9693a);
-  box-shadow: inset 0 -8px 0 rgba(122, 71, 40, 0.15), 0 12px 20px rgba(77, 51, 32, 0.1);
+  box-shadow:
+    inset 0 -8px 0 rgba(122, 71, 40, 0.15),
+    0 12px 20px rgba(77, 51, 32, 0.1);
 }
 
 .plant-pot::before {
@@ -1545,7 +1958,9 @@ textarea {
   border-radius: 999px;
   background: linear-gradient(#7eba7e, #3a8a62);
   transform-origin: 50% 100%;
-  transition: height 0.28s ease, transform 0.28s ease;
+  transition:
+    height 0.28s ease,
+    transform 0.28s ease;
 }
 
 .stem-a {
@@ -1567,12 +1982,20 @@ textarea {
   height: 25px;
   border-radius: 100% 0 100% 0;
   background:
-    radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.22), transparent 22%),
+    radial-gradient(
+      circle at 28% 28%,
+      rgba(255, 255, 255, 0.22),
+      transparent 22%
+    ),
     linear-gradient(135deg, #74bb70, #2e8a67);
   box-shadow: 0 7px 14px rgba(29, 94, 74, 0.1);
   transform-origin: 8% 82%;
   animation: plantSway 4.8s ease-in-out infinite;
-  transition: width 0.28s ease, height 0.28s ease, opacity 0.28s ease, filter 0.28s ease;
+  transition:
+    width 0.28s ease,
+    height 0.28s ease,
+    opacity 0.28s ease,
+    filter 0.28s ease;
 }
 
 .leaf-a {
@@ -1682,7 +2105,11 @@ textarea {
   width: 8px;
   height: 12px;
   border-radius: 50% 50% 55% 55%;
-  background: linear-gradient(180deg, rgba(167, 230, 255, 0.95), rgba(42, 159, 205, 0.82));
+  background: linear-gradient(
+    180deg,
+    rgba(167, 230, 255, 0.95),
+    rgba(42, 159, 205, 0.82)
+  );
   opacity: 0;
   pointer-events: none;
 }
@@ -1753,7 +2180,11 @@ textarea {
   border: 1px solid rgba(215, 169, 75, 0.22);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(255, 247, 224, 0.74), rgba(255, 255, 255, 0.98)),
+    linear-gradient(
+      135deg,
+      rgba(255, 247, 224, 0.74),
+      rgba(255, 255, 255, 0.98)
+    ),
     #fff;
   box-shadow: var(--shadow);
 }
@@ -1817,8 +2248,10 @@ textarea {
   overflow: hidden;
   border-radius: 8px;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 34px 34px,
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 34px 34px,
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 / 34px
+      34px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px) 0 0 /
+      34px 34px,
     #24343d;
 }
 
@@ -1891,7 +2324,11 @@ textarea {
   height: 116px;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(15, 120, 154, 0.12), rgba(215, 169, 75, 0.18));
+  background: linear-gradient(
+    135deg,
+    rgba(15, 120, 154, 0.12),
+    rgba(215, 169, 75, 0.18)
+  );
   color: var(--brand);
   font-size: 44px;
 }
@@ -1953,7 +2390,11 @@ textarea {
   padding: 12px;
   border: 1px solid rgba(215, 169, 75, 0.2);
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 250, 237, 0.78), rgba(255, 255, 255, 0.98));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 250, 237, 0.78),
+    rgba(255, 255, 255, 0.98)
+  );
 }
 
 .info-item b,
@@ -2050,12 +2491,24 @@ textarea {
     overflow-x: auto;
   }
 
+  .nav-stack {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
   .online-block {
     display: none;
   }
 
   .nav-button {
     flex: 0 0 72px;
+  }
+
+  .nav-button.active:first-child {
+    width: 72px;
+    height: 58px;
+    min-height: 58px;
   }
 
   .top-bar {
@@ -2126,6 +2579,15 @@ textarea {
   .video-stage {
     min-height: 360px;
     aspect-ratio: auto;
+  }
+
+  .video-expanded-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .video-expanded-head .zone-action {
+    align-self: flex-end;
   }
 
   .stream-select,
