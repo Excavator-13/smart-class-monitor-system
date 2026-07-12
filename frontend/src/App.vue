@@ -129,6 +129,78 @@ const riskScoreSettings = ref([
 ]);
 const activeStreamId = ref("");
 const activeAlertStatus = ref("全部");
+
+// ── 钉钉 & AI 日报设置（存 localStorage）─────────────────
+const SETTINGS_KEY = "smart_class_alert_settings";
+const loadSettings = () => {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}; } catch { return {}; }
+};
+const saveSettings = (s) => localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+const saved = loadSettings();
+const alertSettings = ref({
+  dingtalkEnabled: saved.dingtalkEnabled ?? true,
+  responsible: saved.responsible ?? "项重善",
+  contacts: saved.contacts ?? [
+    { name: "项重善", mobile: "18601033435" },
+    { name: "章志超", mobile: "15270985055" },
+  ],
+  aiReportEnabled: saved.aiReportEnabled ?? true,
+  reportTime: saved.reportTime ?? "18:00",
+  generating: false,
+  latestReport: saved.latestReport ?? null,
+  reportHistory: saved.reportHistory ?? [],
+});
+
+watch(alertSettings, saveSettings, { deep: true });
+
+// 联系人弹窗
+const showContactModal = ref(false);
+const newContact = ref({ name: "", mobile: "" });
+const doAddContact = () => {
+  const { name, mobile } = newContact.value;
+  if (!name.trim()) { alert("请输入姓名"); return; }
+  if (!/^1\d{10}$/.test(mobile.trim())) { alert("请输入有效的 11 位手机号"); return; }
+  if (alertSettings.value.contacts.some(c => c.name === name.trim())) { alert("已存在"); return; }
+  alertSettings.value.contacts.push({ name: name.trim(), mobile: mobile.trim() });
+  newContact.value = { name: "", mobile: "" };
+};
+const removeContact = (name) => {
+  if (name === "项重善" || name === "章志超") { alert("默认负责人不能删除"); return; }
+  alertSettings.value.contacts = alertSettings.value.contacts.filter(c => c.name !== name);
+};
+
+// 日报
+const showReportModal = ref(false);
+const generateAiReport = async () => {
+  alertSettings.value.generating = true;
+  try {
+    const alertsData = displayAlerts.value.slice(0, 50).map(a => ({
+      alertType: a.alert_type || a.type || "未知",
+      level: a.level || "info",
+      streamId: a.stream_id || a.location || "",
+    }));
+    let report;
+    try {
+      const resp = await fetch("http://127.0.0.1:8080/report/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(alertsData),
+      });
+      if (resp.ok) report = await resp.json();
+    } catch {}
+    if (!report) {
+      report = {
+        date: new Date().toISOString().slice(0,10),
+        time: new Date().toLocaleString("zh-CN"),
+        summary: "日报生成失败，请检查后端服务",
+        alertsCount: 0,
+      };
+    }
+    alertSettings.value.latestReport = report;
+    alertSettings.value.reportHistory.unshift(report);
+  } finally {
+    alertSettings.value.generating = false;
+  }
+};
 const alertKeyword = ref("");
 const activeAlertLevel = ref("全部");
 const activeAlertType = ref("全部");
@@ -2460,6 +2532,77 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
           </article>
+        </div>
+
+        <!-- 通知 & 日报 紧凑栏 -->
+        <div class="module-board" style="margin-bottom:6px">
+          <section class="panel span-12" style="padding:8px 20px;display:flex;gap:50px;align-items:center">
+            <label style="display:flex;align-items:center;gap:10px">
+              <el-switch v-model="alertSettings.dingtalkEnabled" />
+              <b>钉钉通知</b>
+              <span v-if="alertSettings.dingtalkEnabled" style="font-size:13px;color:#67c23a">● {{ alertSettings.responsible }}</span>
+              <el-button v-if="alertSettings.dingtalkEnabled" size="small" @click="showContactModal=true">管理联系人</el-button>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px">
+              <el-switch v-model="alertSettings.aiReportEnabled" />
+              <b>AI日报</b>
+              <el-time-select v-if="alertSettings.aiReportEnabled" v-model="alertSettings.reportTime" start="00:00" end="23:59" step="00:30" size="small" style="width:100px"/>
+              <el-button v-if="alertSettings.aiReportEnabled" size="small" type="primary" :loading="alertSettings.generating" @click="generateAiReport">生成日报</el-button>
+              <el-button v-if="alertSettings.latestReport" size="small" @click="showReportModal=true">往期日报</el-button>
+            </label>
+          </section>
+        </div>
+
+        <!-- 最新日报卡片 -->
+        <div v-if="alertSettings.latestReport" class="module-board" style="margin-bottom:6px">
+          <section class="panel span-12" style="padding:12px 20px;background:#f0f9ff;border-left:3px solid #409EFF">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b>最新日报 — {{ alertSettings.latestReport.date }}</b>
+              <span style="font-size:12px;color:#909399">{{ alertSettings.latestReport.time }}</span>
+            </div>
+            <p style="margin:6px 0 0;font-size:14px;line-height:1.7;white-space:pre-wrap">{{ alertSettings.latestReport.summary }}</p>
+          </section>
+        </div>
+
+        <!-- 联系人弹窗 -->
+        <div v-if="showContactModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;justify-content:center;align-items:center" @click.self="showContactModal=false">
+          <div style="background:#fff;padding:28px;border-radius:10px;width:550px;max-height:75vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.12)">
+            <h2 style="margin:0 0 20px;font-size:18px">联系人管理</h2>
+            <div v-for="c in alertSettings.contacts" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0">
+              <div>
+                <span v-if="c.name===alertSettings.responsible" style="color:#67c23a;margin-right:6px">●</span>
+                <b>{{ c.name }}</b>
+                <span style="color:#909399;font-size:13px;margin-left:8px">{{ c.mobile }}</span>
+              </div>
+              <div style="display:flex;gap:8px">
+                <el-button v-if="c.name!==alertSettings.responsible" size="small" type="primary" plain @click="alertSettings.responsible=c.name">设为负责人</el-button>
+                <el-button v-if="c.name!=='项重善'&&c.name!=='章志超'" size="small" type="danger" plain @click="removeContact(c.name)">删除</el-button>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
+              <input v-model="newContact.name" placeholder="姓名" style="flex:1;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px"/>
+              <input v-model="newContact.mobile" placeholder="手机号" style="flex:2;padding:8px 12px;border:1px solid #dcdfe6;border-radius:6px;font-size:14px"/>
+              <el-button type="primary" size="default" @click="doAddContact">添加</el-button>
+            </div>
+            <div style="text-align:right;margin-top:20px">
+              <el-button @click="showContactModal=false">关闭</el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 往期日报弹窗 -->
+        <div v-if="showReportModal" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;justify-content:center;align-items:center" @click.self="showReportModal=false">
+          <div style="background:#fff;padding:28px;border-radius:10px;width:650px;max-height:80vh;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,.12)">
+            <h2 style="margin:0 0 20px;font-size:18px">往期日报（{{ alertSettings.reportHistory.length }} 条）</h2>
+            <div v-if="alertSettings.reportHistory.length===0" style="color:#909399;text-align:center;padding:40px">暂无日报</div>
+            <div v-for="(r,i) in alertSettings.reportHistory" style="padding:14px 0;border-bottom:1px solid #f0f0f0">
+              <div style="font-size:12px;color:#909399;margin-bottom:4px">{{ r.date }} {{ r.time?.slice(11,16)||'' }}</div>
+              <div style="font-size:14px;line-height:1.7;white-space:pre-wrap">{{ r.summary }}</div>
+            </div>
+            <div style="text-align:right;margin-top:20px">
+              <el-button @click="showReportModal=false">关闭</el-button>
+            </div>
+          </div>
         </div>
 
         <div class="module-board">
