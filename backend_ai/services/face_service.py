@@ -35,10 +35,12 @@ def _detect_onnx_providers(device: str | None = None) -> tuple[list[str], int]:
     if device == "cpu":
         return ["CPUExecutionProvider"], -1
     is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
-    if device in {"cuda", "auto"} or (device is None and not is_apple_silicon):
+    if device == "cuda":
         return ["CUDAExecutionProvider", "CPUExecutionProvider"], 0
     if is_apple_silicon:
         return ["CoreMLExecutionProvider", "CPUExecutionProvider"], -1
+    if device in {"auto", None}:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"], 0
     return ["CPUExecutionProvider"], -1
 
 
