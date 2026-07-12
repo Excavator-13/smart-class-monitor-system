@@ -19,6 +19,9 @@ EVENT_NAMES = {
     "head_down": "长时间低头",
     "crowd_gathering": "异常人流聚集",
     "flame_detected": "明火检测",
+    "spoof_detected": "活体检测异常",
+    "deepfake_detected": "疑似AI换脸攻击",
+    "abnormal_sound": "异常声学事件",
     "stream_offline": "视频流中断",
 }
 
