@@ -14,10 +14,12 @@ import {
   User,
   VideoCamera,
 } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   createStream,
   createStudent,
+  createZone,
+  deleteZone,
   extractFaceFeature,
   fetchAlerts,
   fetchAlertStats,
@@ -35,7 +37,12 @@ import {
   logout,
   register,
   registerStudentFace,
+  toggleRule,
+  toggleZone,
   updateAlertStatus,
+  updateScoreConfig,
+  updateZone,
+  fetchScoreConfig,
 } from "./services/smartClassApi";
 import {
   clearAuthSession,
@@ -49,6 +56,8 @@ import lineDogGif from "./assets/line-dog.gif";
 
 const activePage = ref("monitor");
 const loginBackgroundVideo = `${import.meta.env.BASE_URL}auth/login-moonset.mp4`;
+const authVideoReady = ref(false);
+const authVideoFailed = ref(false);
 const isAuthenticated = ref(Boolean(getStoredToken()));
 const currentUser = ref(getStoredUser());
 const authMode = ref("login");
@@ -166,6 +175,19 @@ watch(alertSettings, saveSettings, { deep: true });
 // 联系人弹窗
 const showContactModal = ref(false);
 const newContact = ref({ name: "", mobile: "" });
+const syncContactsToBackend = async () => {
+  try {
+    await fetch("http://127.0.0.1:8080/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contacts: alertSettings.value.contacts,
+        responsible: alertSettings.value.responsible,
+        reportTime: alertSettings.value.reportTime,
+      }),
+    });
+  } catch {}
+};
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
   if (!name.trim()) {
@@ -185,6 +207,7 @@ const doAddContact = () => {
     mobile: mobile.trim(),
   });
   newContact.value = { name: "", mobile: "" };
+  syncContactsToBackend();
 };
 const removeContact = (name) => {
   if (name === "项重善" || name === "章志超") {
@@ -194,6 +217,7 @@ const removeContact = (name) => {
   alertSettings.value.contacts = alertSettings.value.contacts.filter(
     (c) => c.name !== name,
   );
+  syncContactsToBackend();
 };
 
 // 日报
@@ -205,6 +229,7 @@ const generateAiReport = async () => {
       alertType: a.alert_type || a.type || "未知",
       level: a.level || "info",
       streamId: a.stream_id || a.location || "",
+      snapshotUrl: a.snapshot_url || "",
     }));
     let report;
     try {
@@ -244,7 +269,21 @@ const isDrawingForbiddenZone = ref(false);
 const forbiddenZoneStart = ref(null);
 const forbiddenZoneCurrent = ref(null);
 const pendingForbiddenZone = ref(null);
-const confirmedForbiddenZone = ref(null);
+const zoneSaving = ref(false);
+const deletingZoneIds = ref(new Set());
+const zoneDialogVisible = ref(false);
+const zoneDialogMode = ref("create");
+const zoneForm = ref({
+  id: null,
+  stream_id: "",
+  zone_name: "",
+  zone_type: "danger",
+  coordinates: [],
+  threshold_seconds: 3,
+  safe_distance: 0.05,
+  enabled: true,
+});
+const zoneFormSaving = ref(false);
 
 const streams = ref([]);
 const alerts = ref([]);
@@ -306,9 +345,21 @@ const userRoleName = computed(() => {
     }[currentUser.value?.role] || "未登录"
   );
 });
+const isAdmin = computed(() => currentUser.value?.role === "admin");
 
-const hasConfirmedForbiddenZone = computed(() =>
-  Boolean(confirmedForbiddenZone.value),
+const confirmedForbiddenZones = computed(() =>
+  zones.value
+    .filter(
+      (item) =>
+        item.enabled !== false &&
+        item.zone_type === "phone_forbidden" &&
+        (!activeStreamId.value || item.stream_id === activeStreamId.value),
+    )
+    .map((item) => ({ ...item, rect: rectFromCoordinates(item.coordinates) }))
+    .filter((item) => item.rect),
+);
+const hasConfirmedForbiddenZone = computed(
+  () => confirmedForbiddenZones.value.length > 0,
 );
 const hasPendingForbiddenZone = computed(() =>
   Boolean(pendingForbiddenZone.value),
@@ -364,19 +415,7 @@ const activeStreamZones = computed(() =>
 );
 
 const zoneRows = computed(() => {
-  const rows = [...activeStreamZones.value];
-  if (hasConfirmedForbiddenZone.value) {
-    rows.unshift({
-      id: "drawn-phone-zone",
-      zone_name: "当前手绘禁用区",
-      zone_type: "phone_forbidden",
-      stream_id: activeStreamId.value,
-      coordinates: forbiddenZoneCoordinates.value,
-      enabled: true,
-      source: "实时画面绘制",
-    });
-  }
-  return rows;
+  return [...activeStreamZones.value];
 });
 
 const pendingAlertCount = computed(() => {
@@ -520,13 +559,6 @@ const activeRiskEvents = computed(() => {
 
 const hasActiveRiskEvents = computed(() => activeRiskEvents.value.length > 0);
 
-const aiEventFeed = computed(() => {
-  return activeRiskEvents.value.slice(0, 3).map((item) => ({
-    time: formatEventTime(item.occurred_at),
-    text: `${riskTypeText(item.risk_type)}：${item.alert_name || item.event_name || item.alert_type || item.event_type || "AI 事件"}`,
-  }));
-});
-
 const activeSummary = computed(() => {
   if (!activeRiskEvents.value.length) {
     return {
@@ -596,8 +628,8 @@ const rulePageCards = computed(() => [
   },
   {
     label: "禁用区",
-    value: confirmedForbiddenZone.value
-      ? "已确认"
+    value: hasConfirmedForbiddenZone.value
+      ? `${confirmedForbiddenZones.value.length} 个已启用`
       : pendingForbiddenZone.value
         ? "待确认"
         : "未绘制",
@@ -656,11 +688,7 @@ const activeForbiddenRect = computed(() => {
       forbiddenZoneCurrent.value,
     );
   }
-  return (
-    pendingForbiddenZone.value?.rect ||
-    confirmedForbiddenZone.value?.rect ||
-    null
-  );
+  return pendingForbiddenZone.value?.rect || null;
 });
 
 const forbiddenZoneStyle = computed(() => {
@@ -674,16 +702,9 @@ const forbiddenZoneStyle = computed(() => {
   };
 });
 
-const forbiddenZoneCoordinates = computed(() => {
-  return confirmedForbiddenZone.value?.coordinates || [];
-});
-
-const forbiddenZonePayload = computed(() => ({
-  zone_type: "phone_forbidden",
-  shape_type: "rectangle",
-  stream_id: activeStreamId.value,
-  coordinates: forbiddenZoneCoordinates.value,
-}));
+const forbiddenZoneCoordinates = computed(
+  () => pendingForbiddenZone.value?.coordinates || [],
+);
 
 const phoneDetectionSources = computed(() => {
   return [...analysisEvents.value, ...alerts.value]
@@ -693,10 +714,11 @@ const phoneDetectionSources = computed(() => {
 });
 
 const phoneDetectionsInForbiddenZone = computed(() => {
-  const zone = confirmedForbiddenZone.value?.rect;
-  if (!zone) return [];
+  if (!confirmedForbiddenZones.value.length) return [];
   return phoneDetectionSources.value.filter(({ rect }) =>
-    rectsIntersect(zone, rect),
+    confirmedForbiddenZones.value.some((zone) =>
+      rectsIntersect(zone.rect, rect),
+    ),
   );
 });
 
@@ -1038,6 +1060,15 @@ function riskBaseScore(type) {
   );
 }
 
+async function handleScoreConfigChange(item) {
+  if (!item.id) return;
+  try {
+    await updateScoreConfig(item.id, { score: item.score });
+  } catch (e) {
+    ElMessage.error("评分配置保存失败：" + (e.message || "未知错误"));
+  }
+}
+
 function levelRiskBonus(level) {
   return (
     {
@@ -1088,7 +1119,7 @@ function buildRiskActions(events = []) {
 }
 
 function getVideoPointerPoint(event) {
-  const stage = videoStageRef.value;
+  const stage = event.currentTarget || videoStageRef.value;
   if (!stage) return null;
   const rect = stage.getBoundingClientRect();
   return {
@@ -1248,6 +1279,25 @@ function rectsIntersect(a, b) {
   return overlapWidth > 0 && overlapHeight > 0;
 }
 
+function rectStyle(rect) {
+  if (!rect) return {};
+  return {
+    left: `${rect.x * 100}%`,
+    top: `${rect.y * 100}%`,
+    width: `${rect.width * 100}%`,
+    height: `${rect.height * 100}%`,
+  };
+}
+
+function zoneDisplayName(zone, index) {
+  return zone.zone_name || `手机禁用区 ${index + 1}`;
+}
+
+function resetForbiddenZoneDraft() {
+  pendingForbiddenZone.value = null;
+  cancelForbiddenZoneDraw();
+}
+
 function startForbiddenZoneDraw(event) {
   if (!showRuleOverlay.value) return;
   if (event.button !== 0) return;
@@ -1292,20 +1342,211 @@ function cancelForbiddenZoneDraw() {
   forbiddenZoneCurrent.value = null;
 }
 
-function confirmForbiddenZone() {
-  if (!pendingForbiddenZone.value) return;
-  confirmedForbiddenZone.value = pendingForbiddenZone.value;
-  pendingForbiddenZone.value = null;
+async function confirmForbiddenZone() {
+  if (!pendingForbiddenZone.value || !activeStreamId.value || zoneSaving.value)
+    return;
+  zoneSaving.value = true;
+  try {
+    const created = await createZone({
+      stream_id: activeStreamId.value,
+      zone_name: `手机禁用区 ${confirmedForbiddenZones.value.length + 1}`,
+      zone_type: "phone_forbidden",
+      coordinates: pendingForbiddenZone.value.coordinates,
+      threshold_seconds: 1,
+      safe_distance: 0,
+    });
+    zones.value = [
+      ...zones.value.filter((item) => item.id !== created.id),
+      created,
+    ];
+    pendingForbiddenZone.value = null;
+    ElMessage.success("禁用区已保存，AI 区域配置正在刷新。");
+  } catch (error) {
+    ElMessage.error(error?.message || "禁用区保存失败，请检查后端服务。");
+  } finally {
+    zoneSaving.value = false;
+  }
 }
 
 function clearForbiddenZone() {
-  pendingForbiddenZone.value = null;
-  confirmedForbiddenZone.value = null;
-  cancelForbiddenZoneDraw();
+  resetForbiddenZoneDraft();
+}
+
+async function removeForbiddenZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  if (id === undefined || id === null || deletingZoneIds.value.has(id)) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除“${zone.zone_name || "该禁用区"}”吗？删除后 AI 将停止使用这个区域。`,
+      "删除禁用区",
+      {
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+  deletingZoneIds.value = new Set([...deletingZoneIds.value, id]);
+  try {
+    await deleteZone(id);
+    zones.value = zones.value.filter(
+      (item) => (item.id ?? item.zone_id) !== id,
+    );
+    ElMessage.success(`${zone.zone_name || "禁用区"}已删除，AI 配置正在刷新。`);
+  } catch (error) {
+    ElMessage.error(error?.message || "禁用区删除失败，请稍后重试。");
+  } finally {
+    const nextIds = new Set(deletingZoneIds.value);
+    nextIds.delete(id);
+    deletingZoneIds.value = nextIds;
+  }
 }
 
 function toggleAiAnnotations() {
   showAiAnnotations.value = !showAiAnnotations.value;
+}
+
+function openZoneDialog(mode, zone) {
+  zoneDialogMode.value = mode;
+  if (mode === "create") {
+    zoneForm.value = {
+      id: null,
+      stream_id: activeStreamId.value || "",
+      zone_name: "",
+      zone_type: "danger",
+      coordinates: [],
+      threshold_seconds: 3,
+      safe_distance: 0.05,
+      enabled: true,
+    };
+  } else {
+    zoneForm.value = {
+      id: zone.id ?? zone.zone_id,
+      stream_id: zone.stream_id || "",
+      zone_name: zone.zone_name || "",
+      zone_type: zone.zone_type || "danger",
+      coordinates: zone.coordinates || [],
+      threshold_seconds: zone.threshold_seconds ?? 3,
+      safe_distance: zone.safe_distance ?? 0.05,
+      enabled: zone.enabled ?? true,
+    };
+  }
+  zoneDialogVisible.value = true;
+}
+
+async function saveZone() {
+  const form = zoneForm.value;
+  if (!form.zone_name.trim()) {
+    ElMessage.warning("请填写区域名称。");
+    return;
+  }
+  if (!form.stream_id) {
+    ElMessage.warning("请选择视频源。");
+    return;
+  }
+  zoneFormSaving.value = true;
+  try {
+    if (zoneDialogMode.value === "create") {
+      const created = await createZone({
+        stream_id: form.stream_id,
+        zone_name: form.zone_name.trim(),
+        zone_type: form.zone_type,
+        coordinates: form.coordinates,
+        threshold_seconds: form.threshold_seconds,
+        safe_distance: form.safe_distance,
+      });
+      zones.value = [
+        ...zones.value.filter((item) => item.id !== created.id),
+        created,
+      ];
+      ElMessage.success("区域已创建。");
+    } else {
+      await updateZone(form.id, {
+        zone_name: form.zone_name.trim(),
+        zone_type: form.zone_type,
+        coordinates: form.coordinates,
+        threshold_seconds: form.threshold_seconds,
+        safe_distance: form.safe_distance,
+        enabled: form.enabled,
+      });
+      zones.value = zones.value.map((item) =>
+        (item.id ?? item.zone_id) === form.id
+          ? {
+              ...item,
+              zone_name: form.zone_name.trim(),
+              zone_type: form.zone_type,
+              threshold_seconds: form.threshold_seconds,
+              safe_distance: form.safe_distance,
+              enabled: form.enabled,
+            }
+          : item,
+      );
+      ElMessage.success("区域已更新。");
+    }
+    zoneDialogVisible.value = false;
+  } catch (error) {
+    ElMessage.error(error?.message || "区域保存失败。");
+  } finally {
+    zoneFormSaving.value = false;
+  }
+}
+
+async function handleDeleteZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  if (id === undefined || id === null || deletingZoneIds.value.has(id)) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除"${zone.zone_name || "该区域"}"吗？`,
+      "删除区域",
+      { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" },
+    );
+  } catch {
+    return;
+  }
+  deletingZoneIds.value = new Set([...deletingZoneIds.value, id]);
+  try {
+    await deleteZone(id);
+    zones.value = zones.value.filter(
+      (item) => (item.id ?? item.zone_id) !== id,
+    );
+    ElMessage.success(`${zone.zone_name || "区域"}已删除。`);
+  } catch (error) {
+    ElMessage.error(error?.message || "区域删除失败。");
+  } finally {
+    const nextIds = new Set(deletingZoneIds.value);
+    nextIds.delete(id);
+    deletingZoneIds.value = nextIds;
+  }
+}
+
+async function handleToggleZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  const newEnabled = !zone.enabled;
+  try {
+    await toggleZone(id, newEnabled);
+    zones.value = zones.value.map((item) =>
+      (item.id ?? item.zone_id) === id
+        ? { ...item, enabled: newEnabled }
+        : item,
+    );
+  } catch (error) {
+    ElMessage.error(error?.message || "切换区域开关失败。");
+  }
+}
+
+async function handleToggleRule(rule) {
+  const id = rule?.id;
+  const newEnabled = !rule.enabled;
+  try {
+    await toggleRule(id, newEnabled);
+    rules.value = rules.value.map((item) =>
+      item.id === id ? { ...item, enabled: newEnabled } : item,
+    );
+  } catch (error) {
+    ElMessage.error(error?.message || "切换规则开关失败。");
+  }
 }
 
 function toggleRuleOverlay() {
@@ -1473,6 +1714,7 @@ async function loadDashboard() {
     stats: fetchAlertStats({ stream_id: activeStreamId.value }),
     rules: fetchRules(),
     zones: fetchZones({ stream_id: activeStreamId.value }),
+    scoreConfig: fetchScoreConfig(),
     students: fetchStudents({ page: 1, page_size: 10 }),
     health: fetchSystemHealth(),
     summary: activeStreamId.value
@@ -1507,6 +1749,15 @@ async function loadDashboard() {
   stats.value = results.stats.ok ? results.stats.value || {} : {};
   rules.value = results.rules.ok ? normalizeList(results.rules.value) : [];
   zones.value = results.zones.ok ? normalizeList(results.zones.value) : [];
+  if (results.scoreConfig.ok && Array.isArray(results.scoreConfig.value)) {
+    riskScoreSettings.value = results.scoreConfig.value.map((item) => ({
+      id: item.id,
+      type: item.alert_type,
+      label: item.label,
+      score: item.score,
+      note: item.note || "",
+    }));
+  }
   students.value = results.students.ok
     ? normalizeList(results.students.value)
     : [];
@@ -1528,12 +1779,14 @@ async function loadDashboard() {
 
   if (!previousStreamId && activeStreamId.value) {
     try {
-      const [nextSummary, nextEvents] = await Promise.all([
+      const [nextSummary, nextEvents, nextZones] = await Promise.all([
         fetchAnalysisSummary(activeStreamId.value),
         fetchAnalysisEvents({ stream_id: activeStreamId.value }),
+        fetchZones({ stream_id: activeStreamId.value }),
       ]);
       summary.value = nextSummary || {};
       analysisEvents.value = normalizeList(nextEvents);
+      zones.value = normalizeList(nextZones);
     } catch (error) {
       loadErrors.value.summary = error?.message || "AI 分析接口请求失败";
     }
@@ -1544,14 +1797,16 @@ async function switchStream(streamId) {
   activeStreamId.value = streamId;
   isVideoLive.value = false;
   videoError.value = false;
-  clearForbiddenZone();
+  resetForbiddenZoneDraft();
   try {
-    const [nextSummary, nextEvents] = await Promise.all([
+    const [nextSummary, nextEvents, nextZones] = await Promise.all([
       fetchAnalysisSummary(streamId),
       fetchAnalysisEvents({ stream_id: streamId }),
+      fetchZones({ stream_id: streamId }),
     ]);
     summary.value = nextSummary || {};
     analysisEvents.value = normalizeList(nextEvents);
+    zones.value = normalizeList(nextZones);
     loadErrors.value.summary = "";
     loadErrors.value.events = "";
   } catch (error) {
@@ -2011,13 +2266,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 <template>
   <section v-if="!isAuthenticated" class="auth-shell">
     <video
+      v-if="!authVideoFailed"
       class="auth-bg-video"
+      :class="{ ready: authVideoReady }"
       autoplay
       muted
       loop
       playsinline
       preload="auto"
       aria-hidden="true"
+      @canplay="authVideoReady = true"
+      @error="authVideoFailed = true"
     >
       <source :src="loginBackgroundVideo" type="video/mp4" />
     </video>
@@ -2353,49 +2612,90 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </span>
               </div>
 
+              <template v-if="showRuleOverlay">
+                <div
+                  v-for="(zone, index) in confirmedForbiddenZones"
+                  :key="zone.id || zone.zone_id"
+                  class="drawn-forbidden-zone confirmed"
+                  :style="rectStyle(zone.rect)"
+                >
+                  <span>{{ zoneDisplayName(zone, index) }}</span>
+                </div>
+                <div
+                  v-if="activeForbiddenRect"
+                  class="drawn-forbidden-zone drafting"
+                  :style="forbiddenZoneStyle"
+                >
+                  <span>{{
+                    isDrawingForbiddenZone ? "绘制中" : "待确认禁用区"
+                  }}</span>
+                </div>
+              </template>
               <div
-                v-if="showRuleOverlay && activeForbiddenRect"
-                class="drawn-forbidden-zone"
-                :class="{
-                  drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
-                  confirmed: hasConfirmedForbiddenZone,
-                }"
-                :style="forbiddenZoneStyle"
+                v-if="showRuleOverlay && !activeForbiddenRect"
+                class="draw-hint"
               >
-                <span>{{
-                  isDrawingForbiddenZone
-                    ? "绘制中"
-                    : hasPendingForbiddenZone
-                      ? "待确认禁用区"
-                      : "已确认禁用区"
-                }}</span>
+                {{
+                  hasConfirmedForbiddenZone
+                    ? "可继续拖拽添加禁用区"
+                    : "按住鼠标左键拖拽，绘制禁用区"
+                }}
               </div>
-              <div v-else-if="showRuleOverlay" class="draw-hint">
-                按住鼠标左键拖拽，绘制禁用区
+              <div v-if="!showRuleOverlay" class="draw-hint muted">
+                区域规则层已关闭
               </div>
-              <div v-else class="draw-hint muted">区域规则层已关闭</div>
               <div
-                v-if="
-                  showRuleOverlay &&
-                  (hasPendingForbiddenZone || hasConfirmedForbiddenZone)
-                "
+                v-if="showRuleOverlay && hasPendingForbiddenZone"
                 class="zone-actions"
+                @mousedown.stop
               >
                 <button
-                  v-if="hasPendingForbiddenZone"
                   type="button"
                   class="zone-action primary"
+                  :disabled="zoneSaving"
                   @click.stop="confirmForbiddenZone"
                 >
-                  确定
+                  {{ zoneSaving ? "保存中..." : "确定并启用" }}
                 </button>
                 <button
                   type="button"
                   class="zone-action"
                   @click.stop="clearForbiddenZone"
                 >
-                  删除重新选择
+                  取消草稿
                 </button>
+              </div>
+              <div
+                v-if="showRuleOverlay && confirmedForbiddenZones.length"
+                class="zone-manager"
+                @mousedown.stop
+              >
+                <div class="zone-manager-title">
+                  <b>已启用禁用区</b>
+                  <span>{{ confirmedForbiddenZones.length }} 个</span>
+                </div>
+                <div class="zone-manager-list">
+                  <div
+                    v-for="(zone, index) in confirmedForbiddenZones"
+                    :key="`manager-${zone.id || zone.zone_id}`"
+                    class="zone-manager-item"
+                  >
+                    <span>{{ zoneDisplayName(zone, index) }}</span>
+                    <button
+                      type="button"
+                      class="zone-delete-button"
+                      :disabled="deletingZoneIds.has(zone.id || zone.zone_id)"
+                      :title="`删除${zoneDisplayName(zone, index)}`"
+                      @click.stop="removeForbiddenZone(zone)"
+                    >
+                      {{
+                        deletingZoneIds.has(zone.id || zone.zone_id)
+                          ? "删除中"
+                          : "删除"
+                      }}
+                    </button>
+                  </div>
+                </div>
               </div>
               <template v-if="showAiAnnotations">
                 <div
@@ -2433,7 +2733,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </section>
 
-          <section class="overview-grid">
+          <section class="overview-grid tracking-overview">
             <div class="panel">
               <div class="panel-head compact">
                 <h2>告警追踪记录</h2>
@@ -2515,15 +2815,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   action
                 }}</span>
               </div>
-              <div class="event-feed">
-                <article
-                  v-for="item in aiEventFeed"
-                  :key="`${item.time}-${item.text}`"
-                >
-                  <time>{{ item.time }}</time>
-                  <span>{{ item.text }}</span>
-                </article>
-              </div>
               <div class="timeline">
                 <div
                   v-for="item in activeSummary.timeline || []"
@@ -2572,9 +2863,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="rule-list">
               <article class="zone-coordinate-card">
                 <div>
-                  <b>当前禁用区</b>
+                  <b>实时画面禁用区</b>
                   <span v-if="forbiddenZoneCoordinates.length">
-                    {{
+                    待确认：{{
                       forbiddenZoneCoordinates
                         .map(
                           (point) =>
@@ -2583,9 +2874,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                         .join(" / ")
                     }}
                   </span>
-                  <span v-else-if="hasPendingForbiddenZone"
-                    >区域待确认，点击确定后输出四角坐标</span
-                  >
+                  <span v-else-if="confirmedForbiddenZones.length">
+                    已启用
+                    {{ confirmedForbiddenZones.length }}
+                    个区域，可在实时画面列表中逐个删除
+                  </span>
                   <span v-else>尚未绘制，拖拽实时画面生成四角坐标</span>
                 </div>
               </article>
@@ -2598,8 +2891,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   >
                 </div>
                 <el-switch
-                  v-model="rule.enabled"
+                  :model-value="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  @change="handleToggleRule(rule)"
                 />
               </article>
             </div>
@@ -3051,7 +3345,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </el-table>
           </section>
 
-          <section class="panel span-7">
+          <section class="panel span-12">
             <div class="panel-head compact">
               <h2>告警评分配置</h2>
             </div>
@@ -3067,6 +3361,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   :max="100"
                   :step="1"
                   size="small"
+                  :disabled="!isAdmin"
+                  @change="handleScoreConfigChange(item)"
                 />
               </article>
             </div>
@@ -3074,7 +3370,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
       </section>
 
-      <section v-else-if="activePage === 'rules'" class="page-grid module-page">
+      <section
+        v-else-if="activePage === 'rules'"
+        class="page-grid module-page centered-module-page"
+      >
         <div class="page-kpis">
           <article
             v-for="item in rulePageCards"
@@ -3111,22 +3410,36 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     :min="1"
                     :max="30"
                     size="small"
+                    :disabled="!isAdmin"
                   />
                 </div>
                 <el-switch
-                  v-model="rule.enabled"
+                  :model-value="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  @change="handleToggleRule(rule)"
                 />
               </article>
             </div>
           </section>
 
           <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>当前已设定区域</h2>
+            <div class="panel-head">
+              <div>
+                <h2>区域管理</h2>
+                <span
+                  >区域来自
+                  `/zones`，支持危险区、座位区、手机禁用区、识别区域等类型。</span
+                >
+              </div>
+              <el-button
+                type="primary"
+                size="small"
+                @click="openZoneDialog('create')"
+                >新增区域</el-button
+              >
             </div>
-            <el-table :data="zoneRows" height="260" class="clean-table">
-              <el-table-column label="区域名称" min-width="130">
+            <el-table :data="zoneRows" height="390" class="clean-table">
+              <el-table-column label="区域名称" min-width="110">
                 <template #default="{ row }">
                   {{ row.zone_name || "未命名区域" }}
                 </template>
@@ -3138,16 +3451,50 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="90">
+              <el-table-column label="阈值(秒)" width="80">
                 <template #default="{ row }">
-                  <el-tag :type="row.enabled ? 'success' : 'info'">
-                    {{ row.enabled ? "启用" : "停用" }}
-                  </el-tag>
+                  {{ row.threshold_seconds ?? "--" }}
                 </template>
               </el-table-column>
-              <el-table-column label="坐标" min-width="220">
+              <el-table-column label="预警距离" width="80">
+                <template #default="{ row }">
+                  {{
+                    row.safe_distance
+                      ? (row.safe_distance * 100).toFixed(1) + "%"
+                      : "--"
+                  }}
+                </template>
+              </el-table-column>
+              <el-table-column label="开关" width="70">
+                <template #default="{ row }">
+                  <el-switch
+                    :model-value="row.enabled"
+                    size="small"
+                    @change="handleToggleZone(row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="坐标" min-width="140">
                 <template #default="{ row }">
                   <span class="coord-text">{{ zoneCoordinateText(row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    text
+                    @click="openZoneDialog('edit', row)"
+                    >编辑</el-button
+                  >
+                  <el-button
+                    size="small"
+                    type="danger"
+                    text
+                    @click="handleDeleteZone(row)"
+                    >删除</el-button
+                  >
                 </template>
               </el-table-column>
             </el-table>
@@ -3157,7 +3504,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
       <section
         v-else-if="activePage === 'people'"
-        class="page-grid module-page"
+        class="page-grid module-page centered-module-page"
       >
         <div class="page-kpis">
           <article
@@ -3172,7 +3519,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
 
         <div class="module-board">
-          <section class="panel span-8">
+          <section class="panel span-12">
             <div class="panel-head">
               <div>
                 <h2>人员与人脸库</h2>
@@ -3181,11 +3528,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   `/students/{id}/face`。</span
                 >
               </div>
-              <el-button type="primary" :icon="User" @click="openPersonDialog"
+              <el-button
+                v-if="isAdmin"
+                type="primary"
+                :icon="User"
+                @click="openPersonDialog"
                 >新增人员</el-button
               >
             </div>
-            <el-table :data="students" height="320" class="clean-table">
+            <el-table :data="students" height="480" class="clean-table">
               <el-table-column prop="student_no" label="编号" width="110" />
               <el-table-column prop="name" label="姓名" width="120" />
               <el-table-column
@@ -3201,7 +3552,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </template>
               </el-table-column>
               <el-table-column prop="last_seen" label="最近出现" width="110" />
-              <el-table-column label="操作" width="130" fixed="right">
+              <el-table-column
+                v-if="isAdmin"
+                label="操作"
+                width="130"
+                fixed="right"
+              >
                 <template #default="{ row }">
                   <el-button
                     size="small"
@@ -3218,7 +3574,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
       </section>
 
-      <section v-else class="page-grid module-page">
+      <section v-else class="page-grid module-page centered-module-page">
         <div class="page-kpis">
           <article
             v-for="item in systemPageCards"
@@ -3232,7 +3588,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </div>
 
         <div class="module-board">
-          <section class="panel span-7">
+          <section class="panel span-8">
             <div class="panel-head">
               <div>
                 <h2>视频源与服务状态</h2>
@@ -3240,7 +3596,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   >对应 `/streams`、`/model/status`、`/system/health`。</span
                 >
               </div>
-              <el-button :icon="Switch" @click="openStreamDialog"
+              <el-button v-if="isAdmin" :icon="Switch" @click="openStreamDialog"
                 >新增视频源</el-button
               >
             </div>
@@ -3260,7 +3616,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </section>
 
-          <section class="panel span-5">
+          <section class="panel span-4">
             <div class="panel-head compact">
               <h2>运行概览</h2>
             </div>
@@ -3497,6 +3853,87 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </template>
       </el-dialog>
 
+      <el-dialog
+        v-model="zoneDialogVisible"
+        :title="zoneDialogMode === 'create' ? '新增区域' : '编辑区域'"
+        width="520px"
+        class="local-edit-dialog"
+      >
+        <el-form class="local-edit-form" label-position="top">
+          <el-form-item label="视频源">
+            <el-select
+              v-model="zoneForm.stream_id"
+              placeholder="选择视频源"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="stream in streams"
+                :key="stream.stream_id"
+                :label="stream.stream_name || stream.stream_id"
+                :value="stream.stream_id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="区域名称">
+            <el-input
+              v-model="zoneForm.zone_name"
+              placeholder="例如 一号教室危险区"
+            />
+          </el-form-item>
+          <el-form-item label="区域类型">
+            <el-select v-model="zoneForm.zone_type" style="width: 100%">
+              <el-option label="危险区" value="danger" />
+              <el-option label="座位区" value="seat" />
+              <el-option label="手机禁用区" value="phone_forbidden" />
+              <el-option label="识别区域" value="roi" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="停留阈值（秒）">
+            <el-input-number
+              v-model="zoneForm.threshold_seconds"
+              :min="1"
+              :max="60"
+            />
+            <span style="margin-left: 8px; color: #909399; font-size: 12px"
+              >目标在区域内持续停留超过此时长后触发告警</span
+            >
+          </el-form-item>
+          <el-form-item label="预警距离（归一化比例）">
+            <el-input-number
+              v-model="zoneForm.safe_distance"
+              :min="0"
+              :max="0.5"
+              :step="0.01"
+              :precision="2"
+            />
+            <span style="margin-left: 8px; color: #909399; font-size: 12px"
+              >实际判定框比显示框向外扩展此比例，0 表示严格按框判定</span
+            >
+          </el-form-item>
+          <el-form-item v-if="zoneDialogMode === 'edit'" label="启用状态">
+            <el-switch v-model="zoneForm.enabled" />
+          </el-form-item>
+          <p class="dialog-hint">
+            坐标可在实时监控页面拖拽绘制后从此处编辑，或由 AI
+            自动生成。当前坐标：{{
+              zoneForm.coordinates.length
+                ? zoneCoordinateText(zoneForm)
+                : "暂无"
+            }}
+          </p>
+        </el-form>
+        <template #footer>
+          <el-button @click="zoneDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :disabled="zoneFormSaving"
+            @click="saveZone"
+          >
+            {{ zoneFormSaving ? "保存中..." : "确定" }}
+          </el-button>
+        </template>
+      </el-dialog>
+
       <div
         v-if="isVideoExpanded"
         class="video-expanded-mask"
@@ -3521,7 +3958,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               关闭
             </button>
           </header>
-          <div class="video-expanded-stage">
+          <div
+            class="video-expanded-stage"
+            :class="{
+              drawing: isDrawingForbiddenZone,
+              locked: !showRuleOverlay,
+            }"
+            @mousedown.left.prevent="startForbiddenZoneDraw"
+            @mousemove="updateForbiddenZoneDraw"
+            @mouseup="finishForbiddenZoneDraw"
+            @mouseleave="finishForbiddenZoneDraw"
+          >
             <img
               v-if="!videoError"
               class="video-stream"
@@ -3539,18 +3986,76 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div class="desk d2"></div>
               <div class="desk d3"></div>
             </div>
+            <template v-if="showRuleOverlay">
+              <div
+                v-for="(zone, index) in confirmedForbiddenZones"
+                :key="`expanded-${zone.id || zone.zone_id}`"
+                class="drawn-forbidden-zone confirmed"
+                :style="rectStyle(zone.rect)"
+              >
+                <span>{{ zoneDisplayName(zone, index) }}</span>
+              </div>
+              <div
+                v-if="activeForbiddenRect"
+                class="drawn-forbidden-zone drafting"
+                :style="forbiddenZoneStyle"
+              >
+                <span>{{
+                  isDrawingForbiddenZone ? "绘制中" : "待确认禁用区"
+                }}</span>
+              </div>
+            </template>
             <div
-              v-if="showRuleOverlay && activeForbiddenRect"
-              class="drawn-forbidden-zone"
-              :class="{
-                drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
-                confirmed: hasConfirmedForbiddenZone,
-              }"
-              :style="forbiddenZoneStyle"
+              v-if="showRuleOverlay && hasPendingForbiddenZone"
+              class="zone-actions"
+              @mousedown.stop
             >
-              <span>{{
-                hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区"
-              }}</span>
+              <button
+                type="button"
+                class="zone-action primary"
+                :disabled="zoneSaving"
+                @click.stop="confirmForbiddenZone"
+              >
+                {{ zoneSaving ? "保存中..." : "确定并启用" }}
+              </button>
+              <button
+                type="button"
+                class="zone-action"
+                @click.stop="clearForbiddenZone"
+              >
+                取消草稿
+              </button>
+            </div>
+            <div
+              v-if="showRuleOverlay && confirmedForbiddenZones.length"
+              class="zone-manager expanded"
+              @mousedown.stop
+            >
+              <div class="zone-manager-title">
+                <b>已启用禁用区</b>
+                <span>{{ confirmedForbiddenZones.length }} 个</span>
+              </div>
+              <div class="zone-manager-list">
+                <div
+                  v-for="(zone, index) in confirmedForbiddenZones"
+                  :key="`expanded-manager-${zone.id || zone.zone_id}`"
+                  class="zone-manager-item"
+                >
+                  <span>{{ zoneDisplayName(zone, index) }}</span>
+                  <button
+                    type="button"
+                    class="zone-delete-button"
+                    :disabled="deletingZoneIds.has(zone.id || zone.zone_id)"
+                    @click.stop="removeForbiddenZone(zone)"
+                  >
+                    {{
+                      deletingZoneIds.has(zone.id || zone.zone_id)
+                        ? "删除中"
+                        : "删除"
+                    }}
+                  </button>
+                </div>
+              </div>
             </div>
             <template v-if="showAiAnnotations">
               <div

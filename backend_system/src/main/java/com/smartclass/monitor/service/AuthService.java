@@ -68,7 +68,7 @@ public class AuthService {
         User user = new User();
         user.setUsername(username);
         user.setPasswordHash(passwordEncoder.encode(password));
-        user.setRole("teacher");
+        user.setRole(userMapper.countActive() == 0 ? "admin" : "teacher");
         user.setNickname(nickname);
         user.setStatus("enabled");
 

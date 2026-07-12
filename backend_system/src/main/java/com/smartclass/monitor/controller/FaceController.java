@@ -2,6 +2,7 @@ package com.smartclass.monitor.controller;
 
 import com.smartclass.monitor.common.response.ApiResponse;
 import com.smartclass.monitor.dto.FaceRegisterRequest;
+import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.FaceService;
 import com.smartclass.monitor.vo.FaceFeatureVO;
 import com.smartclass.monitor.vo.FaceRegisterResponse;
@@ -24,6 +25,7 @@ public class FaceController {
 
     @PostMapping("/students/{id}/face")
     @Operation(summary = "人脸注册", description = "上传 base64 人脸图片，调 AI 提取特征并入库")
+    @RequireRole("admin")
     public ApiResponse<FaceRegisterResponse> registerFace(@PathVariable Long id,
                                                            @Valid @RequestBody FaceRegisterRequest request) {
         return ApiResponse.success(faceService.registerFace(id, request.getImage()));

@@ -5,11 +5,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -25,10 +28,10 @@ public class ReportService {
     @Value("${report.qwen.url:https://ws-bwonuhgq62ys3o1g.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions}")
     private String qwenUrl;
 
-    @Value("${report.qwen.key:sk-ws-H.EMYEIEX.dnvZ.MEQCIFdlcGSG5aYzr7oYUKZyArz7gl6FHlS8Jf4rSeNl8VpeAiAt7m_LOJgP0jVkSfIdS5JlfEr1-ei183LTJIOS8WRl0Q}")
+    @Value("${report.qwen.key:sk-ws-H.EMXPMID.91yA.MEUCIQC6JxHW4VNET1qOKTBSr18mHMtU8QFBk-LsyK2OmWOPygIgPuLCk8dpBFHYLsIEO4tNeigdh5RPhMj4hm9lUTtY0iY}")
     private String qwenKey;
 
-    @Value("${report.qwen.model:qwen-plus-2025-07-28}")
+    @Value("${report.qwen.model:qwen3.7-plus}")
     private String model;
 
     @Value("${report.ai-enabled:true}")
@@ -36,6 +39,24 @@ public class ReportService {
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** 前端传来的设置 */
+    private volatile Map<String, Object> settings = new LinkedHashMap<>();
+
+    /** 每隔 10 分钟检查是否到设置的日报时间 */
+    @Scheduled(fixedRate = 600000)
+    public void checkAndAutoGenerate() {
+        if (!aiEnabled) return;
+        String setTime = String.valueOf(settings.getOrDefault("reportTime", "18:00"));
+        String now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES).toString();
+        if (now.length() >= 5) now = now.substring(0, 5);
+        if (now.equals(setTime)) {
+            log.info("定时生成日报 {} ", now);
+            generateReport(Collections.emptyList());
+        }
+    }
+
+    public void updateSettings(Map<String, Object> s) { this.settings = s; }
 
     /** 最新的日报缓存 */
     private volatile Map<String, Object> latestReport;
@@ -90,6 +111,13 @@ public class ReportService {
 
     public Map<String, Object> getLatestReport() {
         return latestReport;
+    }
+
+    public List<Map<String, Object>> getHistory() {
+        if (latestReport == null) {
+            return Collections.emptyList();
+        }
+        return Collections.singletonList(latestReport);
     }
 
     /** 调用千问 API */

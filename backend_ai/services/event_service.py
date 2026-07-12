@@ -21,6 +21,9 @@ EVENT_NAMES = {
     "fall_detected": "人员摔倒",
     "leave_seat": "长时间离座",
     "flame_detected": "明火检测",
+    "spoof_detected": "活体检测异常",
+    "deepfake_detected": "疑似AI换脸攻击",
+    "abnormal_sound": "异常声学事件",
     "stream_offline": "视频流中断",
 }
 

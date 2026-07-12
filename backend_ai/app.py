@@ -6,16 +6,19 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, Response, request
+from flask import Flask, Response, request, send_from_directory
 
 from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.dingtalk_service import start_stream, trigger_alert
 from backend_ai.services.analysis_service import AnalysisService
+from backend_ai.services.anti_spoof_service import AntiSpoofService
+from backend_ai.services.audio_service import AudioService
 from backend_ai.services.behavior_service import BehaviorService
 from backend_ai.services.config_client import ConfigClient
 from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
 from backend_ai.services.fire_service import FireService
+from backend_ai.services.snapshot_push import SnapshotPusher
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
@@ -119,6 +122,36 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     elif fire_service is None:
         fire_service = FireService(model=None)
 
+    anti_spoof_settings = (model_config.get("models") or {}).get("anti_spoof", {})
+    anti_spoof_service = (overrides or {}).get("anti_spoof_service") if overrides else None
+    if anti_spoof_service is None and anti_spoof_settings.get("enabled", False):
+        try:
+            anti_spoof_service = AntiSpoofService(
+                blink_threshold_seconds=float(anti_spoof_settings.get("blink_threshold_seconds", 5.0)),
+                texture_variance_threshold=float(anti_spoof_settings.get("texture_variance_threshold", 8.0)),
+            )
+            print("[AntiSpoof] 活体检测模块已启用")
+        except Exception as exc:
+            print(f"[AntiSpoof] 活体检测模块加载失败: {exc}")
+            anti_spoof_service = None
+    elif anti_spoof_service is None and not anti_spoof_settings.get("enabled", False):
+        anti_spoof_service = None
+
+    audio_settings = (model_config.get("models") or {}).get("audio", {})
+    audio_service = (overrides or {}).get("audio_service") if overrides else None
+    if audio_service is None and audio_settings.get("enabled", False):
+        try:
+            audio_service = AudioService(
+                sample_rate=int(audio_settings.get("sample_rate", 16000)),
+                window_ms=int(audio_settings.get("window_ms", 1000)),
+            )
+            print("[Audio] 异常声学检测模块已启用")
+        except Exception as exc:
+            print(f"[Audio] 异常声学检测模块加载失败: {exc}")
+            audio_service = None
+    elif audio_service is None and not audio_settings.get("enabled", False):
+        audio_service = None
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
     alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
     start_stream()  # 启动钉钉 Stream 监听
@@ -128,6 +161,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
     )
+    snapshot_remote = app_config.get("snapshot_remote", {})
+    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
+    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
+    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
+    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
+
     analysis_service = AnalysisService(
         face_service=face_service,
         zone_service=zone_service,
@@ -135,8 +174,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         event_service=event_service,
         config_client=config_client,
         fire_service=fire_service,
+        anti_spoof_service=anti_spoof_service,
+        audio_service=audio_service,
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_pusher=snapshot_pusher,
     )
 
     app.extensions["ai_services"] = {
@@ -146,6 +188,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         "zone_service": zone_service,
         "behavior_service": behavior_service,
         "fire_service": fire_service,
+        "anti_spoof_service": anti_spoof_service,
+        "audio_service": audio_service,
         "alert_client": alert_client,
         "stream_manager": stream_manager,
         "analysis_service": analysis_service,
@@ -177,7 +221,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 "avg_infer_ms": analysis_service.avg_latency_ms("behavior"),
                 "last_error": getattr(behavior_service, "last_error", None),
             },
+            {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
+            {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
             {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
+            {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
+            {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
@@ -268,7 +316,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             return error_response(40401, "stream not found", status=404)
         annotate = request.args.get("annotate", "true").lower() != "false"
         modules_param = request.args.get("modules", "all")
-        modules = {"face", "zone", "behavior", "fire"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
+        modules = {"face", "zone", "behavior", "fire", "anti_spoof", "audio"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
 
         def generate():
             while True:
@@ -285,6 +333,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+    @app.get("/snapshots/<path:filename>")
+    def serve_snapshot(filename: str):
+        snapshot_dir = BASE_DIR / "static" / "snapshots"
+        return send_from_directory(snapshot_dir, filename)
 
     return app
 

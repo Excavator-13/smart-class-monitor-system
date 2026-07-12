@@ -4,6 +4,7 @@ import com.smartclass.monitor.common.response.ApiResponse;
 import com.smartclass.monitor.common.response.PageResult;
 import com.smartclass.monitor.dto.StreamCreateRequest;
 import com.smartclass.monitor.dto.StreamUpdateRequest;
+import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.StreamService;
 import com.smartclass.monitor.vo.StreamPreviewVO;
 import com.smartclass.monitor.vo.StreamStatusVO;
@@ -37,6 +38,7 @@ public class StreamController {
 
     @PostMapping("/streams")
     @Operation(summary = "新增视频源", description = "创建新的视频源，stream_id 必须唯一且与推流端 Stream Key 一致")
+    @RequireRole("admin")
     public ApiResponse<StreamVO> create(@Valid @RequestBody StreamCreateRequest request) {
         return ApiResponse.success(streamService.createStream(request));
     }
@@ -55,6 +57,7 @@ public class StreamController {
 
     @PutMapping("/streams/{id}")
     @Operation(summary = "编辑视频源", description = "根据数据库主键 id 更新视频源")
+    @RequireRole("admin")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody StreamUpdateRequest request) {
         streamService.updateStream(id, request);
         return ApiResponse.success();
@@ -62,6 +65,7 @@ public class StreamController {
 
     @DeleteMapping("/streams/{id}")
     @Operation(summary = "删除视频源", description = "软删除视频源，有关联告警时不会物理删除")
+    @RequireRole("admin")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         streamService.deleteStream(id);
         return ApiResponse.success();

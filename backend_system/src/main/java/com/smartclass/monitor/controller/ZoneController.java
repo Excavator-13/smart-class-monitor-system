@@ -56,6 +56,13 @@ public class ZoneController {
         return ApiResponse.success();
     }
 
+    @PutMapping("/zones/{id}/toggle")
+    @Operation(summary = "切换区域开关", description = "仅切换 enabled 状态，teacher 可调用")
+    public ApiResponse<Void> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
+        zoneService.toggleZone(id, enabled);
+        return ApiResponse.success();
+    }
+
     @GetMapping("/streams/{stream_id}/zones")
     @Operation(summary = "获取视频源全部区域", description = "查询指定 stream_id 下的所有已启用区域")
     public ApiResponse<List<ZoneVO>> zonesByStream(@PathVariable("stream_id") String streamId) {
