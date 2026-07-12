@@ -5,7 +5,18 @@ from typing import Any
 
 import requests
 
+from backend_ai.services.event_service import EVENT_NAMES
+
 logger = logging.getLogger(__name__)
+
+# 钉钉通知白名单（只推这些事件）
+DINGTALK_ALERT_TYPES = {
+    "stranger_detected", "danger_zone_intrusion", "danger_zone_stay",
+    "danger_zone_approach", "crowd_gathering", "fall_detected",
+    "flame_detected", "spoof_detected", "deepfake_detected",
+    "abnormal_sound", "stream_offline", "phone_usage",
+    "head_down", "leave_seat",
+}
 
 
 class AlertClient:
@@ -61,9 +72,14 @@ class AlertClient:
         # 钉钉通知 + 逐级上报
         if self.dingtalk:
             try:
-                alert_name = event.get("event_type", "未知告警")
-                stream = event.get("stream_id", "")
-                self.dingtalk(f"{alert_name} | 摄像头：{stream}")
+                event_type = event.get("event_type", "")
+                if event_type not in DINGTALK_ALERT_TYPES:
+                    logger.debug("事件 %s 不在钉钉通知范围，跳过", event_type)
+                else:
+                    alert_name = EVENT_NAMES.get(event_type, event_type)
+                    stream = event.get("stream_id", "")
+                    snapshot = event.get("snapshot_path", "")
+                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=snapshot)
             except Exception:
                 logger.exception("钉钉通知失败")
 

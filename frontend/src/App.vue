@@ -160,6 +160,7 @@ const alertSettings = ref({
   ],
   aiReportEnabled: saved.aiReportEnabled ?? true,
   reportTime: saved.reportTime ?? "18:00",
+  alertInterval: saved.alertInterval ?? 30,
   generating: false,
   latestReport: saved.latestReport ?? null,
   reportHistory: saved.reportHistory ?? [],
@@ -167,18 +168,20 @@ const alertSettings = ref({
 
 watch(alertSettings, saveSettings, { deep: true });
 
-// 联系人弹窗
-const showContactModal = ref(false);
-const newContact = ref({ name: "", mobile: "" });
 const syncContactsToBackend = async () => {
   try {
     await fetch("http://127.0.0.1:8080/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: alertSettings.value.contacts, responsible: alertSettings.value.responsible, reportTime: alertSettings.value.reportTime }),
+      body: JSON.stringify({ contacts: alertSettings.value.contacts, responsible: alertSettings.value.responsible, reportTime: alertSettings.value.reportTime, alertInterval: alertSettings.value.alertInterval }),
     });
   } catch {}
 };
+watch(() => alertSettings.value.responsible, syncContactsToBackend);
+
+// 联系人弹窗
+const showContactModal = ref(false);
+const newContact = ref({ name: "", mobile: "" });
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
   if (!name.trim()) { alert("请输入姓名"); return; }
@@ -227,6 +230,40 @@ const generateAiReport = async () => {
   } finally {
     alertSettings.value.generating = false;
   }
+};
+
+const exportReportPdf = () => {
+  const report = alertSettings.value.latestReport;
+  if (!report) return;
+  const items = (report.alerts || []).map(a => {
+    const snap = a.snapshot_url || a.snapshotUrl || "";
+    const analysis = a.vl_analysis || a.vlAnalysis || "";
+    return `<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:6px">
+      <h4>${a.alertType || a.type || ""} — ${a.stream_id || a.streamId || ""}</h4>
+      ${snap ? `<img src="${snap}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" onerror="this.style.display='none'"/>` : ""}
+      ${analysis ? `<p style="color:#555;font-size:13px">AI分析：${analysis}</p>` : ""}
+    </div>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>日报_${report.date}</title><style>
+    body{font-family:'Microsoft YaHei',sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#333}
+    h1{text-align:center;border-bottom:2px solid #409EFF;padding-bottom:10px}
+    h2{color:#409EFF;margin-top:24px}
+    .summary{background:#f0f9ff;padding:16px;border-radius:8px;margin:16px 0;font-size:15px;line-height:1.8}
+    @media print{body{padding:0}}
+  </style></head><body>
+    <h1>智慧教室安防日报 — ${report.date}</h1>
+    <h2>AI 总结</h2><div class="summary">${report.summary || ""}</div>
+    <h2>告警详情（${report.alertsCount || items.length} 条）</h2>${items}
+    <p style="text-align:center;color:#999;margin-top:30px">智慧教室实时行为分析与安全监测系统</p>
+  </body></html>`;
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `日报_${report.date}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 const alertKeyword = ref("");
 const activeAlertLevel = ref("全部");
@@ -2743,6 +2780,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 style="font-size: 13px; color: #67c23a"
                 >● {{ alertSettings.responsible }}</span
               >
+              <span v-if="alertSettings.dingtalkEnabled" style="font-size:12px;color:#909399;margin-left:8px">
+                间隔 <input v-model.number="alertSettings.alertInterval" type="number" min="10" max="600" style="width:50px;padding:2px 4px;border:1px solid #dcdfe6;border-radius:4px;text-align:center" @change="syncContactsToBackend"/> 秒
+              </span>
               <el-button
                 v-if="alertSettings.dingtalkEnabled"
                 size="small"
@@ -2770,6 +2810,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 @click="generateAiReport"
                 >生成日报</el-button
               >
+              <el-button
+                v-if="alertSettings.latestReport"
+                size="small"
+                type="success"
+                @click="exportReportPdf"
+                >导出 PDF</el-button>
               <el-button
                 v-if="alertSettings.latestReport"
                 size="small"
@@ -2980,6 +3026,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </div>
             </div>
             <div style="text-align: right; margin-top: 20px">
+              <el-button type="primary" size="small" @click="exportReportPdf">导出 PDF</el-button>
               <el-button @click="showReportModal = false">关闭</el-button>
             </div>
           </div>

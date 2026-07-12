@@ -339,6 +339,22 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         snapshot_dir = BASE_DIR / "static" / "snapshots"
         return send_from_directory(snapshot_dir, filename)
 
+    @app.post("/api/contacts/sync")
+    def contacts_sync():
+        body = request.get_json(silent=True) or {}
+        contacts = body.get("contacts", [])
+        new_persons = {}
+        for c in contacts:
+            if c.get("name") and c.get("mobile"):
+                new_persons[c["name"]] = {"name": c["name"], "mobile": c["mobile"]}
+        from backend_ai.services import dingtalk_service as ds
+        ds.PERSONS = new_persons
+        r = body.get("responsible", "")
+        if r: ds.PRIMARY = r
+        i = body.get("alertInterval")
+        if i: ds.STEP_TIMEOUT = int(i)
+        return json_response({"ok": True, "count": len(new_persons)})
+
     return app
 
 
