@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, Response, request
+from flask import Flask, Response, request, send_from_directory
 
 from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.dingtalk_service import start_stream, trigger_alert
@@ -16,6 +16,7 @@ from backend_ai.services.config_client import ConfigClient
 from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
 from backend_ai.services.fire_service import FireService
+from backend_ai.services.snapshot_push import SnapshotPusher
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
@@ -128,6 +129,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
     )
+    snapshot_remote = app_config.get("snapshot_remote", {})
+    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
+    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
+    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
+    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
+
     analysis_service = AnalysisService(
         face_service=face_service,
         zone_service=zone_service,
@@ -137,6 +144,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         fire_service=fire_service,
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_pusher=snapshot_pusher,
     )
 
     app.extensions["ai_services"] = {
@@ -285,6 +293,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+    @app.get("/snapshots/<path:filename>")
+    def serve_snapshot(filename: str):
+        snapshot_dir = BASE_DIR / "static" / "snapshots"
+        return send_from_directory(snapshot_dir, filename)
 
     return app
 

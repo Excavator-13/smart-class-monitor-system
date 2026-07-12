@@ -14,7 +14,7 @@ from backend_ai.utils.logger import get_logger
 
 
 class AnalysisService:
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
@@ -23,6 +23,7 @@ class AnalysisService:
         self.config_client = config_client
         self.alert_client = alert_client
         self.snapshot_root = snapshot_root
+        self.snapshot_pusher = snapshot_pusher
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
 
@@ -139,7 +140,10 @@ class AnalysisService:
         ok = cv2.imwrite(str(path), frame)
         if not ok:
             raise RuntimeError("snapshot encode failed")
-        return f"/snapshots/{day}/{event_id}.jpg"
+        relative_path = f"/snapshots/{day}/{event_id}.jpg"
+        if self.snapshot_pusher is not None:
+            self.snapshot_pusher.push_async(path, relative_path)
+        return relative_path
 
     def _draw_objects(self, frame: np.ndarray, objects: list[dict[str, Any]]) -> None:
         for idx, obj in enumerate(objects):

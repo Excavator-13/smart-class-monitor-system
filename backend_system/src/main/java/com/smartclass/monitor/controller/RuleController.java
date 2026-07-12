@@ -3,6 +3,7 @@ package com.smartclass.monitor.controller;
 import com.smartclass.monitor.common.response.ApiResponse;
 import com.smartclass.monitor.dto.RuleCreateRequest;
 import com.smartclass.monitor.dto.RuleUpdateRequest;
+import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.RuleService;
 import com.smartclass.monitor.vo.RuleVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,7 @@ public class RuleController {
 
     @PostMapping("/rules")
     @Operation(summary = "新增规则", description = "创建行为检测规则，含置信度阈值和冷却时间")
+    @RequireRole("admin")
     public ApiResponse<RuleVO> create(@Valid @RequestBody RuleCreateRequest request) {
         return ApiResponse.success(ruleService.createRule(request));
     }
@@ -42,6 +44,7 @@ public class RuleController {
 
     @PutMapping("/rules/{id}")
     @Operation(summary = "更新规则", description = "更新规则阈值、置信度、冷却时间等，修改后通知 AI 刷新")
+    @RequireRole("admin")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody RuleUpdateRequest request) {
         ruleService.updateRule(id, request);
         return ApiResponse.success();
@@ -49,6 +52,7 @@ public class RuleController {
 
     @DeleteMapping("/rules/{id}")
     @Operation(summary = "删除规则", description = "软删除规则，初版谨慎开放")
+    @RequireRole("admin")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         ruleService.deleteRule(id);
         return ApiResponse.success();

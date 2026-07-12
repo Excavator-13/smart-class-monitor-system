@@ -3,6 +3,7 @@ package com.smartclass.monitor.controller;
 import com.smartclass.monitor.common.response.ApiResponse;
 import com.smartclass.monitor.dto.ZoneCreateRequest;
 import com.smartclass.monitor.dto.ZoneUpdateRequest;
+import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.ZoneService;
 import com.smartclass.monitor.vo.ZoneVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -32,6 +33,7 @@ public class ZoneController {
 
     @PostMapping("/zones")
     @Operation(summary = "新增区域", description = "创建区域配置，coordinates 为 0-1 归一化坐标 JSON")
+    @RequireRole("admin")
     public ApiResponse<ZoneVO> create(@Valid @RequestBody ZoneCreateRequest request) {
         return ApiResponse.success(zoneService.createZone(request));
     }
@@ -44,6 +46,7 @@ public class ZoneController {
 
     @PutMapping("/zones/{id}")
     @Operation(summary = "修改区域", description = "更新区域配置，修改后自动通知 AI 刷新")
+    @RequireRole("admin")
     public ApiResponse<Void> update(@PathVariable Long id, @RequestBody ZoneUpdateRequest request) {
         zoneService.updateZone(id, request);
         return ApiResponse.success();
@@ -51,6 +54,7 @@ public class ZoneController {
 
     @DeleteMapping("/zones/{id}")
     @Operation(summary = "删除区域", description = "软删除区域，删除后自动通知 AI 刷新")
+    @RequireRole("admin")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         zoneService.deleteZone(id);
         return ApiResponse.success();
