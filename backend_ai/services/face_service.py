@@ -99,6 +99,11 @@ class FaceService:
         for idx, face in enumerate(faces):
             embedding = np.asarray(face["embedding"] if isinstance(face, dict) else face.embedding, dtype=float)
             bbox = face["bbox"] if isinstance(face, dict) else [int(v) for v in face.bbox]
+            # 提取 InsightFace 68 点关键点
+            landmarks = None
+            if not isinstance(face, dict) and hasattr(face, "landmark_3d_68") and face.landmark_3d_68 is not None:
+                lm3d = face.landmark_3d_68
+                landmarks = [[float(lm3d[i][0]), float(lm3d[i][1])] for i in range(68)]
             best: tuple[float, dict[str, Any] | None] = (-1.0, None)
             for student in feature_cache.values():
                 vector = np.asarray(student.get("feature_vector") or [], dtype=float)
@@ -109,28 +114,37 @@ class FaceService:
                     best = (similarity, student)
             if best[1] and best[0] >= self.similarity_threshold:
                 student = best[1]
+                target = {
+                    "track_id": f"face_{idx + 1}",
+                    "student_id": student.get("student_id"),
+                    "student_name": student.get("student_name"),
+                    "bbox": bbox,
+                }
+                if landmarks:
+                    target["landmarks"] = landmarks
                 events.append(
                     {
                         "event_type": "face_recognized",
                         "confidence": best[0],
                         "level": "info",
-                        "target": {
-                            "track_id": f"face_{idx + 1}",
-                            "student_id": student.get("student_id"),
-                            "student_name": student.get("student_name"),
-                            "bbox": bbox,
-                        },
+                        "target": target,
                         "track_key": str(student.get("student_id")),
                         "threshold_seconds": 0,
                     }
                 )
             else:
+                target = {
+                    "track_id": f"face_{idx + 1}",
+                    "bbox": bbox,
+                }
+                if landmarks:
+                    target["landmarks"] = landmarks
                 events.append(
                     {
                         "event_type": "stranger_detected",
                         "confidence": max(best[0], 0.0),
                         "level": "warning",
-                        "target": {"track_id": f"face_{idx + 1}", "bbox": bbox},
+                        "target": target,
                         "track_key": f"face_{idx + 1}",
                         "threshold_seconds": 0,
                     }
