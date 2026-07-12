@@ -14,10 +14,12 @@ import {
   User,
   VideoCamera,
 } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   createStream,
   createStudent,
+  createZone,
+  deleteZone,
   extractFaceFeature,
   fetchAlerts,
   fetchAlertStats,
@@ -49,6 +51,8 @@ import lineDogGif from "./assets/line-dog.gif";
 
 const activePage = ref("monitor");
 const loginBackgroundVideo = `${import.meta.env.BASE_URL}auth/login-moonset.mp4`;
+const authVideoReady = ref(false);
+const authVideoFailed = ref(false);
 const isAuthenticated = ref(Boolean(getStoredToken()));
 const currentUser = ref(getStoredUser());
 const authMode = ref("login");
@@ -244,7 +248,8 @@ const isDrawingForbiddenZone = ref(false);
 const forbiddenZoneStart = ref(null);
 const forbiddenZoneCurrent = ref(null);
 const pendingForbiddenZone = ref(null);
-const confirmedForbiddenZone = ref(null);
+const zoneSaving = ref(false);
+const deletingZoneIds = ref(new Set());
 
 const streams = ref([]);
 const alerts = ref([]);
@@ -307,8 +312,19 @@ const userRoleName = computed(() => {
   );
 });
 
-const hasConfirmedForbiddenZone = computed(() =>
-  Boolean(confirmedForbiddenZone.value),
+const confirmedForbiddenZones = computed(() =>
+  zones.value
+    .filter(
+      (item) =>
+        item.enabled !== false &&
+        item.zone_type === "phone_forbidden" &&
+        (!activeStreamId.value || item.stream_id === activeStreamId.value),
+    )
+    .map((item) => ({ ...item, rect: rectFromCoordinates(item.coordinates) }))
+    .filter((item) => item.rect),
+);
+const hasConfirmedForbiddenZone = computed(
+  () => confirmedForbiddenZones.value.length > 0,
 );
 const hasPendingForbiddenZone = computed(() =>
   Boolean(pendingForbiddenZone.value),
@@ -364,19 +380,7 @@ const activeStreamZones = computed(() =>
 );
 
 const zoneRows = computed(() => {
-  const rows = [...activeStreamZones.value];
-  if (hasConfirmedForbiddenZone.value) {
-    rows.unshift({
-      id: "drawn-phone-zone",
-      zone_name: "当前手绘禁用区",
-      zone_type: "phone_forbidden",
-      stream_id: activeStreamId.value,
-      coordinates: forbiddenZoneCoordinates.value,
-      enabled: true,
-      source: "实时画面绘制",
-    });
-  }
-  return rows;
+  return [...activeStreamZones.value];
 });
 
 const pendingAlertCount = computed(() => {
@@ -589,8 +593,8 @@ const rulePageCards = computed(() => [
   },
   {
     label: "禁用区",
-    value: confirmedForbiddenZone.value
-      ? "已确认"
+    value: hasConfirmedForbiddenZone.value
+      ? `${confirmedForbiddenZones.value.length} 个已启用`
       : pendingForbiddenZone.value
         ? "待确认"
         : "未绘制",
@@ -649,11 +653,7 @@ const activeForbiddenRect = computed(() => {
       forbiddenZoneCurrent.value,
     );
   }
-  return (
-    pendingForbiddenZone.value?.rect ||
-    confirmedForbiddenZone.value?.rect ||
-    null
-  );
+  return pendingForbiddenZone.value?.rect || null;
 });
 
 const forbiddenZoneStyle = computed(() => {
@@ -667,16 +667,9 @@ const forbiddenZoneStyle = computed(() => {
   };
 });
 
-const forbiddenZoneCoordinates = computed(() => {
-  return confirmedForbiddenZone.value?.coordinates || [];
-});
-
-const forbiddenZonePayload = computed(() => ({
-  zone_type: "phone_forbidden",
-  shape_type: "rectangle",
-  stream_id: activeStreamId.value,
-  coordinates: forbiddenZoneCoordinates.value,
-}));
+const forbiddenZoneCoordinates = computed(
+  () => pendingForbiddenZone.value?.coordinates || [],
+);
 
 const phoneDetectionSources = computed(() => {
   return [...analysisEvents.value, ...alerts.value]
@@ -686,10 +679,11 @@ const phoneDetectionSources = computed(() => {
 });
 
 const phoneDetectionsInForbiddenZone = computed(() => {
-  const zone = confirmedForbiddenZone.value?.rect;
-  if (!zone) return [];
+  if (!confirmedForbiddenZones.value.length) return [];
   return phoneDetectionSources.value.filter(({ rect }) =>
-    rectsIntersect(zone, rect),
+    confirmedForbiddenZones.value.some((zone) =>
+      rectsIntersect(zone.rect, rect),
+    ),
   );
 });
 
@@ -1081,7 +1075,7 @@ function buildRiskActions(events = []) {
 }
 
 function getVideoPointerPoint(event) {
-  const stage = videoStageRef.value;
+  const stage = event.currentTarget || videoStageRef.value;
   if (!stage) return null;
   const rect = stage.getBoundingClientRect();
   return {
@@ -1241,6 +1235,25 @@ function rectsIntersect(a, b) {
   return overlapWidth > 0 && overlapHeight > 0;
 }
 
+function rectStyle(rect) {
+  if (!rect) return {};
+  return {
+    left: `${rect.x * 100}%`,
+    top: `${rect.y * 100}%`,
+    width: `${rect.width * 100}%`,
+    height: `${rect.height * 100}%`,
+  };
+}
+
+function zoneDisplayName(zone, index) {
+  return zone.zone_name || `手机禁用区 ${index + 1}`;
+}
+
+function resetForbiddenZoneDraft() {
+  pendingForbiddenZone.value = null;
+  cancelForbiddenZoneDraw();
+}
+
 function startForbiddenZoneDraw(event) {
   if (!showRuleOverlay.value) return;
   if (event.button !== 0) return;
@@ -1285,16 +1298,66 @@ function cancelForbiddenZoneDraw() {
   forbiddenZoneCurrent.value = null;
 }
 
-function confirmForbiddenZone() {
-  if (!pendingForbiddenZone.value) return;
-  confirmedForbiddenZone.value = pendingForbiddenZone.value;
-  pendingForbiddenZone.value = null;
+async function confirmForbiddenZone() {
+  if (!pendingForbiddenZone.value || !activeStreamId.value || zoneSaving.value)
+    return;
+  zoneSaving.value = true;
+  try {
+    const created = await createZone({
+      stream_id: activeStreamId.value,
+      zone_name: `手机禁用区 ${confirmedForbiddenZones.value.length + 1}`,
+      zone_type: "phone_forbidden",
+      coordinates: pendingForbiddenZone.value.coordinates,
+      threshold_seconds: 1,
+      safe_distance: 0,
+    });
+    zones.value = [
+      ...zones.value.filter((item) => item.id !== created.id),
+      created,
+    ];
+    pendingForbiddenZone.value = null;
+    ElMessage.success("禁用区已保存，AI 区域配置正在刷新。");
+  } catch (error) {
+    ElMessage.error(error?.message || "禁用区保存失败，请检查后端服务。");
+  } finally {
+    zoneSaving.value = false;
+  }
 }
 
 function clearForbiddenZone() {
-  pendingForbiddenZone.value = null;
-  confirmedForbiddenZone.value = null;
-  cancelForbiddenZoneDraw();
+  resetForbiddenZoneDraft();
+}
+
+async function removeForbiddenZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  if (id === undefined || id === null || deletingZoneIds.value.has(id)) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除“${zone.zone_name || "该禁用区"}”吗？删除后 AI 将停止使用这个区域。`,
+      "删除禁用区",
+      {
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        type: "warning",
+      },
+    );
+  } catch {
+    return;
+  }
+  deletingZoneIds.value = new Set([...deletingZoneIds.value, id]);
+  try {
+    await deleteZone(id);
+    zones.value = zones.value.filter(
+      (item) => (item.id ?? item.zone_id) !== id,
+    );
+    ElMessage.success(`${zone.zone_name || "禁用区"}已删除，AI 配置正在刷新。`);
+  } catch (error) {
+    ElMessage.error(error?.message || "禁用区删除失败，请稍后重试。");
+  } finally {
+    const nextIds = new Set(deletingZoneIds.value);
+    nextIds.delete(id);
+    deletingZoneIds.value = nextIds;
+  }
 }
 
 function toggleAiAnnotations() {
@@ -1521,12 +1584,14 @@ async function loadDashboard() {
 
   if (!previousStreamId && activeStreamId.value) {
     try {
-      const [nextSummary, nextEvents] = await Promise.all([
+      const [nextSummary, nextEvents, nextZones] = await Promise.all([
         fetchAnalysisSummary(activeStreamId.value),
         fetchAnalysisEvents({ stream_id: activeStreamId.value }),
+        fetchZones({ stream_id: activeStreamId.value }),
       ]);
       summary.value = nextSummary || {};
       analysisEvents.value = normalizeList(nextEvents);
+      zones.value = normalizeList(nextZones);
     } catch (error) {
       loadErrors.value.summary = error?.message || "AI 分析接口请求失败";
     }
@@ -1537,14 +1602,16 @@ async function switchStream(streamId) {
   activeStreamId.value = streamId;
   isVideoLive.value = false;
   videoError.value = false;
-  clearForbiddenZone();
+  resetForbiddenZoneDraft();
   try {
-    const [nextSummary, nextEvents] = await Promise.all([
+    const [nextSummary, nextEvents, nextZones] = await Promise.all([
       fetchAnalysisSummary(streamId),
       fetchAnalysisEvents({ stream_id: streamId }),
+      fetchZones({ stream_id: streamId }),
     ]);
     summary.value = nextSummary || {};
     analysisEvents.value = normalizeList(nextEvents);
+    zones.value = normalizeList(nextZones);
     loadErrors.value.summary = "";
     loadErrors.value.events = "";
   } catch (error) {
@@ -2004,13 +2071,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 <template>
   <section v-if="!isAuthenticated" class="auth-shell">
     <video
+      v-if="!authVideoFailed"
       class="auth-bg-video"
+      :class="{ ready: authVideoReady }"
       autoplay
       muted
       loop
       playsinline
       preload="auto"
       aria-hidden="true"
+      @canplay="authVideoReady = true"
+      @error="authVideoFailed = true"
     >
       <source :src="loginBackgroundVideo" type="video/mp4" />
     </video>
@@ -2346,49 +2417,90 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </span>
               </div>
 
+              <template v-if="showRuleOverlay">
+                <div
+                  v-for="(zone, index) in confirmedForbiddenZones"
+                  :key="zone.id || zone.zone_id"
+                  class="drawn-forbidden-zone confirmed"
+                  :style="rectStyle(zone.rect)"
+                >
+                  <span>{{ zoneDisplayName(zone, index) }}</span>
+                </div>
+                <div
+                  v-if="activeForbiddenRect"
+                  class="drawn-forbidden-zone drafting"
+                  :style="forbiddenZoneStyle"
+                >
+                  <span>{{
+                    isDrawingForbiddenZone ? "绘制中" : "待确认禁用区"
+                  }}</span>
+                </div>
+              </template>
               <div
-                v-if="showRuleOverlay && activeForbiddenRect"
-                class="drawn-forbidden-zone"
-                :class="{
-                  drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
-                  confirmed: hasConfirmedForbiddenZone,
-                }"
-                :style="forbiddenZoneStyle"
+                v-if="showRuleOverlay && !activeForbiddenRect"
+                class="draw-hint"
               >
-                <span>{{
-                  isDrawingForbiddenZone
-                    ? "绘制中"
-                    : hasPendingForbiddenZone
-                      ? "待确认禁用区"
-                      : "已确认禁用区"
-                }}</span>
+                {{
+                  hasConfirmedForbiddenZone
+                    ? "可继续拖拽添加禁用区"
+                    : "按住鼠标左键拖拽，绘制禁用区"
+                }}
               </div>
-              <div v-else-if="showRuleOverlay" class="draw-hint">
-                按住鼠标左键拖拽，绘制禁用区
+              <div v-if="!showRuleOverlay" class="draw-hint muted">
+                区域规则层已关闭
               </div>
-              <div v-else class="draw-hint muted">区域规则层已关闭</div>
               <div
-                v-if="
-                  showRuleOverlay &&
-                  (hasPendingForbiddenZone || hasConfirmedForbiddenZone)
-                "
+                v-if="showRuleOverlay && hasPendingForbiddenZone"
                 class="zone-actions"
+                @mousedown.stop
               >
                 <button
-                  v-if="hasPendingForbiddenZone"
                   type="button"
                   class="zone-action primary"
+                  :disabled="zoneSaving"
                   @click.stop="confirmForbiddenZone"
                 >
-                  确定
+                  {{ zoneSaving ? "保存中..." : "确定并启用" }}
                 </button>
                 <button
                   type="button"
                   class="zone-action"
                   @click.stop="clearForbiddenZone"
                 >
-                  删除重新选择
+                  取消草稿
                 </button>
+              </div>
+              <div
+                v-if="showRuleOverlay && confirmedForbiddenZones.length"
+                class="zone-manager"
+                @mousedown.stop
+              >
+                <div class="zone-manager-title">
+                  <b>已启用禁用区</b>
+                  <span>{{ confirmedForbiddenZones.length }} 个</span>
+                </div>
+                <div class="zone-manager-list">
+                  <div
+                    v-for="(zone, index) in confirmedForbiddenZones"
+                    :key="`manager-${zone.id || zone.zone_id}`"
+                    class="zone-manager-item"
+                  >
+                    <span>{{ zoneDisplayName(zone, index) }}</span>
+                    <button
+                      type="button"
+                      class="zone-delete-button"
+                      :disabled="deletingZoneIds.has(zone.id || zone.zone_id)"
+                      :title="`删除${zoneDisplayName(zone, index)}`"
+                      @click.stop="removeForbiddenZone(zone)"
+                    >
+                      {{
+                        deletingZoneIds.has(zone.id || zone.zone_id)
+                          ? "删除中"
+                          : "删除"
+                      }}
+                    </button>
+                  </div>
+                </div>
               </div>
               <template v-if="showAiAnnotations">
                 <div
@@ -2556,9 +2668,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="rule-list">
               <article class="zone-coordinate-card">
                 <div>
-                  <b>当前禁用区</b>
+                  <b>实时画面禁用区</b>
                   <span v-if="forbiddenZoneCoordinates.length">
-                    {{
+                    待确认：{{
                       forbiddenZoneCoordinates
                         .map(
                           (point) =>
@@ -2567,9 +2679,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                         .join(" / ")
                     }}
                   </span>
-                  <span v-else-if="hasPendingForbiddenZone"
-                    >区域待确认，点击确定后输出四角坐标</span
-                  >
+                  <span v-else-if="confirmedForbiddenZones.length">
+                    已启用 {{ confirmedForbiddenZones.length }} 个区域，可在实时画面列表中逐个删除
+                  </span>
                   <span v-else>尚未绘制，拖拽实时画面生成四角坐标</span>
                 </div>
               </article>
@@ -3508,7 +3620,17 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               关闭
             </button>
           </header>
-          <div class="video-expanded-stage">
+          <div
+            class="video-expanded-stage"
+            :class="{
+              drawing: isDrawingForbiddenZone,
+              locked: !showRuleOverlay,
+            }"
+            @mousedown.left.prevent="startForbiddenZoneDraw"
+            @mousemove="updateForbiddenZoneDraw"
+            @mouseup="finishForbiddenZoneDraw"
+            @mouseleave="finishForbiddenZoneDraw"
+          >
             <img
               v-if="!videoError"
               class="video-stream"
@@ -3526,18 +3648,76 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div class="desk d2"></div>
               <div class="desk d3"></div>
             </div>
+            <template v-if="showRuleOverlay">
+              <div
+                v-for="(zone, index) in confirmedForbiddenZones"
+                :key="`expanded-${zone.id || zone.zone_id}`"
+                class="drawn-forbidden-zone confirmed"
+                :style="rectStyle(zone.rect)"
+              >
+                <span>{{ zoneDisplayName(zone, index) }}</span>
+              </div>
+              <div
+                v-if="activeForbiddenRect"
+                class="drawn-forbidden-zone drafting"
+                :style="forbiddenZoneStyle"
+              >
+                <span>{{
+                  isDrawingForbiddenZone ? "绘制中" : "待确认禁用区"
+                }}</span>
+              </div>
+            </template>
             <div
-              v-if="showRuleOverlay && activeForbiddenRect"
-              class="drawn-forbidden-zone"
-              :class="{
-                drafting: isDrawingForbiddenZone || hasPendingForbiddenZone,
-                confirmed: hasConfirmedForbiddenZone,
-              }"
-              :style="forbiddenZoneStyle"
+              v-if="showRuleOverlay && hasPendingForbiddenZone"
+              class="zone-actions"
+              @mousedown.stop
             >
-              <span>{{
-                hasPendingForbiddenZone ? "待确认禁用区" : "已确认禁用区"
-              }}</span>
+              <button
+                type="button"
+                class="zone-action primary"
+                :disabled="zoneSaving"
+                @click.stop="confirmForbiddenZone"
+              >
+                {{ zoneSaving ? "保存中..." : "确定并启用" }}
+              </button>
+              <button
+                type="button"
+                class="zone-action"
+                @click.stop="clearForbiddenZone"
+              >
+                取消草稿
+              </button>
+            </div>
+            <div
+              v-if="showRuleOverlay && confirmedForbiddenZones.length"
+              class="zone-manager expanded"
+              @mousedown.stop
+            >
+              <div class="zone-manager-title">
+                <b>已启用禁用区</b>
+                <span>{{ confirmedForbiddenZones.length }} 个</span>
+              </div>
+              <div class="zone-manager-list">
+                <div
+                  v-for="(zone, index) in confirmedForbiddenZones"
+                  :key="`expanded-manager-${zone.id || zone.zone_id}`"
+                  class="zone-manager-item"
+                >
+                  <span>{{ zoneDisplayName(zone, index) }}</span>
+                  <button
+                    type="button"
+                    class="zone-delete-button"
+                    :disabled="deletingZoneIds.has(zone.id || zone.zone_id)"
+                    @click.stop="removeForbiddenZone(zone)"
+                  >
+                    {{
+                      deletingZoneIds.has(zone.id || zone.zone_id)
+                        ? "删除中"
+                        : "删除"
+                    }}
+                  </button>
+                </div>
+              </div>
             </div>
             <template v-if="showAiAnnotations">
               <div
