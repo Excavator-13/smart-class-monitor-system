@@ -24,7 +24,8 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
 
     private static final List<String> EXCLUDE_PREFIXES = List.of(
             "/swagger-ui",
-            "/v3/api-docs"
+            "/v3/api-docs",
+            "/report"
     );
 
     private final JwtTokenProvider jwtTokenProvider;
