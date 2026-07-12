@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict
 from typing import Any
 
+import cv2
 import numpy as np
 
 
@@ -56,12 +58,12 @@ class AntiSpoofService:
         for face in faces:
             track_id = face.get("track_id", f"face_{len(detections)}")
             bbox = face.get("bbox")
-            landmarks = face.get("landmarks")
 
             state = self._states[track_id]
 
-            # --- 眨眼检测 ---
-            if landmarks and len(landmarks) >= 68:
+            # --- 眨眼检测（用 dlib 提取 68 点关键点） ---
+            landmarks = self._get_landmarks(frame, bbox) if frame is not None and bbox else None
+            if landmarks is not None and len(landmarks) >= 68:
                 left_eye = landmarks[36:42]
                 right_eye = landmarks[42:48]
                 left_ear = self._eye_aspect_ratio(left_eye)
@@ -171,6 +173,41 @@ class AntiSpoofService:
                 }
 
         return detections
+
+    # ------- 关键点提取 -------
+
+    @staticmethod
+    def _get_landmarks(frame: np.ndarray | None, bbox: list | None) -> list | None:
+        """用 dlib 提取 68 点人脸关键点，返回 numpy 数组列表或 None"""
+        if frame is None or bbox is None:
+            return None
+        try:
+            import dlib
+        except ImportError:
+            return None
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        try:
+            detector = dlib.get_frontal_face_detector()
+            dlib_rect = dlib.rectangle(x1, y1, x2, y2)
+            gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame[y1:y2, x1:x2]
+            dets = detector(gray, 0)
+            if len(dets) == 0:
+                return None
+            # 尝试加载 68 点预测器
+            for path in [
+                "backend_ai/models/dlib/shape_predictor_68_face_landmarks.dat",
+            ]:
+                if os.path.exists(path):
+                    predictor = dlib.shape_predictor(path)
+                    shape = predictor(gray, dets[0])
+                    return [np.array([p.x + x1, p.y + y1]) for p in shape.parts()]
+        except Exception:
+            pass
+        return None
 
     # ------- 静态方法 -------
 
