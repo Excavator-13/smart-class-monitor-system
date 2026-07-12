@@ -315,9 +315,6 @@ POST {{aiUrl}}/face/features/reload
 ### 四、截图 & 证据（AI → 云服务器 Nginx）
 ### ============================================
 
-### AI 本地截图（Flask fallback，开发环境用）
-GET {{aiUrl}}/snapshots/20260712/evt_test.jpg
-
 ### 云服务器 Nginx 截图（生产环境，前端实际访问路径）
 GET {{nginxUrl}}/snapshots/20260712/evt_b10caf1f1fe840f3.jpg
 

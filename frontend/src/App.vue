@@ -37,7 +37,12 @@ import {
   logout,
   register,
   registerStudentFace,
+  toggleRule,
+  toggleZone,
   updateAlertStatus,
+  updateScoreConfig,
+  updateZone,
+  fetchScoreConfig,
 } from "./services/smartClassApi";
 import {
   clearAuthSession,
@@ -175,22 +180,43 @@ const syncContactsToBackend = async () => {
     await fetch("http://127.0.0.1:8080/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: alertSettings.value.contacts, responsible: alertSettings.value.responsible, reportTime: alertSettings.value.reportTime }),
+      body: JSON.stringify({
+        contacts: alertSettings.value.contacts,
+        responsible: alertSettings.value.responsible,
+        reportTime: alertSettings.value.reportTime,
+      }),
     });
   } catch {}
 };
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
-  if (!name.trim()) { alert("请输入姓名"); return; }
-  if (!/^1\d{10}$/.test(mobile.trim())) { alert("请输入有效的 11 位手机号"); return; }
-  if (alertSettings.value.contacts.some((c) => c.name === name.trim())) { alert("已存在"); return; }
-  alertSettings.value.contacts.push({ name: name.trim(), mobile: mobile.trim() });
+  if (!name.trim()) {
+    alert("请输入姓名");
+    return;
+  }
+  if (!/^1\d{10}$/.test(mobile.trim())) {
+    alert("请输入有效的 11 位手机号");
+    return;
+  }
+  if (alertSettings.value.contacts.some((c) => c.name === name.trim())) {
+    alert("已存在");
+    return;
+  }
+  alertSettings.value.contacts.push({
+    name: name.trim(),
+    mobile: mobile.trim(),
+  });
   newContact.value = { name: "", mobile: "" };
   syncContactsToBackend();
 };
 const removeContact = (name) => {
-  if (name === "项重善" || name === "章志超") { alert("默认负责人不能删除"); return; }
-  alertSettings.value.contacts = alertSettings.value.contacts.filter((c) => c.name !== name);
+  if (name === "项重善" || name === "章志超") {
+    alert("默认负责人不能删除");
+    return;
+  }
+  alertSettings.value.contacts = alertSettings.value.contacts.filter(
+    (c) => c.name !== name,
+  );
   syncContactsToBackend();
 };
 
@@ -245,6 +271,19 @@ const forbiddenZoneCurrent = ref(null);
 const pendingForbiddenZone = ref(null);
 const zoneSaving = ref(false);
 const deletingZoneIds = ref(new Set());
+const zoneDialogVisible = ref(false);
+const zoneDialogMode = ref("create");
+const zoneForm = ref({
+  id: null,
+  stream_id: "",
+  zone_name: "",
+  zone_type: "danger",
+  coordinates: [],
+  threshold_seconds: 3,
+  safe_distance: 0.05,
+  enabled: true,
+});
+const zoneFormSaving = ref(false);
 
 const streams = ref([]);
 const alerts = ref([]);
@@ -306,6 +345,7 @@ const userRoleName = computed(() => {
     }[currentUser.value?.role] || "未登录"
   );
 });
+const isAdmin = computed(() => currentUser.value?.role === "admin");
 
 const confirmedForbiddenZones = computed(() =>
   zones.value
@@ -1020,6 +1060,15 @@ function riskBaseScore(type) {
   );
 }
 
+async function handleScoreConfigChange(item) {
+  if (!item.id) return;
+  try {
+    await updateScoreConfig(item.id, { score: item.score });
+  } catch (e) {
+    ElMessage.error("评分配置保存失败：" + (e.message || "未知错误"));
+  }
+}
+
 function levelRiskBonus(level) {
   return (
     {
@@ -1359,6 +1408,147 @@ function toggleAiAnnotations() {
   showAiAnnotations.value = !showAiAnnotations.value;
 }
 
+function openZoneDialog(mode, zone) {
+  zoneDialogMode.value = mode;
+  if (mode === "create") {
+    zoneForm.value = {
+      id: null,
+      stream_id: activeStreamId.value || "",
+      zone_name: "",
+      zone_type: "danger",
+      coordinates: [],
+      threshold_seconds: 3,
+      safe_distance: 0.05,
+      enabled: true,
+    };
+  } else {
+    zoneForm.value = {
+      id: zone.id ?? zone.zone_id,
+      stream_id: zone.stream_id || "",
+      zone_name: zone.zone_name || "",
+      zone_type: zone.zone_type || "danger",
+      coordinates: zone.coordinates || [],
+      threshold_seconds: zone.threshold_seconds ?? 3,
+      safe_distance: zone.safe_distance ?? 0.05,
+      enabled: zone.enabled ?? true,
+    };
+  }
+  zoneDialogVisible.value = true;
+}
+
+async function saveZone() {
+  const form = zoneForm.value;
+  if (!form.zone_name.trim()) {
+    ElMessage.warning("请填写区域名称。");
+    return;
+  }
+  if (!form.stream_id) {
+    ElMessage.warning("请选择视频源。");
+    return;
+  }
+  zoneFormSaving.value = true;
+  try {
+    if (zoneDialogMode.value === "create") {
+      const created = await createZone({
+        stream_id: form.stream_id,
+        zone_name: form.zone_name.trim(),
+        zone_type: form.zone_type,
+        coordinates: form.coordinates,
+        threshold_seconds: form.threshold_seconds,
+        safe_distance: form.safe_distance,
+      });
+      zones.value = [
+        ...zones.value.filter((item) => item.id !== created.id),
+        created,
+      ];
+      ElMessage.success("区域已创建。");
+    } else {
+      await updateZone(form.id, {
+        zone_name: form.zone_name.trim(),
+        zone_type: form.zone_type,
+        coordinates: form.coordinates,
+        threshold_seconds: form.threshold_seconds,
+        safe_distance: form.safe_distance,
+        enabled: form.enabled,
+      });
+      zones.value = zones.value.map((item) =>
+        (item.id ?? item.zone_id) === form.id
+          ? {
+              ...item,
+              zone_name: form.zone_name.trim(),
+              zone_type: form.zone_type,
+              threshold_seconds: form.threshold_seconds,
+              safe_distance: form.safe_distance,
+              enabled: form.enabled,
+            }
+          : item,
+      );
+      ElMessage.success("区域已更新。");
+    }
+    zoneDialogVisible.value = false;
+  } catch (error) {
+    ElMessage.error(error?.message || "区域保存失败。");
+  } finally {
+    zoneFormSaving.value = false;
+  }
+}
+
+async function handleDeleteZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  if (id === undefined || id === null || deletingZoneIds.value.has(id)) return;
+  try {
+    await ElMessageBox.confirm(
+      `确定删除"${zone.zone_name || "该区域"}"吗？`,
+      "删除区域",
+      { confirmButtonText: "删除", cancelButtonText: "取消", type: "warning" },
+    );
+  } catch {
+    return;
+  }
+  deletingZoneIds.value = new Set([...deletingZoneIds.value, id]);
+  try {
+    await deleteZone(id);
+    zones.value = zones.value.filter(
+      (item) => (item.id ?? item.zone_id) !== id,
+    );
+    ElMessage.success(`${zone.zone_name || "区域"}已删除。`);
+  } catch (error) {
+    ElMessage.error(error?.message || "区域删除失败。");
+  } finally {
+    const nextIds = new Set(deletingZoneIds.value);
+    nextIds.delete(id);
+    deletingZoneIds.value = nextIds;
+  }
+}
+
+async function handleToggleZone(zone) {
+  const id = zone?.id ?? zone?.zone_id;
+  const newEnabled = !zone.enabled;
+  try {
+    await toggleZone(id, newEnabled);
+    zones.value = zones.value.map((item) =>
+      (item.id ?? item.zone_id) === id
+        ? { ...item, enabled: newEnabled }
+        : item,
+    );
+  } catch (error) {
+    ElMessage.error(error?.message || "切换区域开关失败。");
+  }
+}
+
+async function handleToggleRule(rule) {
+  const id = rule?.id;
+  const newEnabled = !rule.enabled;
+  try {
+    await toggleRule(id, newEnabled);
+    rules.value = rules.value.map((item) =>
+      item.id === id ? { ...item, enabled: newEnabled } : item,
+    );
+  } catch (error) {
+    ElMessage.error(error?.message || "切换规则开关失败。");
+  }
+}
+
 function toggleRuleOverlay() {
   showRuleOverlay.value = !showRuleOverlay.value;
   if (!showRuleOverlay.value) cancelForbiddenZoneDraw();
@@ -1524,6 +1714,7 @@ async function loadDashboard() {
     stats: fetchAlertStats({ stream_id: activeStreamId.value }),
     rules: fetchRules(),
     zones: fetchZones({ stream_id: activeStreamId.value }),
+    scoreConfig: fetchScoreConfig(),
     students: fetchStudents({ page: 1, page_size: 10 }),
     health: fetchSystemHealth(),
     summary: activeStreamId.value
@@ -1558,6 +1749,15 @@ async function loadDashboard() {
   stats.value = results.stats.ok ? results.stats.value || {} : {};
   rules.value = results.rules.ok ? normalizeList(results.rules.value) : [];
   zones.value = results.zones.ok ? normalizeList(results.zones.value) : [];
+  if (results.scoreConfig.ok && Array.isArray(results.scoreConfig.value)) {
+    riskScoreSettings.value = results.scoreConfig.value.map((item) => ({
+      id: item.id,
+      type: item.alert_type,
+      label: item.label,
+      score: item.score,
+      note: item.note || "",
+    }));
+  }
   students.value = results.students.ok
     ? normalizeList(results.students.value)
     : [];
@@ -2675,7 +2875,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     }}
                   </span>
                   <span v-else-if="confirmedForbiddenZones.length">
-                    已启用 {{ confirmedForbiddenZones.length }} 个区域，可在实时画面列表中逐个删除
+                    已启用
+                    {{ confirmedForbiddenZones.length }}
+                    个区域，可在实时画面列表中逐个删除
                   </span>
                   <span v-else>尚未绘制，拖拽实时画面生成四角坐标</span>
                 </div>
@@ -2689,8 +2891,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   >
                 </div>
                 <el-switch
-                  v-model="rule.enabled"
+                  :model-value="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  @change="handleToggleRule(rule)"
                 />
               </article>
             </div>
@@ -3158,6 +3361,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   :max="100"
                   :step="1"
                   size="small"
+                  :disabled="!isAdmin"
+                  @change="handleScoreConfigChange(item)"
                 />
               </article>
             </div>
@@ -3205,22 +3410,36 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     :min="1"
                     :max="30"
                     size="small"
+                    :disabled="!isAdmin"
                   />
                 </div>
                 <el-switch
-                  v-model="rule.enabled"
+                  :model-value="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  @change="handleToggleRule(rule)"
                 />
               </article>
             </div>
           </section>
 
           <section class="panel span-6">
-            <div class="panel-head compact">
-              <h2>当前已设定区域</h2>
+            <div class="panel-head">
+              <div>
+                <h2>区域管理</h2>
+                <span
+                  >区域来自
+                  `/zones`，支持危险区、座位区、手机禁用区、识别区域等类型。</span
+                >
+              </div>
+              <el-button
+                type="primary"
+                size="small"
+                @click="openZoneDialog('create')"
+                >新增区域</el-button
+              >
             </div>
             <el-table :data="zoneRows" height="390" class="clean-table">
-              <el-table-column label="区域名称" min-width="130">
+              <el-table-column label="区域名称" min-width="110">
                 <template #default="{ row }">
                   {{ row.zone_name || "未命名区域" }}
                 </template>
@@ -3232,16 +3451,50 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="状态" width="90">
+              <el-table-column label="阈值(秒)" width="80">
                 <template #default="{ row }">
-                  <el-tag :type="row.enabled ? 'success' : 'info'">
-                    {{ row.enabled ? "启用" : "停用" }}
-                  </el-tag>
+                  {{ row.threshold_seconds ?? "--" }}
                 </template>
               </el-table-column>
-              <el-table-column label="坐标" min-width="220">
+              <el-table-column label="预警距离" width="80">
+                <template #default="{ row }">
+                  {{
+                    row.safe_distance
+                      ? (row.safe_distance * 100).toFixed(1) + "%"
+                      : "--"
+                  }}
+                </template>
+              </el-table-column>
+              <el-table-column label="开关" width="70">
+                <template #default="{ row }">
+                  <el-switch
+                    :model-value="row.enabled"
+                    size="small"
+                    @change="handleToggleZone(row)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="坐标" min-width="140">
                 <template #default="{ row }">
                   <span class="coord-text">{{ zoneCoordinateText(row) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    text
+                    @click="openZoneDialog('edit', row)"
+                    >编辑</el-button
+                  >
+                  <el-button
+                    size="small"
+                    type="danger"
+                    text
+                    @click="handleDeleteZone(row)"
+                    >删除</el-button
+                  >
                 </template>
               </el-table-column>
             </el-table>
@@ -3275,7 +3528,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   `/students/{id}/face`。</span
                 >
               </div>
-              <el-button type="primary" :icon="User" @click="openPersonDialog"
+              <el-button
+                v-if="isAdmin"
+                type="primary"
+                :icon="User"
+                @click="openPersonDialog"
                 >新增人员</el-button
               >
             </div>
@@ -3295,7 +3552,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </template>
               </el-table-column>
               <el-table-column prop="last_seen" label="最近出现" width="110" />
-              <el-table-column label="操作" width="130" fixed="right">
+              <el-table-column
+                v-if="isAdmin"
+                label="操作"
+                width="130"
+                fixed="right"
+              >
                 <template #default="{ row }">
                   <el-button
                     size="small"
@@ -3334,7 +3596,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   >对应 `/streams`、`/model/status`、`/system/health`。</span
                 >
               </div>
-              <el-button :icon="Switch" @click="openStreamDialog"
+              <el-button v-if="isAdmin" :icon="Switch" @click="openStreamDialog"
                 >新增视频源</el-button
               >
             </div>
@@ -3588,6 +3850,87 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             @click="saveFaceRegistration"
             >提交注册</el-button
           >
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="zoneDialogVisible"
+        :title="zoneDialogMode === 'create' ? '新增区域' : '编辑区域'"
+        width="520px"
+        class="local-edit-dialog"
+      >
+        <el-form class="local-edit-form" label-position="top">
+          <el-form-item label="视频源">
+            <el-select
+              v-model="zoneForm.stream_id"
+              placeholder="选择视频源"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="stream in streams"
+                :key="stream.stream_id"
+                :label="stream.stream_name || stream.stream_id"
+                :value="stream.stream_id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="区域名称">
+            <el-input
+              v-model="zoneForm.zone_name"
+              placeholder="例如 一号教室危险区"
+            />
+          </el-form-item>
+          <el-form-item label="区域类型">
+            <el-select v-model="zoneForm.zone_type" style="width: 100%">
+              <el-option label="危险区" value="danger" />
+              <el-option label="座位区" value="seat" />
+              <el-option label="手机禁用区" value="phone_forbidden" />
+              <el-option label="识别区域" value="roi" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="停留阈值（秒）">
+            <el-input-number
+              v-model="zoneForm.threshold_seconds"
+              :min="1"
+              :max="60"
+            />
+            <span style="margin-left: 8px; color: #909399; font-size: 12px"
+              >目标在区域内持续停留超过此时长后触发告警</span
+            >
+          </el-form-item>
+          <el-form-item label="预警距离（归一化比例）">
+            <el-input-number
+              v-model="zoneForm.safe_distance"
+              :min="0"
+              :max="0.5"
+              :step="0.01"
+              :precision="2"
+            />
+            <span style="margin-left: 8px; color: #909399; font-size: 12px"
+              >实际判定框比显示框向外扩展此比例，0 表示严格按框判定</span
+            >
+          </el-form-item>
+          <el-form-item v-if="zoneDialogMode === 'edit'" label="启用状态">
+            <el-switch v-model="zoneForm.enabled" />
+          </el-form-item>
+          <p class="dialog-hint">
+            坐标可在实时监控页面拖拽绘制后从此处编辑，或由 AI
+            自动生成。当前坐标：{{
+              zoneForm.coordinates.length
+                ? zoneCoordinateText(zoneForm)
+                : "暂无"
+            }}
+          </p>
+        </el-form>
+        <template #footer>
+          <el-button @click="zoneDialogVisible = false">取消</el-button>
+          <el-button
+            type="primary"
+            :disabled="zoneFormSaving"
+            @click="saveZone"
+          >
+            {{ zoneFormSaving ? "保存中..." : "确定" }}
+          </el-button>
         </template>
       </el-dialog>
 

@@ -46,7 +46,7 @@ public class ReportService {
     /** 每隔 10 分钟检查是否到设置的日报时间 */
     @Scheduled(fixedRate = 600000)
     public void checkAndAutoGenerate() {
-        if (!enabled) return;
+        if (!aiEnabled) return;
         String setTime = String.valueOf(settings.getOrDefault("reportTime", "18:00"));
         String now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES).toString();
         if (now.length() >= 5) now = now.substring(0, 5);
@@ -111,6 +111,13 @@ public class ReportService {
 
     public Map<String, Object> getLatestReport() {
         return latestReport;
+    }
+
+    public List<Map<String, Object>> getHistory() {
+        if (latestReport == null) {
+            return Collections.emptyList();
+        }
+        return Collections.singletonList(latestReport);
     }
 
     /** 调用千问 API */

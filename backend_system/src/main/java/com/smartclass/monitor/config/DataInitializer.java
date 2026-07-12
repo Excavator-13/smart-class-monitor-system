@@ -28,6 +28,7 @@ public class DataInitializer implements CommandLineRunner {
     private final FaceFeatureMapper faceFeatureMapper;
     private final RecordingFileMapper recordingFileMapper;
     private final OperationLogMapper operationLogMapper;
+    private final ScoreConfigMapper scoreConfigMapper;
     private final PasswordEncoder passwordEncoder;
 
     public DataInitializer(UserMapper userMapper,
@@ -39,6 +40,7 @@ public class DataInitializer implements CommandLineRunner {
                            FaceFeatureMapper faceFeatureMapper,
                            RecordingFileMapper recordingFileMapper,
                            OperationLogMapper operationLogMapper,
+                           ScoreConfigMapper scoreConfigMapper,
                            PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.videoStreamMapper = videoStreamMapper;
@@ -49,6 +51,7 @@ public class DataInitializer implements CommandLineRunner {
         this.faceFeatureMapper = faceFeatureMapper;
         this.recordingFileMapper = recordingFileMapper;
         this.operationLogMapper = operationLogMapper;
+        this.scoreConfigMapper = scoreConfigMapper;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -65,6 +68,7 @@ public class DataInitializer implements CommandLineRunner {
         seedRules();
         seedZones();
         seedAlerts();
+        seedScoreConfig();
 
         log.info("===== DataInitializer: 测试数据初始化完成 =====");
     }
@@ -75,6 +79,7 @@ public class DataInitializer implements CommandLineRunner {
         recordingFileMapper.truncate();
         faceFeatureMapper.truncate();
         operationLogMapper.truncate();
+        scoreConfigMapper.truncate();
         dangerZoneMapper.truncate();
         behaviorRuleMapper.truncate();
         studentMapper.truncate();
@@ -267,5 +272,30 @@ public class DataInitializer implements CommandLineRunner {
         alert4.setHandledAt(now.minusHours(1));
         alert4.setRemark("已确认，学生捡笔");
         alertEventMapper.insert(alert4);
+    }
+
+    private void seedScoreConfig() {
+        log.info("插入告警评分配置...");
+        List<ScoreConfig> configs = Arrays.asList(
+                createScoreConfig("fire", "明火", 92, "最高危，发现后立即拉高综合分"),
+                createScoreConfig("fall", "摔倒", 86, "高危，需现场确认人员状态"),
+                createScoreConfig("stranger", "陌生人", 70, "中高风险，需核验身份"),
+                createScoreConfig("phone", "手机违规", 62, "必须命中已确认禁用区后才参与评分"),
+                createScoreConfig("zone", "区域入侵", 58, "按区域规则命中情况评分"),
+                createScoreConfig("behavior", "行为异常", 42, "低头、睡觉等课堂行为异常"),
+                createScoreConfig("general", "其他告警", 35, "未识别类型的兜底分")
+        );
+        for (ScoreConfig c : configs) {
+            scoreConfigMapper.insert(c);
+        }
+    }
+
+    private ScoreConfig createScoreConfig(String alertType, String label, int score, String note) {
+        ScoreConfig c = new ScoreConfig();
+        c.setAlertType(alertType);
+        c.setLabel(label);
+        c.setScore(score);
+        c.setNote(note);
+        return c;
     }
 }
