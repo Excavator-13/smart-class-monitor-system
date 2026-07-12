@@ -170,34 +170,28 @@ watch(alertSettings, saveSettings, { deep: true });
 // 联系人弹窗
 const showContactModal = ref(false);
 const newContact = ref({ name: "", mobile: "" });
+const syncContactsToBackend = async () => {
+  try {
+    await fetch("http://127.0.0.1:8080/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contacts: alertSettings.value.contacts, responsible: alertSettings.value.responsible, reportTime: alertSettings.value.reportTime }),
+    });
+  } catch {}
+};
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
-  if (!name.trim()) {
-    alert("请输入姓名");
-    return;
-  }
-  if (!/^1\d{10}$/.test(mobile.trim())) {
-    alert("请输入有效的 11 位手机号");
-    return;
-  }
-  if (alertSettings.value.contacts.some((c) => c.name === name.trim())) {
-    alert("已存在");
-    return;
-  }
-  alertSettings.value.contacts.push({
-    name: name.trim(),
-    mobile: mobile.trim(),
-  });
+  if (!name.trim()) { alert("请输入姓名"); return; }
+  if (!/^1\d{10}$/.test(mobile.trim())) { alert("请输入有效的 11 位手机号"); return; }
+  if (alertSettings.value.contacts.some((c) => c.name === name.trim())) { alert("已存在"); return; }
+  alertSettings.value.contacts.push({ name: name.trim(), mobile: mobile.trim() });
   newContact.value = { name: "", mobile: "" };
+  syncContactsToBackend();
 };
 const removeContact = (name) => {
-  if (name === "项重善" || name === "章志超") {
-    alert("默认负责人不能删除");
-    return;
-  }
-  alertSettings.value.contacts = alertSettings.value.contacts.filter(
-    (c) => c.name !== name,
-  );
+  if (name === "项重善" || name === "章志超") { alert("默认负责人不能删除"); return; }
+  alertSettings.value.contacts = alertSettings.value.contacts.filter((c) => c.name !== name);
+  syncContactsToBackend();
 };
 
 // 日报
@@ -209,6 +203,7 @@ const generateAiReport = async () => {
       alertType: a.alert_type || a.type || "未知",
       level: a.level || "info",
       streamId: a.stream_id || a.location || "",
+      snapshotUrl: a.snapshot_url || "",
     }));
     let report;
     try {
