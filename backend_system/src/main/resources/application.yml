@@ -12,6 +12,12 @@ spring:
       maximum-pool-size: 10
       minimum-idle: 2
 
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:sql/schema.sql
+      continue-on-error: false
+
   # Jackson 序列化配置
   jackson:
     property-naming-strategy: SNAKE_CASE
