@@ -59,6 +59,16 @@ def test_no_faces_no_detection():
     assert detections == []
 
 
+def test_detect_accepts_numpy_bbox_with_frame():
+    service = AntiSpoofService()
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    face = {"track_id": "track_1", "bbox": np.array([10, 10, 100, 100]), "landmarks": None}
+
+    detections = service.detect("stream_1", [face], frame)
+
+    assert detections == []
+
+
 def test_eye_aspect_ratio_open():
     # 睁眼：眼宽15px，眼高8px → EAR ≈ 0.53
     eye_open = [

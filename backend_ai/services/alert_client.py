@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
 import requests
 
 from backend_ai.services.event_service import EVENT_NAMES
@@ -17,6 +18,18 @@ DINGTALK_ALERT_TYPES = {
     "abnormal_sound", "stream_offline", "phone_usage",
     "head_down", "leave_seat",
 }
+
+
+def _to_json_safe(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {key: _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_safe(item) for item in value]
+    return value
 
 
 class AlertClient:
@@ -43,7 +56,7 @@ class AlertClient:
             }.items()
             if value is not None
         }
-        return {
+        return _to_json_safe({
             "event_id": event.get("event_id"),
             "stream_id": event.get("stream_id"),
             "alert_type": event.get("event_type"),
@@ -59,7 +72,7 @@ class AlertClient:
             "record_path": record_path,
             "event_time_offset": event_time_offset,
             "extra": {"source": "backend_ai"},
-        }
+        })
 
     def push_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         payload = self.map_event_to_alert(event, record_path=record_path)
