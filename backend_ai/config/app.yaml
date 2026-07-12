@@ -25,3 +25,8 @@ events:
   default_cooldown_seconds: 45
   default_threshold_seconds: 3
   default_confidence_threshold: 0.6
+
+snapshot_remote:
+  host: ""
+  user: "root"
+  path: "/data/snapshots"

@@ -81,7 +81,7 @@ class ConfigClient:
         stream_ids = [stream_id] if stream_id else list(self.cache.streams.keys())
         count = 0
         for sid in stream_ids:
-            items = _items(self._get("/zones", params={"stream_id": sid}))
+            items = _items(self._get("/zones", params={"streamId": sid}))
             zones = [zone for zone in items if zone.get("enabled", True)]
             self.cache.zones_by_stream[sid] = zones
             count += len(zones)

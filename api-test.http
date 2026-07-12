@@ -3,6 +3,7 @@
 ### ============================================
 @baseUrl = http://localhost:8080
 @aiUrl = http://localhost:5001
+@nginxUrl = http://39.106.209.208:9092
 @internalToken = smart-class-ai-internal-token-2026
 @jwt = {{login.response.body.data.token}}
 
@@ -46,6 +47,106 @@ Content-Type: application/json
 
 ### 获取当前用户信息
 GET {{baseUrl}}/auth/info
+Authorization: Bearer {{jwt}}
+
+### ============================================
+### 0.1 用户管理（admin 专用）
+### ============================================
+
+### 用户列表
+GET {{baseUrl}}/users?page=1&pageSize=10
+Authorization: Bearer {{jwt}}
+
+### 用户列表-按角色筛选
+GET {{baseUrl}}/users?role=teacher&page=1&pageSize=10
+Authorization: Bearer {{jwt}}
+
+### 用户列表-按状态筛选
+GET {{baseUrl}}/users?status=enabled&page=1&pageSize=10
+Authorization: Bearer {{jwt}}
+
+### 用户详情（需替换真实 id）
+GET {{baseUrl}}/users/1
+Authorization: Bearer {{jwt}}
+
+### 编辑用户（昵称/头像）
+PUT {{baseUrl}}/users/2
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{"nickname":"张老师","avatarUrl":""}
+
+### 变更用户角色（admin→teacher 或 teacher→admin）
+PUT {{baseUrl}}/users/2/role
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{"role":"teacher"}
+
+### 禁用用户
+PUT {{baseUrl}}/users/2/status
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{"status":"disabled"}
+
+### 启用用户
+PUT {{baseUrl}}/users/2/status
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{"status":"enabled"}
+
+### 删除用户（软删除）
+DELETE {{baseUrl}}/users/2
+Authorization: Bearer {{jwt}}
+
+### ============================================
+### 0.2 RBAC 权限验证
+### ============================================
+
+### teacher 登录（用于权限对比测试）
+# @name teacherLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{"username":"teacher","password":"teacher123"}
+
+### teacher 读视频源（应 200）
+GET {{baseUrl}}/streams?page=1&pageSize=10
+Authorization: Bearer {{teacherLogin.response.body.data.token}}
+
+### teacher 新增视频源（应 403）
+POST {{baseUrl}}/streams
+Authorization: Bearer {{teacherLogin.response.body.data.token}}
+Content-Type: application/json
+
+{"stream_name":"test","stream_id":"test_01","rtmp_url":"rtmp://localhost:9090/live/test_01","remark":""}
+
+### teacher 新增人员（应 403）
+POST {{baseUrl}}/students
+Authorization: Bearer {{teacherLogin.response.body.data.token}}
+Content-Type: application/json
+
+{"student_no":"9999","name":"test","class_name":"test"}
+
+### teacher 查操作日志（应 403）
+GET {{baseUrl}}/operation-logs?page=1&pageSize=10
+Authorization: Bearer {{teacherLogin.response.body.data.token}}
+
+### teacher 访问用户管理（应 403）
+GET {{baseUrl}}/users?page=1&pageSize=10
+Authorization: Bearer {{teacherLogin.response.body.data.token}}
+
+### admin 新增视频源（应 200）
+POST {{baseUrl}}/streams
+Authorization: Bearer {{jwt}}
+Content-Type: application/json
+
+{"stream_name":"test","stream_id":"test_01","rtmp_url":"rtmp://localhost:9090/live/test_01","remark":""}
+
+### admin 访问用户管理（应 200）
+GET {{baseUrl}}/users?page=1&pageSize=10
 Authorization: Bearer {{jwt}}
 
 ### ============================================
@@ -209,3 +310,16 @@ POST {{aiUrl}}/config/reload
 
 ### 重载人脸特征
 POST {{aiUrl}}/face/features/reload
+
+### ============================================
+### 四、截图 & 证据（AI → 云服务器 Nginx）
+### ============================================
+
+### AI 本地截图（Flask fallback，开发环境用）
+GET {{aiUrl}}/snapshots/20260712/evt_test.jpg
+
+### 云服务器 Nginx 截图（生产环境，前端实际访问路径）
+GET {{nginxUrl}}/snapshots/20260712/evt_b10caf1f1fe840f3.jpg
+
+### AI 模型状态（含 snapshot_pusher 是否启用）
+GET {{aiUrl}}/model/status
