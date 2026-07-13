@@ -228,6 +228,31 @@ const generateAiReport = async () => {
   }
 };
 
+const getSnapshotUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  const base = window.__SMART_CLASS_CONFIG__?.NGINX_BASE || "http://39.106.209.208:9092";
+  return base + path;
+};
+
+const renderMd = (text) => {
+  if (!text) return "";
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/## (.+)/g, "<h3>$1</h3>")
+    .replace(/### (.+)/g, "<h4>$1</h4>")
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br>");
+};
+
+const reportChart = computed(() => {
+  const r = alertSettings.value.latestReport;
+  if (!r || !r.raw || !r.raw.type_counts) return [];
+  const counts = r.raw.type_counts;
+  const max = Math.max(...Object.values(counts), 1);
+  return Object.entries(counts).map(([type, count]) => ({ type, count, pct: (count / max * 100).toFixed(0) }));
+});
+
 const exportReportPdf = () => {
   const report = alertSettings.value.latestReport;
   if (!report) return;
@@ -237,7 +262,7 @@ const exportReportPdf = () => {
       const analysis = a.vl_analysis || a.vlAnalysis || "";
       return `<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:6px">
       <h4>${a.alertType || a.type || ""} — ${a.stream_id || a.streamId || ""}</h4>
-      ${snap ? `<img src="${snap}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" onerror="this.style.display='none'"/>` : ""}
+      ${snap ? `<img src="${getSnapshotUrl(snap)}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" />` : ""}
       ${analysis ? `<p style="color:#555;font-size:13px">AI分析：${analysis}</p>` : ""}
     </div>`;
     })
@@ -250,7 +275,7 @@ const exportReportPdf = () => {
     @media print{body{padding:0}}
   </style></head><body>
     <h1>智慧教室安防日报 — ${report.date}</h1>
-    <h2>AI 总结</h2><div class="summary">${report.summary || ""}</div>
+    <h2>AI 总结</h2><div class="summary">${renderMd(report.summary || "")}</div>
     <h2>告警详情（${report.alertsCount || items.length} 条）</h2>${items}
     <p style="text-align:center;color:#999;margin-top:30px">智慧教室实时行为分析与安全监测系统</p>
   </body></html>`;
@@ -3015,8 +3040,32 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 white-space: pre-wrap;
               "
             >
-              {{ alertSettings.latestReport.summary }}
+              <p v-html="renderMd(alertSettings.latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
             </p>
+
+            <!-- 统计条形图 -->
+            <div v-if="reportChart.length > 0" style="margin:12px 0;padding:12px;background:#fff;border-radius:8px">
+              <div style="font-size:14px;font-weight:600;margin-bottom:10px;color:#1d2129">告警统计</div>
+              <div v-for="c in reportChart" :key="c.type" style="display:flex;align-items:center;gap:10px;margin:6px 0">
+                <span style="width:100px;font-size:13px;text-align:right;color:#4e5969;flex-shrink:0">{{ c.type }}</span>
+                <div style="flex:1;height:24px;background:#f2f3f5;border-radius:6px;overflow:hidden">
+                  <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
+                    <span style="color:#fff;font-size:12px;font-weight:500">{{ c.count }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 告警详情（带截图 + VL 分析） -->
+            <div v-for="(a, i) in (alertSettings.latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
+              <div style="font-weight:bold;font-size:13px">{{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}</div>
+              <div v-if="a.snapshot_url || a.snapshotUrl" style="margin-top:6px">
+                <img :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)" style="max-width:100%;max-height:200px;border-radius:4px" @error="$event.target.style.display='none'" />
+              </div>
+              <div v-if="a.vl_analysis || a.vlAnalysis" style="margin-top:4px;font-size:12px;color:#555;background:#f5f7fa;padding:6px;border-radius:4px">
+                AI分析：{{ a.vl_analysis || a.vlAnalysis }}
+              </div>
+            </div>
           </section>
         </div>
 
