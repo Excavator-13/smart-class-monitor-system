@@ -202,3 +202,28 @@ Content-Type: application/json
 ### 28. 删除测试区域（谨慎执行）
 DELETE {{baseUrl}}/zones/{{zoneId}}
 Authorization: Bearer {{jwt}}
+
+### 29. AI 告警写入（无录像信息，验证 record_path 不被 ingest 填充）
+POST {{baseUrl}}/alerts/ai
+X-Internal-Token: {{internalToken}}
+Content-Type: application/json
+
+{
+  "event_id": "http-test-no-recording-001",
+  "stream_id": "{{streamId}}",
+  "alert_type": "phone_usage",
+  "alert_name": "手机使用",
+  "level": "warning",
+  "confidence": 0.85,
+  "occurred_at": "2026-07-13T10:00:00+08:00",
+  "snapshot_path": "/snapshots/20260713/http-test-no-recording-001.jpg"
+}
+
+### 30. 告警详情（验证 eventTimeOffset 字段存在、recordUrl 动态填充）
+# 替换 alertId 为上面创建的告警 ID
+GET {{baseUrl}}/alerts/8
+Authorization: Bearer {{jwt}}
+
+### 31. 录像列表（确认 recording_file 中有匹配记录，供动态填充查库）
+GET {{baseUrl}}/recordings?streamId={{streamId}}&page=1&pageSize=5
+Authorization: Bearer {{jwt}}

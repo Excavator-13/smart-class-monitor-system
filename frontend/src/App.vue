@@ -832,8 +832,12 @@ function zoneCoordinateText(zone = {}) {
 }
 
 function evidenceSummary(row = {}) {
-  if (row.snapshot_url) return "已保存告警截图";
-  return "未生成证据文件";
+  const hasSnapshot = !!row.snapshot_url;
+  const hasRecord = !!row.record_url;
+  if (hasSnapshot && hasRecord) return "截图 + 录像";
+  if (hasSnapshot) return "已保存截图";
+  if (hasRecord) return "仅录像";
+  return "证据生成中";
 }
 
 function statusType(status) {
@@ -3759,7 +3763,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </section>
         </div>
       </section>
-
     </main>
 
     <teleport to="body">

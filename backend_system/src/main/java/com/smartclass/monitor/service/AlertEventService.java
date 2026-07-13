@@ -5,15 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartclass.monitor.common.exception.BusinessException;
 import com.smartclass.monitor.dto.AlertIngestRequest;
 import com.smartclass.monitor.entity.AlertEvent;
-import com.smartclass.monitor.entity.RecordingFile;
 import com.smartclass.monitor.mapper.AlertEventMapper;
-import com.smartclass.monitor.mapper.RecordingFileMapper;
 import com.smartclass.monitor.vo.AlertIngestResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -24,11 +21,9 @@ public class AlertEventService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final AlertEventMapper mapper;
-    private final RecordingFileMapper recordingMapper;
 
-    public AlertEventService(AlertEventMapper mapper, RecordingFileMapper recordingMapper) {
+    public AlertEventService(AlertEventMapper mapper) {
         this.mapper = mapper;
-        this.recordingMapper = recordingMapper;
     }
 
     public AlertIngestResponse ingestAlert(AlertIngestRequest req) {
@@ -66,30 +61,6 @@ public class AlertEventService {
                         DateTimeFormatter.ISO_OFFSET_DATE_TIME));
             } catch (Exception e) {
                 throw new BusinessException(400, "occurred_at 格式错误，需 ISO 8601");
-            }
-        }
-
-        if (event.getOccurredAt() != null && event.getStreamId() != null) {
-            try {
-                RecordingFile rec = recordingMapper.findContainingRecording(
-                        event.getStreamId(), event.getOccurredAt());
-                if (rec != null) {
-                    String urlDir = rec.getFilePath();
-                    if (urlDir != null && urlDir.startsWith("/segments")) {
-                        urlDir = "/records" + urlDir.substring("/segments".length());
-                    }
-                    if (urlDir == null || urlDir.equals("/")) {
-                        event.setRecordPath("/" + rec.getFileName());
-                    } else {
-                        event.setRecordPath(urlDir + "/" + rec.getFileName());
-                    }
-                    if (rec.getStartedAt() != null) {
-                        long offsetSec = Duration.between(rec.getStartedAt(), event.getOccurredAt()).getSeconds();
-                        event.setEventTimeOffset(Math.max(0, (double) offsetSec));
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("录像查找失败 event_id={}: {}", req.getEventId(), e.getMessage());
             }
         }
 
