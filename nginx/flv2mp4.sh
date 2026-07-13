@@ -15,11 +15,19 @@ insert_recording() {
     local FEXT="${FNAME##*.}"
     local FSIZE=$(stat -c%s "$FILE_PATH" 2>/dev/null || echo 0)
     local MTIME=$(stat -c%Y "$FILE_PATH" 2>/dev/null || echo 0)
+    local MEDIA_DURATION=$(ffprobe -v error -show_entries format=duration \
+        -of default=noprint_wrappers=1:nokey=1 "$FILE_PATH" 2>/dev/null | tr -d '\r')
 
     local STREAM_ID=""
     local STARTED_AT=""
     local DURATION=0
     local ENDED_AT=""
+    local HAS_MEDIA_DURATION=false
+
+    if [[ "$MEDIA_DURATION" =~ ^[0-9]+([.][0-9]+)?$ ]] && \
+       awk -v duration="$MEDIA_DURATION" 'BEGIN { exit !(duration > 0) }'; then
+        HAS_MEDIA_DURATION=true
+    fi
 
     if [ "$SOURCE_TYPE" = "segment" ]; then
         # 格式: classroom_01-2026-07-13-08_30_00.mp4
@@ -30,8 +38,16 @@ insert_recording() {
         if [ -n "$STARTED_AT" ]; then
             local START_EPOCH=$(date -d "$STARTED_AT" +%s 2>/dev/null || echo 0)
             if [ "$START_EPOCH" -gt 0 ]; then
-                DURATION=30
-                local END_EPOCH=$(( START_EPOCH + DURATION ))
+                if [ "$HAS_MEDIA_DURATION" = true ]; then
+                    DURATION="$MEDIA_DURATION"
+                else
+                    DURATION=30
+                    echo "$(date) ffprobe 未读取到有效时长，切片回退 30 秒: $FNAME" >> /var/log/flv2mp4_error.log
+                fi
+                # recording_file.ended_at 精确到秒；向上取整可避免截断小数后产生查询空洞。
+                local DURATION_CEIL=$(awk -v duration="$DURATION" \
+                    'BEGIN { whole = int(duration); print (duration > whole ? whole + 1 : whole) }')
+                local END_EPOCH=$(( START_EPOCH + DURATION_CEIL ))
                 ENDED_AT=$(date -d "@$END_EPOCH" +"%Y-%m-%d %H:%M:%S")
             fi
         fi
@@ -43,9 +59,18 @@ insert_recording() {
         fi
         if [ -n "$STARTED_AT" ]; then
             local START_EPOCH=$(date -d "$STARTED_AT" +%s 2>/dev/null || echo 0)
-            [ "$START_EPOCH" -gt 0 ] && [ "$MTIME" -gt 0 ] && DURATION=$(( MTIME - START_EPOCH ))
+            if [ "$START_EPOCH" -gt 0 ] && [ "$HAS_MEDIA_DURATION" = true ]; then
+                DURATION="$MEDIA_DURATION"
+                local DURATION_CEIL=$(awk -v duration="$DURATION" \
+                    'BEGIN { whole = int(duration); print (duration > whole ? whole + 1 : whole) }')
+                local END_EPOCH=$(( START_EPOCH + DURATION_CEIL ))
+                ENDED_AT=$(date -d "@$END_EPOCH" +"%Y-%m-%d %H:%M:%S")
+            elif [ "$START_EPOCH" -gt 0 ] && [ "$MTIME" -gt 0 ]; then
+                DURATION=$(( MTIME - START_EPOCH ))
+                ENDED_AT=$(date -d "@$MTIME" +"%Y-%m-%d %H:%M:%S")
+                echo "$(date) ffprobe 未读取到有效时长，完整录像回退 mtime: $FNAME" >> /var/log/flv2mp4_error.log
+            fi
         fi
-        ENDED_AT=$(date -d "@$MTIME" +"%Y-%m-%d %H:%M:%S")
     fi
 
     [ -z "$STREAM_ID" ] && return

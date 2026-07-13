@@ -94,3 +94,22 @@ The `AlertClient.push_alert()` method SHALL accept and forward `event_time_offse
 - **GIVEN** `push_alert(event)` is called without `event_time_offset`
 - **WHEN** `map_event_to_alert()` constructs the payload
 - **THEN** the payload SHALL include `event_time_offset = None`
+## MODIFIED Requirements
+
+### Requirement: Alert replay resolves only segment MP4 recordings
+
+当告警自身没有持久化录像路径时，SpringBoot 必须根据 `stream_id + occurred_at` 查找包含事件时刻的 `source_type='segment'` MP4，不得用完整 `nginx_record` 作为异常片段回放结果。
+
+#### Scenario: Segment and complete recording overlap
+
+- **GIVEN** 同一事件时刻同时落在切片和完整录像时间范围内
+- **WHEN** `/alerts` 或 `/alerts/{id}` 动态解析录像
+- **THEN** 系统 SHALL 选择切片 MP4
+- **AND** `record_url` SHALL 使用 `/records/{date}/{filename}.mp4`
+
+#### Scenario: No segment contains the event
+
+- **GIVEN** 只有完整录像覆盖事件时刻，或没有切片覆盖事件时刻
+- **WHEN** 后端解析异常录像
+- **THEN** `record_url` 和 `event_time_offset` SHALL 为 null
+- **AND** 系统 SHALL NOT 返回完整录像根目录 URL

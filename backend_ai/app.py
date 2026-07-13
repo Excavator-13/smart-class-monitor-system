@@ -353,7 +353,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             while True:
                 frame = stream_manager.get_frame(stream_id)
                 if frame is None:
-                    analysis_service.observe_stream_offline(stream_id)
+                    if stream_manager.should_emit_offline_alert(stream_id):
+                        analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
                 elif annotate:
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
