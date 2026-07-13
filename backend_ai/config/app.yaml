@@ -30,3 +30,7 @@ snapshot_remote:
   host: ""
   user: "root"
   path: "/data/snapshots"
+
+recording:
+  segment_seconds: 30
+  segment_dir: "/records"
