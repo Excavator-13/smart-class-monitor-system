@@ -178,8 +178,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     elif audio_service is None and not audio_settings.get("enabled", False):
         audio_service = None
 
+    snapshot_root = BASE_DIR / "static" / "snapshots"
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
@@ -203,7 +205,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         anti_spoof_service=anti_spoof_service,
         audio_service=audio_service,
         alert_client=alert_client,
-        snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_root=snapshot_root,
         snapshot_pusher=snapshot_pusher,
         alert_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
         alert_overlay_seconds=float(events_cfg.get("alert_overlay_seconds", 2)),
