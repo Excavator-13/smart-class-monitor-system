@@ -14,6 +14,10 @@ from backend_ai.utils.logger import get_logger
 
 
 class AnalysisService:
+    ZONE_COLORS: dict[str, tuple[int, int, int]] = {
+        "danger": (0, 0, 255),
+        "phone_forbidden": (0, 140, 255),
+    }
     SNAPSHOT_EVENT_TYPES = {
         "danger_zone_intrusion",
         "danger_zone_stay",
@@ -85,15 +89,18 @@ class AnalysisService:
         if self.behavior_service.loaded:
             self._draw_objects(frame, object_list)
 
+        zones = self.config_client.get_zones(stream_id) if ("zone" in enabled or "behavior" in enabled) else []
+        danger_zones = [z for z in zones if z.get("zone_type") == "danger"]
+        phone_forbidden_zones = [z for z in zones if z.get("zone_type") == "phone_forbidden"]
+
         if "behavior" in enabled:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
-            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules)
+            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules, phone_forbidden_zones=phone_forbidden_zones)
             detected.extend(behavior_detections)
             self._draw_detections(frame, behavior_detections, color=(0, 255, 255))
 
         if "zone" in enabled:
             started = time.perf_counter()
-            zones = self.config_client.get_zones(stream_id)
             self._draw_zones(frame, zones)
             if not zones:
                 self._draw_status(frame, "Danger zone not configured", color=(0, 220, 255))
@@ -101,7 +108,7 @@ class AnalysisService:
             zone_detections = self.zone_service.detect(
                 stream_id,
                 persons,
-                zones,
+                danger_zones,
                 self.config_client.get_rule("danger_zone"),
             )
             detected.extend(zone_detections)
@@ -239,10 +246,12 @@ class AnalysisService:
                 py = int(y * height) if 0 <= y <= 1 else int(y)
                 points.append([px, py])
             pts = np.asarray(points, dtype=np.int32)
-            cv2.polylines(frame, [pts], isClosed=True, color=(0, 0, 255), thickness=2)
+            zone_type = zone.get("zone_type", "danger")
+            color = self.ZONE_COLORS.get(zone_type, (0, 0, 255))
+            cv2.polylines(frame, [pts], isClosed=True, color=color, thickness=2)
             label = str(zone.get("zone_name") or zone.get("zone_type") or "danger zone")
             x0, y0 = points[0]
-            draw_text(frame, label, (x0, max(18, y0 - 8)), font_scale=0.55, color=(0, 0, 255), thickness=2)
+            draw_text(frame, label, (x0, max(18, y0 - 8)), font_scale=0.55, color=color, thickness=2)
 
     def _draw_status(self, frame: np.ndarray, text: str, color: tuple[int, int, int]) -> None:
         height, width = frame.shape[:2]
