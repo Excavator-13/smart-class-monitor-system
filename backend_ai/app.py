@@ -37,6 +37,15 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
+
+def _resolve_snapshot_root(cfg: dict[str, Any]) -> Path:
+    """Resolve snapshot save directory from config, defaulting to BASE_DIR/static/snapshots."""
+    snapshot_cfg = cfg.get("snapshot", {})
+    local_path = snapshot_cfg.get("local_path", "") or ""
+    if local_path:
+        return Path(local_path)
+    return BASE_DIR / "static" / "snapshots"
+
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
 
@@ -177,7 +186,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         anti_spoof_service=anti_spoof_service,
         audio_service=audio_service,
         alert_client=alert_client,
-        snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_root=_resolve_snapshot_root(app_config),
         snapshot_pusher=snapshot_pusher,
     )
 
@@ -334,10 +343,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
+    snapshot_root = _resolve_snapshot_root(app_config)
+
     @app.get("/snapshots/<path:filename>")
     def serve_snapshot(filename: str):
-        snapshot_dir = BASE_DIR / "static" / "snapshots"
-        return send_from_directory(snapshot_dir, filename)
+        return send_from_directory(snapshot_root, filename)
 
     return app
 

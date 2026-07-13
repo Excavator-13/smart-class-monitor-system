@@ -1579,6 +1579,7 @@ function normalizeUser(loginPayload, username) {
 async function enterAuthenticatedApp(user, token, remember = true) {
   currentUser.value = user;
   isAuthenticated.value = true;
+  activePage.value = "monitor";
   storeAuthSession(token, user, remember);
   await loadDashboard();
   startAlertRefresh();
@@ -2228,6 +2229,7 @@ onMounted(async () => {
     setAuthNotice("登录状态已失效，请重新登录。", "warning");
     return;
   }
+  activePage.value = "monitor";
   await loadDashboard();
   startAlertRefresh();
 });
@@ -3441,7 +3443,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button
-                    v-if="isAdmin"
                     size="small"
                     type="primary"
                     text
@@ -3449,7 +3450,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     >编辑</el-button
                   >
                   <el-button
-                    v-if="isAdmin"
                     size="small"
                     type="danger"
                     text
@@ -3683,6 +3683,14 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </section>
         </div>
       </section>
+      <section v-else class="page-grid module-page centered-module-page">
+        <div class="module-board">
+          <section class="panel span-12">
+            <el-empty description="页面未找到，请从左侧导航选择" />
+          </section>
+        </div>
+      </section>
+
     </main>
 
     <teleport to="body">
