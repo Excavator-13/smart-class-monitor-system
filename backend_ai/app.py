@@ -76,7 +76,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     event_service = (overrides or {}).get("event_service") if overrides else None
     event_service = event_service or EventService(
         max_items=int(events_cfg.get("max_items", 500)),
-        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
+        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
+        continuity_gap_seconds=float(events_cfg.get("continuity_gap_seconds", 2)),
     )
     device_config = resolve_device(model_config.get("device"))
     face_settings = (model_config.get("models") or {}).get("face", {})
