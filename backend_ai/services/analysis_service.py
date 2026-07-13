@@ -12,6 +12,7 @@ import numpy as np
 from backend_ai.utils.geometry import parse_polygon_coordinates
 from backend_ai.utils.image_utils import draw_text
 from backend_ai.utils.logger import get_logger
+from backend_ai.utils.response import TZ_SHANGHAI
 
 
 class AnalysisService:
@@ -129,21 +130,13 @@ class AnalysisService:
                     try:
                         if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
                             event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
-                        self.alert_client.push_alert(event)
+                        record_path, time_offset = self._resolve_record_segment(
+                            stream_id, event.get("occurred_at", "")
+                        )
+                        self.alert_client.push_alert(event, record_path=record_path, event_time_offset=time_offset)
                         self.event_service.mark_confirmed(event["event_id"])
                     except Exception as exc:
                         self.logger.warning("Failed to push alert event_id=%s type=%s: %s", event.get("event_id"), event.get("event_type"), exc)
-            if should_confirm and self.alert_client is not None:
-                try:
-                    if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
-                        event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
-                    record_path, time_offset = self._resolve_record_segment(
-                        stream_id, event.get("occurred_at", "")
-                    )
-                    self.alert_client.push_alert(event, record_path=record_path, event_time_offset=time_offset)
-                    self.event_service.mark_confirmed(event["event_id"])
-                except Exception as exc:
-                    self.logger.warning("Failed to push alert event_id=%s type=%s: %s", event.get("event_id"), event.get("event_type"), exc)
             events.append(event)
         self._draw_alert_overlays(frame, stream_id)
         return events
@@ -201,7 +194,7 @@ class AnalysisService:
         except (ValueError, TypeError):
             return None, None
         if dt.tzinfo is not None:
-            dt = dt.astimezone(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)
+            dt = dt.astimezone(TZ_SHANGHAI).replace(tzinfo=None)
         seconds_of_day = dt.hour * 3600 + dt.minute * 60 + dt.second
         segment_start_seconds = (seconds_of_day // segment_seconds) * segment_seconds
         time_offset = float(seconds_of_day - segment_start_seconds)
