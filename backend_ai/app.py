@@ -179,6 +179,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
     snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
+    recording_config = {
+        "segment_seconds": int(os.environ.get("RECORDING_SEGMENT_SECONDS") or app_config.get("recording", {}).get("segment_seconds", 30)),
+        "segment_dir": os.environ.get("RECORDING_SEGMENT_DIR") or app_config.get("recording", {}).get("segment_dir", "/records"),
+    }
+
     analysis_service = AnalysisService(
         face_service=face_service,
         zone_service=zone_service,
@@ -191,6 +196,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
         snapshot_pusher=snapshot_pusher,
+        recording_config=recording_config,
     )
 
     app.extensions["ai_services"] = {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ class AnalysisService:
     VISIBLE_DETECTION_EVENT_TYPES = {"face_recognized"}
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
 
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, recording_config: dict[str, Any] | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
@@ -30,6 +31,7 @@ class AnalysisService:
         self.alert_client = alert_client
         self.snapshot_root = snapshot_root
         self.snapshot_pusher = snapshot_pusher
+        self.recording_config = recording_config or {}
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
 
@@ -114,7 +116,10 @@ class AnalysisService:
                 try:
                     if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
                         event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
-                    self.alert_client.push_alert(event)
+                    record_path, time_offset = self._resolve_record_segment(
+                        stream_id, event.get("occurred_at", "")
+                    )
+                    self.alert_client.push_alert(event, record_path=record_path, event_time_offset=time_offset)
                     self.event_service.mark_confirmed(event["event_id"])
                 except Exception as exc:
                     self.logger.warning("Failed to push alert event_id=%s type=%s: %s", event.get("event_id"), event.get("event_type"), exc)
@@ -163,6 +168,28 @@ class AnalysisService:
         if self.snapshot_pusher is not None:
             self.snapshot_pusher.push_async(path, relative_path)
         return relative_path
+
+    def _resolve_record_segment(self, stream_id: str, occurred_at: str) -> tuple[str | None, float | None]:
+        segment_seconds = int(self.recording_config.get("segment_seconds", 30))
+        segment_dir = self.recording_config.get("segment_dir", "/records")
+        if not stream_id or not occurred_at:
+            return None, None
+        try:
+            dt = datetime.fromisoformat(occurred_at)
+        except (ValueError, TypeError):
+            return None, None
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None) + timedelta(hours=8)
+        seconds_of_day = dt.hour * 3600 + dt.minute * 60 + dt.second
+        segment_start_seconds = (seconds_of_day // segment_seconds) * segment_seconds
+        time_offset = float(seconds_of_day - segment_start_seconds)
+        base = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        segment_start = base + timedelta(seconds=segment_start_seconds)
+        day_str = segment_start.strftime("%Y%m%d")
+        time_str = segment_start.strftime("%Y-%m-%d-%H_%M_%S")
+        filename = f"{stream_id}-{time_str}.mp4"
+        record_path = f"{segment_dir}/{day_str}/{filename}"
+        return record_path, time_offset
 
     def _draw_objects(self, frame: np.ndarray, objects: list[dict[str, Any]]) -> None:
         for idx, obj in enumerate(objects):

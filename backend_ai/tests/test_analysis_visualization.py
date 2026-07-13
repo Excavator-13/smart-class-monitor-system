@@ -142,7 +142,7 @@ class CapturingAlertClient:
     def __init__(self):
         self.events = []
 
-    def push_alert(self, event):
+    def push_alert(self, event, record_path=None, event_time_offset=None):
         self.events.append(dict(event))
 
 
