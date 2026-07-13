@@ -36,4 +36,7 @@ public interface DangerZoneMapper {
 
     @Update("UPDATE danger_zone SET deleted_at=NOW() WHERE id=#{id}")
     int softDelete(@Param("id") Long id);
+
+    @Delete("TRUNCATE TABLE danger_zone")
+    void truncate();
 }

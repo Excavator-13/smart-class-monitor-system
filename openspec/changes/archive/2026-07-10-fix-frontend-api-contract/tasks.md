@@ -1,0 +1,18 @@
+- [x] 修正 fetchAlertStats fallback 字段名：today_alerts → today_total，pending_alerts → unhandled_count
+- [x] 修正 App.vue 中 metricCards 读取 stats.value.today_alerts → stats.value.today_total
+- [x] 修正 mockStreams 的 status 值：online/offline → enabled/disabled
+- [x] 修正 onlineStreamCount 计算逻辑：status === "online" → status === "enabled"
+- [x] 修正 fetchAlerts fallback 结构：list → records
+- [x] 修正 fetchStudents fallback 结构：list → records
+- [x] 新建 mockAnalysisEvents 替代 mockAlerts.slice(0, 2)，使用 AI 事件格式字段
+- [x] 修正 fetchAnalysisEvents fallback 为 mockAnalysisEvents
+- [x] 修正 mockHealth 字段名：api → backend
+- [x] 修正 normalizeHealth 优先读取 payload.backend
+- [x] 移除 loadDashboard 中 fetchAlertStats 的 stream_id 参数
+- [x] 修正 vite.config.js AI 代理 fallback 端口：5000 → 5001
+- [x] 补充 mockAlerts 缺失的 AlertVO 字段（stream_name、student_id、student_name、handled_at、remark）
+- [x] 验证 fetchAlertStats 字段名对齐：后端返回 today_total/unhandled_count 时前端正确展示
+- [x] 验证 onlineStreamCount 统计 enabled 状态的视频源数量
+- [x] 验证分页 fallback 使用 records key 时 normalizeList 正确解析
+- [x] 验证 AI 事件 fallback 使用 event_type/event_status 字段
+- [x] 验证 Vite 代理 /ai 请求转发到 localhost:5001

@@ -38,6 +38,19 @@ def load_yaml(path: Path) -> dict[str, Any]:
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
+
+    @app.after_request
+    def add_cors_headers(response: Response) -> Response:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        return response
+
+    @app.before_request
+    def handle_preflight() -> Response | None:
+        if request.method == "OPTIONS":
+            return Response(status=204)
+
     app_config = load_yaml(BASE_DIR / "config" / "app.yaml")
     model_config = load_yaml(BASE_DIR / "config" / "model.yaml")
     if overrides:
@@ -49,6 +62,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     internal_token = os.environ.get("INTERNAL_TOKEN") or spring.get("internal_token")
     stream_cfg = app_config.get("stream", {})
     events_cfg = app_config.get("events", {})
+    cache_cfg = app_config.get("cache", {})
+    model_settings = model_config.get("models") or {}
 
     config_client = (overrides or {}).get("config_client") if overrides else None
     config_client = config_client or ConfigClient(
@@ -67,12 +82,24 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     face_service = face_service or FaceService(
         feature_dim=int(face_settings.get("feature_dim", 512)),
         similarity_threshold=float(face_settings.get("similarity_threshold", 0.45)),
+        model_name=str(face_settings.get("name", "buffalo_l")),
+        providers=list(face_settings.get("providers") or ["CUDAExecutionProvider"]),
+        det_size=tuple(face_settings.get("det_size") or [640, 640]),
+        ctx_id=int(face_settings.get("ctx_id", 0)),
         device=device_config,
     )
+    if not (overrides or {}).get("face_service"):
+        face_service.load_model(face_settings)
     zone_service = (overrides or {}).get("zone_service") if overrides else None
     zone_service = zone_service or ZoneService()
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
-    behavior_service = behavior_service or BehaviorService()
+    behavior_settings = model_settings.get("behavior", {})
+    behavior_service = behavior_service or BehaviorService(
+        confidence_threshold=float(behavior_settings.get("confidence_threshold", 0.6)),
+        device=device_config,
+    )
+    if not (overrides or {}).get("behavior_service"):
+        behavior_service.load_model(behavior_settings, BASE_DIR)
 
     fire_settings = (model_config.get("models") or {}).get("fire", {})
     fire_service = (overrides or {}).get("fire_service") if overrides else None
@@ -125,9 +152,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         audio_service = None
 
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, dingtalk=trigger_alert)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
     start_stream()  # 启动钉钉 Stream 监听
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token)
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,
@@ -144,6 +170,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         anti_spoof_service=anti_spoof_service,
         audio_service=audio_service,
         alert_client=alert_client,
+        snapshot_root=BASE_DIR / "static" / "snapshots",
     )
 
     app.extensions["ai_services"] = {
@@ -160,19 +187,35 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         "analysis_service": analysis_service,
     }
 
+    if not overrides:
+        config_client.bootstrap()
+        config_client.start_polling(cache_cfg)
+
     @app.get("/model/status")
     def model_status():
         models = [
             {
                 "module": "face",
                 "loaded": bool(face_service.loaded),
-                "model_name": "insightface",
-                "version": "v1",
-                "avg_infer_ms": None,
+                "model_name": getattr(face_service, "model_name", "insightface"),
+                "version": getattr(face_service, "model_version", "v1"),
+                "providers": getattr(face_service, "providers", None),
+                "avg_infer_ms": analysis_service.avg_latency_ms("face"),
+                "last_error": getattr(face_service, "last_error", None),
+            },
+            {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("zone")},
+            {
+                "module": "behavior",
+                "loaded": bool(getattr(behavior_service, "loaded", behavior_service.model is not None)),
+                "model_name": getattr(behavior_service, "model_name", "ultralytics"),
+                "version": getattr(behavior_service, "model_version", "v1"),
+                "weights_path": getattr(behavior_service, "weights_path", None),
+                "avg_infer_ms": analysis_service.avg_latency_ms("behavior"),
+                "last_error": getattr(behavior_service, "last_error", None),
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": nalysis_service.avg_latency_ms("fire")},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]
@@ -197,19 +240,22 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         for event in events:
             et = event.get("event_type", "unknown")
             counts[et] = counts.get(et, 0) + 1
-        high_count = sum(1 for e in events if e.get("level") == "high")
-        warning_count = sum(1 for e in events if e.get("level") == "warning")
-        if high_count > 0:
-            risk_level = "high"
-        elif warning_count > 3:
-            risk_level = "warning"
-        else:
-            risk_level = "low"
-        risk_score = min(100, high_count * 30 + warning_count * 10)
+        high_types = {"danger_zone_stay", "stream_offline", "fall_detected", "flame_detected"}
+        warning_types = {"stranger_detected", "danger_zone_intrusion", "danger_zone_approach", "phone_usage", "head_down", "crowd_gathering"}
+        risk_score = min(100, sum(counts.get(t, 0) * 25 for t in high_types) + sum(counts.get(t, 0) * 12 for t in warning_types))
+        risk_level = "high" if risk_score >= 70 else "warning" if risk_score >= 30 else "low"
+        stream_status = next((item for item in stream_manager.status() if item.get("stream_id") == stream_id), None)
         parts = []
-        for et, cnt in counts.items():
-            parts.append(f"{EVENT_NAMES.get(et, et)} {cnt} 起")
-        summary = "当前无异常事件" if not parts else "，".join(parts)
+        if counts.get("phone_usage"):
+            parts.append(f"检测到 {counts['phone_usage']} 起使用手机行为")
+        if counts.get("danger_zone_intrusion") or counts.get("danger_zone_stay"):
+            parts.append("危险区域存在人员异常")
+        if counts.get("stream_offline"):
+            parts.append("视频流存在中断")
+        if not parts:
+            parts.append("当前未检测到明显异常")
+        summary = "，".join(parts) + "。"
+        suggestion = "建议教师优先关注高风险告警并核对实时画面。" if risk_level != "low" else "建议保持巡检，持续观察课堂状态。"
         recent = events[:5]
         timeline = [
             {"time": e.get("occurred_at", "")[11:16], "text": f"{EVENT_NAMES.get(e.get('event_type', ''), e.get('event_type', ''))} 置信度 {e.get('confidence', 0):.0%}"}
@@ -223,6 +269,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             "summary": summary,
             "actions": ["自动抓拍", "等待人工确认", "保留追踪记录"] if risk_level != "low" else ["持续监控"],
             "counts": counts,
+            "stream_status": stream_status,
+            "suggestion": suggestion,
             "timeline": timeline,
         })
 
@@ -266,6 +314,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             while True:
                 frame = stream_manager.get_frame(stream_id)
                 if frame is None:
+                    analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
                 elif annotate:
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)

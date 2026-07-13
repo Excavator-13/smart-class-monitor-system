@@ -1,0 +1,8 @@
+- [x] Read SpringBoot, AI, module dependency, and Nginx media documents.
+- [x] Create OpenSpec change for frontend API contract alignment.
+- [x] Replace implicit `safeGet` mock fallback with explicit mock-mode behavior.
+- [x] Add API adapters for documented SpringBoot and AI response shapes.
+- [x] Remove demo login fallback and surface real authentication failures.
+- [x] Replace hardcoded AI summary/event/phone violation behavior with API-derived data and empty states.
+- [x] Ensure media URLs use Nginx base and frontend GIF assets do not use `/media`.
+- [x] Run frontend build verification.
