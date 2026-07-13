@@ -103,6 +103,8 @@ class EventService:
         cooldown = self.default_cooldown_seconds if cooldown_seconds is None else cooldown_seconds
         should_confirm = duration >= threshold_seconds and current - state.last_alert_at >= cooldown
         if should_confirm:
+            if state.last_alert_at > 0:
+                state.event_id = f"evt_{uuid4().hex[:16]}"
             state.event_status = "confirmed"
             state.last_alert_at = current
 

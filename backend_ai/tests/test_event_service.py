@@ -47,3 +47,23 @@ def test_observe_uses_same_event_id_for_same_track():
 
     assert first["event_id"] == second["event_id"]
 
+
+def test_repeated_alert_after_cooldown_gets_new_event_id():
+    service = EventService(default_cooldown_seconds=10)
+
+    first, first_confirmed = service.observe(
+        "classroom_01", "deepfake_detected", "face_1", 0.9, now=100
+    )
+    inside, inside_confirmed = service.observe(
+        "classroom_01", "deepfake_detected", "face_1", 0.9, now=101
+    )
+    second, second_confirmed = service.observe(
+        "classroom_01", "deepfake_detected", "face_1", 0.9, now=110
+    )
+
+    assert first_confirmed is True
+    assert inside_confirmed is False
+    assert second_confirmed is True
+    assert inside["event_id"] == first["event_id"]
+    assert second["event_id"] != first["event_id"]
+

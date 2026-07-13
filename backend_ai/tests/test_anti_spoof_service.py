@@ -69,6 +69,21 @@ def test_detect_accepts_numpy_bbox_with_frame():
     assert detections == []
 
 
+def test_detect_accepts_numpy_landmarks_without_ambiguous_truth_value():
+    service = AntiSpoofService()
+    landmarks = np.zeros((68, 2), dtype=float)
+    landmarks[36:48] = np.asarray(_make_open_eye_landmarks()[36:48])
+    face = {
+        "track_id": "track_1",
+        "bbox": np.array([10, 10, 100, 100]),
+        "landmarks": landmarks,
+    }
+
+    detections = service.detect("stream_1", [face])
+
+    assert detections == []
+
+
 def test_eye_aspect_ratio_open():
     # 睁眼：眼宽15px，眼高8px → EAR ≈ 0.53
     eye_open = [
@@ -126,3 +141,20 @@ def test_status():
     assert status["loaded"] is True
     assert "active_tracks" in status
     assert "blink_threshold_seconds" in status
+    assert status["deepfake_detector"]["loaded"] is False
+
+
+def test_status_includes_injected_deepfake_detector():
+    class FakeDeepfakeDetector:
+        loaded = True
+
+        def status(self):
+            return {"loaded": True, "model": "Meso4", "device": "cpu"}
+
+    service = AntiSpoofService(deepfake_detector=FakeDeepfakeDetector())
+
+    assert service.status()["deepfake_detector"] == {
+        "loaded": True,
+        "model": "Meso4",
+        "device": "cpu",
+    }

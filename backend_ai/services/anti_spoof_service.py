@@ -62,7 +62,9 @@ class AntiSpoofService:
             state = self._states[track_id]
 
             # --- 眨眼检测（face_service 传入的 landmarks，或 dlib 提取） ---
-            landmarks = face.get("landmarks") or (self._get_landmarks(frame, bbox) if frame is not None and bbox else None)
+            landmarks = face.get("landmarks")
+            if landmarks is None and frame is not None and bbox is not None and len(bbox) > 0:
+                landmarks = self._get_landmarks(frame, bbox)
             if landmarks is not None and len(landmarks) >= 68:
                 left_eye = landmarks[36:42]
                 right_eye = landmarks[42:48]
@@ -249,11 +251,13 @@ class AntiSpoofService:
         return True  # 纯规则驱动，无需模型
 
     def status(self) -> dict[str, Any]:
+        deepfake_status = self.deepfake_detector.status() if self.deepfake_detector is not None else {"loaded": False}
         return {
             "loaded": self.loaded,
             "active_tracks": len(self._states),
             "blink_threshold_seconds": self.blink_threshold_seconds,
             "texture_variance_threshold": self.texture_variance_threshold,
+            "deepfake_detector": deepfake_status,
         }
 
 

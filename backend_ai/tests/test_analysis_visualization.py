@@ -105,6 +105,64 @@ def test_recognized_face_label_uses_registered_student_number():
     assert labels == ["TEST-001"]
 
 
+def test_security_and_fire_detection_labels_are_visible():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=FakeZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=FakeConfigClient(),
+    )
+    labels = []
+    service._draw_bbox = lambda frame, bbox, label, color: labels.append((label, color))
+    frame = np.zeros((80, 120, 3), dtype=np.uint8)
+
+    service._draw_detections(
+        frame,
+        [
+            {"event_type": "spoof_detected", "target": {"bbox": [10, 10, 30, 40]}},
+            {"event_type": "deepfake_detected", "target": {"bbox": [10, 10, 30, 40]}},
+        ],
+        color=(0, 0, 255),
+    )
+    service._draw_detections(
+        frame,
+        [{"event_type": "flame_detected", "target": {"bbox": [40, 10, 60, 40]}}],
+        color=(0, 80, 255),
+    )
+
+    assert labels == [
+        ("Spoof detected", (0, 0, 255)),
+        ("Deepfake detected", (0, 0, 255)),
+        ("Fire", (0, 80, 255)),
+    ]
+
+
+def test_alert_overlay_is_drawn_for_two_seconds_then_removed():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=FakeZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=FakeConfigClient(),
+        alert_overlay_seconds=2,
+    )
+    service._add_alert_overlay(
+        "classroom_01",
+        {"event_id": "evt_fire", "event_type": "flame_detected"},
+        now=10,
+    )
+    visible_frame = np.zeros((80, 240, 3), dtype=np.uint8)
+    service._draw_alert_overlays(visible_frame, "classroom_01", now=11.99)
+
+    expired_frame = np.zeros((80, 240, 3), dtype=np.uint8)
+    service._draw_alert_overlays(expired_frame, "classroom_01", now=12)
+
+    assert visible_frame.sum() > 0
+    assert expired_frame.sum() == 0
+    assert len(service._alert_overlays["classroom_01"]) == 0
+
+
 def test_only_person_phone_usage_and_recognized_faces_are_visible():
     service = AnalysisService(
         face_service=FakeFaceService(),
