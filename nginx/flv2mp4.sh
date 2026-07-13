@@ -80,7 +80,7 @@ process_file() {
 
 mkdir -p "$SEGMENTS_DIR"
 
-inotifywait -m -e close_write --format '%w%f' "$WATCH_DIR" "$SEGMENTS_DIR" | while read FILE
+inotifywait -m -r -e close_write --format '%w%f' "$WATCH_DIR" "$SEGMENTS_DIR" | while read FILE
 do
     if [[ "$FILE" == "$SEGMENTS_DIR"* ]]; then
         process_file "$FILE" "segment"
