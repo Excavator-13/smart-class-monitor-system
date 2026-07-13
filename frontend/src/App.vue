@@ -147,7 +147,12 @@ const syncContactsToBackend = async () => {
     await fetch("http://127.0.0.1:8080/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contacts: alertSettings.value.contacts, responsible: alertSettings.value.responsible, reportTime: alertSettings.value.reportTime, alertInterval: alertSettings.value.alertInterval }),
+      body: JSON.stringify({
+        contacts: alertSettings.value.contacts,
+        responsible: alertSettings.value.responsible,
+        reportTime: alertSettings.value.reportTime,
+        alertInterval: alertSettings.value.alertInterval,
+      }),
     });
   } catch {}
 };
@@ -226,15 +231,17 @@ const generateAiReport = async () => {
 const exportReportPdf = () => {
   const report = alertSettings.value.latestReport;
   if (!report) return;
-  const items = (report.alerts || []).map(a => {
-    const snap = a.snapshot_url || a.snapshotUrl || "";
-    const analysis = a.vl_analysis || a.vlAnalysis || "";
-    return `<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:6px">
+  const items = (report.alerts || [])
+    .map((a) => {
+      const snap = a.snapshot_url || a.snapshotUrl || "";
+      const analysis = a.vl_analysis || a.vlAnalysis || "";
+      return `<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:6px">
       <h4>${a.alertType || a.type || ""} — ${a.stream_id || a.streamId || ""}</h4>
       ${snap ? `<img src="${snap}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" onerror="this.style.display='none'"/>` : ""}
       ${analysis ? `<p style="color:#555;font-size:13px">AI分析：${analysis}</p>` : ""}
     </div>`;
-  }).join("");
+    })
+    .join("");
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>日报_${report.date}</title><style>
     body{font-family:'Microsoft YaHei',sans-serif;max-width:800px;margin:0 auto;padding:20px;color:#333}
     h1{text-align:center;border-bottom:2px solid #409EFF;padding-bottom:10px}
@@ -261,6 +268,7 @@ const activeAlertLevel = ref("全部");
 const activeAlertType = ref("全部");
 const isVideoLive = ref(false);
 const videoError = ref(false);
+const streamSwitching = ref(false);
 const isDay = ref(true);
 const showAiAnnotations = ref(true);
 const showRuleOverlay = ref(true);
@@ -765,26 +773,6 @@ function isPhoneItemInForbiddenZone(item) {
     ({ item: source }) => source === item,
   );
 }
-
-const aiOverlayTargets = computed(() => {
-  return uniqueEvents([...analysisEvents.value, ...alerts.value])
-    .filter((item) => !isPhoneRelated(item) || isPhoneItemInForbiddenZone(item))
-    .map((item) => ({ item, rect: normalizeDetectionRect(item) }))
-    .filter(({ rect }) => rect)
-    .slice(0, 6)
-    .map(({ item, rect }) => ({
-      id: item.event_id || `${item.event_type}-${item.occurred_at}`,
-      label: item.event_name || item.alert_name || item.event_type || "AI 目标",
-      confidence: item.confidence,
-      level: item.level,
-      style: {
-        left: `${rect.x * 100}%`,
-        top: `${rect.y * 100}%`,
-        width: `${Math.max(rect.width * 100, 6)}%`,
-        height: `${Math.max(rect.height * 100, 6)}%`,
-      },
-    }));
-});
 
 function levelText(level) {
   return (
@@ -1812,6 +1800,7 @@ async function switchStream(streamId) {
   activeStreamId.value = streamId;
   isVideoLive.value = false;
   videoError.value = false;
+  streamSwitching.value = true;
   resetForbiddenZoneDraft();
   try {
     const [nextSummary, nextEvents, nextZones] = await Promise.all([
@@ -1828,6 +1817,8 @@ async function switchStream(streamId) {
     summary.value = {};
     analysisEvents.value = [];
     loadErrors.value.summary = error?.message || "AI 分析接口请求失败";
+  } finally {
+    streamSwitching.value = false;
   }
 }
 
@@ -2623,7 +2614,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </span>
                 <span class="video-chip danger">
                   <span class="status-dot red"></span>
-                  {{ videoError ? "视频不可用" : "实时联调" }}
+                  {{
+                    videoError
+                      ? "视频不可用"
+                      : streamSwitching
+                        ? "切换中..."
+                        : "实时联调"
+                  }}
                 </span>
               </div>
 
@@ -2644,9 +2641,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 v-if="showRuleOverlay && !activeForbiddenRect"
                 class="draw-hint"
               >
-                {{
-                  "按住鼠标左键拖拽新增区域，已保存区域由 AI 视频流标注"
-                }}
+                {{ "按住鼠标左键拖拽新增区域，已保存区域由 AI 视频流标注" }}
               </div>
               <div v-if="!showRuleOverlay" class="draw-hint muted">
                 区域规则层已关闭
@@ -2691,25 +2686,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   取消草稿
                 </button>
               </div>
-              <template v-if="showAiAnnotations">
-                <div
-                  v-for="target in aiOverlayTargets"
-                  :key="target.id"
-                  class="person-box api-box"
-                  :class="target.level"
-                  :style="target.style"
-                >
-                  <span
-                    >{{ target.label
-                    }}{{
-                      target.confidence
-                        ? ` ${Math.round(target.confidence * 100)}%`
-                        : ""
-                    }}</span
-                  >
-                </div>
-              </template>
-
               <div v-if="showAiAnnotations" class="insight-strip">
                 <article>
                   <span>AI 研判</span>
@@ -2940,8 +2916,26 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 style="font-size: 13px; color: #67c23a"
                 >● {{ alertSettings.responsible }}</span
               >
-              <span v-if="alertSettings.dingtalkEnabled" style="font-size:12px;color:#909399;margin-left:8px">
-                间隔 <input v-model.number="alertSettings.alertInterval" type="number" min="10" max="600" style="width:50px;padding:2px 4px;border:1px solid #dcdfe6;border-radius:4px;text-align:center" @change="syncContactsToBackend"/> 秒
+              <span
+                v-if="alertSettings.dingtalkEnabled"
+                style="font-size: 12px; color: #909399; margin-left: 8px"
+              >
+                间隔
+                <input
+                  v-model.number="alertSettings.alertInterval"
+                  type="number"
+                  min="10"
+                  max="600"
+                  style="
+                    width: 50px;
+                    padding: 2px 4px;
+                    border: 1px solid #dcdfe6;
+                    border-radius: 4px;
+                    text-align: center;
+                  "
+                  @change="syncContactsToBackend"
+                />
+                秒
               </span>
               <el-button
                 v-if="alertSettings.dingtalkEnabled"
@@ -2975,7 +2969,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 size="small"
                 type="success"
                 @click="exportReportPdf"
-                >导出 PDF</el-button>
+                >导出 PDF</el-button
+              >
               <el-button
                 v-if="alertSettings.latestReport"
                 size="small"
@@ -3186,7 +3181,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </div>
             </div>
             <div style="text-align: right; margin-top: 20px">
-              <el-button type="primary" size="small" @click="exportReportPdf">导出 PDF</el-button>
+              <el-button type="primary" size="small" @click="exportReportPdf"
+                >导出 PDF</el-button
+              >
               <el-button @click="showReportModal = false">关闭</el-button>
             </div>
           </div>
@@ -3647,8 +3644,16 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="last_login_at" label="最近登录" min-width="170" />
-              <el-table-column prop="created_at" label="创建时间" min-width="170" />
+              <el-table-column
+                prop="last_login_at"
+                label="最近登录"
+                min-width="170"
+              />
+              <el-table-column
+                prop="created_at"
+                label="创建时间"
+                min-width="170"
+              />
             </el-table>
           </section>
         </div>
@@ -4123,24 +4128,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 取消草稿
               </button>
             </div>
-            <template v-if="showAiAnnotations">
-              <div
-                v-for="target in aiOverlayTargets"
-                :key="target.id"
-                class="person-box api-box"
-                :class="target.level"
-                :style="target.style"
-              >
-                <span
-                  >{{ target.label
-                  }}{{
-                    target.confidence
-                      ? ` ${Math.round(target.confidence * 100)}%`
-                      : ""
-                  }}</span
-                >
-              </div>
-            </template>
           </div>
         </section>
       </div>
