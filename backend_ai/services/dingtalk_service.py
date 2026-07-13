@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from typing import Any
@@ -17,12 +18,12 @@ from dingtalk_stream import (
 
 logger = logging.getLogger(__name__)
 
-# ── 配置 ───────────────────────────────────────────────────
+# ── 配置（从环境变量读取）──────────────────────────────────
 
-APP_KEY = "dingvd9kkjc0bofwbqhu"
-APP_SECRET = "813aXbnZ6zbPM8ryKCma_8qVLzTj1D4kWSkujkjLYavI22xYHv3rhCCuxU-uYdUy"
-ROBOT_CODE = "dingvd9kkjc0bofwbqhu"
-GROUP_ID = "cid+kYdFkRFkyGbzYUZc/QJCQ=="
+APP_KEY = os.environ.get("DINGTALK_APP_KEY", "")
+APP_SECRET = os.environ.get("DINGTALK_APP_SECRET", "")
+ROBOT_CODE = APP_KEY
+GROUP_ID = os.environ.get("DINGTALK_GROUP_ID", "")
 
 PERSONS: dict[str, dict[str, Any]] = {
     "项重善":  {"name": "项重善", "mobile": "18601033435"},
@@ -53,7 +54,7 @@ def _get_token() -> str:
 
 # ── 发消息（Webhook — 支持蓝色 @）───────────────────────
 
-WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=ef247487bb8129668aa09a122be9161f056afaf263488d0c9285814654b06618"
+WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
 
 
 def _upload_image(file_path: str) -> str:
@@ -168,6 +169,9 @@ _event_keys: dict[str, str] = {}
 
 
 def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
+    if not APP_KEY or not APP_SECRET or not WEBHOOK:
+        logger.warning("钉钉配置不完整（APP_KEY/APP_SECRET/WEBHOOK），跳过通知")
+        return
     c = _get_chain(start or PRIMARY)
     _step(msg, c, 0, snapshot)
 
@@ -289,6 +293,9 @@ class AlertHandler(ChatbotHandler):
 
 
 def start_stream():
+    if not APP_KEY or not APP_SECRET:
+        logger.warning("钉钉配置不完整（APP_KEY/APP_SECRET），跳过 Stream 启动")
+        return
     def _run():
         cred = Credential(APP_KEY, APP_SECRET)
         client = DingTalkStreamClient(cred)

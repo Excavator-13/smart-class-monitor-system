@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
 from dotenv import load_dotenv
 from flask import Flask, Response, request, send_from_directory
@@ -36,6 +37,35 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
+
+def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None):
+    try:
+        headers = {"X-Internal-Token": internal_token} if internal_token else None
+        resp = requests.get(f"{spring_base_url}/api/settings", headers=headers, timeout=5)
+        if not resp.ok:
+            return
+        data = resp.json()
+        from backend_ai.services import dingtalk_service as ds
+        contacts = data.get("contacts", [])
+        new_persons = {}
+        for c in contacts:
+            name = c.get("name", "")
+            mobile = c.get("mobile", "")
+            if name and mobile:
+                new_persons[name] = {"name": name, "mobile": mobile}
+        if new_persons:
+            ds.PERSONS.clear()
+            ds.PERSONS.update(new_persons)
+        responsible = data.get("responsible", "")
+        if responsible:
+            ds.PRIMARY = responsible
+        interval = data.get("alertInterval")
+        if interval:
+            ds.STEP_TIMEOUT = int(interval)
+        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}")
+    except Exception:
+        print("[DingTalk] 从 Spring Boot 恢复设置失败，使用默认值")
 
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
@@ -182,6 +212,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     alert_client = (overrides or {}).get("alert_client") if overrides else None
     alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
+    _restore_dingtalk_settings(spring_base_url, internal_token)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
