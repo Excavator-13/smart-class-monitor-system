@@ -14,7 +14,11 @@ from backend_ai.utils.logger import get_logger
 
 
 class AnalysisService:
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None):
+    SNAPSHOT_EVENT_TYPES = {"danger_zone_intrusion"}
+    VISIBLE_DETECTION_EVENT_TYPES = {"face_recognized"}
+    VISIBLE_OBJECT_CLASSES = {"person", "student"}
+
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
@@ -25,6 +29,7 @@ class AnalysisService:
         self.config_client = config_client
         self.alert_client = alert_client
         self.snapshot_root = snapshot_root
+        self.snapshot_pusher = snapshot_pusher
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
 
@@ -107,7 +112,8 @@ class AnalysisService:
             )
             if should_confirm and self.alert_client is not None:
                 try:
-                    event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
+                    if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
+                        event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
                     self.alert_client.push_alert(event)
                     self.event_service.mark_confirmed(event["event_id"])
                 except Exception as exc:
@@ -153,12 +159,17 @@ class AnalysisService:
         ok = cv2.imwrite(str(path), frame)
         if not ok:
             raise RuntimeError("snapshot encode failed")
-        return f"/snapshots/{day}/{event_id}.jpg"
+        relative_path = f"/snapshots/{day}/{event_id}.jpg"
+        if self.snapshot_pusher is not None:
+            self.snapshot_pusher.push_async(path, relative_path)
+        return relative_path
 
     def _draw_objects(self, frame: np.ndarray, objects: list[dict[str, Any]]) -> None:
         for idx, obj in enumerate(objects):
+            if obj.get("class_name") not in self.VISIBLE_OBJECT_CLASSES:
+                continue
             bbox = obj.get("bbox")
-            if not bbox:
+            if bbox is None or len(bbox) == 0:
                 continue
             label = obj.get("class_name") or f"object_{idx + 1}"
             confidence = obj.get("confidence")
@@ -168,9 +179,11 @@ class AnalysisService:
 
     def _draw_detections(self, frame: np.ndarray, detections: list[dict[str, Any]], color: tuple[int, int, int]) -> None:
         for item in detections:
+            if item.get("event_type") not in self.VISIBLE_DETECTION_EVENT_TYPES:
+                continue
             target = item.get("target") or {}
             bbox = target.get("bbox")
-            if not bbox:
+            if bbox is None or len(bbox) == 0:
                 continue
             label_parts = [str(item.get("event_type", "event"))]
             zone = item.get("zone") or {}

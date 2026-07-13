@@ -31,8 +31,9 @@ public class ReportController {
     }
 
     @PostMapping("/generate")
-    public Map<String, Object> generate(@RequestBody List<Map<String, Object>> alerts) {
-        return reportService.generateReport(alerts);
+    public Map<String, Object> generate(@RequestBody(required = false) List<Map<String, Object>> alerts) {
+        // 始终读数据库（含真实截图）
+        return reportService.generateReport(reportService.queryTodayAlerts());
     }
 
     @GetMapping("/history")

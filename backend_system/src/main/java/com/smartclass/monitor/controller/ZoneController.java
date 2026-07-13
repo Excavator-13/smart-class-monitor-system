@@ -44,7 +44,7 @@ public class ZoneController {
 
     @PutMapping("/zones/{id}")
     @Operation(summary = "修改区域", description = "更新区域配置，修改后自动通知 AI 刷新")
-    public ApiResponse<Void> update(@PathVariable Long id, @RequestBody ZoneUpdateRequest request) {
+    public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody ZoneUpdateRequest request) {
         zoneService.updateZone(id, request);
         return ApiResponse.success();
     }
@@ -53,6 +53,13 @@ public class ZoneController {
     @Operation(summary = "删除区域", description = "软删除区域，删除后自动通知 AI 刷新")
     public ApiResponse<Void> delete(@PathVariable Long id) {
         zoneService.deleteZone(id);
+        return ApiResponse.success();
+    }
+
+    @PutMapping("/zones/{id}/toggle")
+    @Operation(summary = "切换区域开关", description = "仅切换 enabled 状态，teacher 可调用")
+    public ApiResponse<Void> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
+        zoneService.toggleZone(id, enabled);
         return ApiResponse.success();
     }
 

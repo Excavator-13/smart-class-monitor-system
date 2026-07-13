@@ -2,6 +2,7 @@ package com.smartclass.monitor.controller;
 
 import com.smartclass.monitor.common.response.ApiResponse;
 import com.smartclass.monitor.common.response.PageResult;
+import com.smartclass.monitor.security.RequireRole;
 import com.smartclass.monitor.service.OperationLogService;
 import com.smartclass.monitor.vo.OperationLogVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @Tag(name = "system-api", description = "系统健康检查 / 日志 / 运维接口")
+@RequireRole("admin")
 public class OperationLogController {
 
     private final OperationLogService operationLogService;

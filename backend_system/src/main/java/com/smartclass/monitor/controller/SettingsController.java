@@ -2,6 +2,7 @@ package com.smartclass.monitor.controller;
 
 import com.smartclass.monitor.service.ReportService;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 
@@ -19,7 +20,13 @@ public class SettingsController {
     @PutMapping
     public Map<String, Object> update(@RequestBody Map<String, Object> body) {
         store.putAll(body);
-        reportService.updateSettings(body);  // 通知定时任务
+        reportService.updateSettings(body);
+
+        // 同步到 Flask AI
+        try {
+            new RestTemplate().postForObject("http://127.0.0.1:5001/api/contacts/sync", body, String.class);
+        } catch (Exception ignored) {}
+
         return Map.of("ok", true, "stored", store.keySet());
     }
 

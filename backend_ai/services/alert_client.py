@@ -3,9 +3,33 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
 import requests
 
+from backend_ai.services.event_service import EVENT_NAMES
+
 logger = logging.getLogger(__name__)
+
+# 钉钉通知白名单（只推这些事件）
+DINGTALK_ALERT_TYPES = {
+    "stranger_detected", "danger_zone_intrusion", "danger_zone_stay",
+    "danger_zone_approach", "crowd_gathering", "fall_detected",
+    "flame_detected", "spoof_detected", "deepfake_detected",
+    "abnormal_sound", "stream_offline", "phone_usage",
+    "head_down", "leave_seat",
+}
+
+
+def _to_json_safe(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {key: _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_json_safe(item) for item in value]
+    return value
 
 
 class AlertClient:
@@ -32,7 +56,7 @@ class AlertClient:
             }.items()
             if value is not None
         }
-        return {
+        return _to_json_safe({
             "event_id": event.get("event_id"),
             "stream_id": event.get("stream_id"),
             "alert_type": event.get("event_type"),
@@ -48,7 +72,7 @@ class AlertClient:
             "record_path": record_path,
             "event_time_offset": event_time_offset,
             "extra": {"source": "backend_ai"},
-        }
+        })
 
     def push_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
         payload = self.map_event_to_alert(event, record_path=record_path)
@@ -61,9 +85,14 @@ class AlertClient:
         # 钉钉通知 + 逐级上报
         if self.dingtalk:
             try:
-                alert_name = event.get("event_type", "未知告警")
-                stream = event.get("stream_id", "")
-                self.dingtalk(f"{alert_name} | 摄像头：{stream}")
+                event_type = event.get("event_type", "")
+                if event_type not in DINGTALK_ALERT_TYPES:
+                    logger.debug("事件 %s 不在钉钉通知范围，跳过", event_type)
+                else:
+                    alert_name = EVENT_NAMES.get(event_type, event_type)
+                    stream = event.get("stream_id", "")
+                    snapshot = event.get("snapshot_path", "")
+                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=snapshot)
             except Exception:
                 logger.exception("钉钉通知失败")
 

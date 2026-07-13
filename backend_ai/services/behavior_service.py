@@ -77,7 +77,13 @@ class BehaviorService:
     def detect_objects(self, frame: Any) -> list[dict[str, Any]]:
         if self.model is None:
             return []
-        results = self.model.predict(frame, conf=self.confidence_threshold, verbose=False) if hasattr(self.model, "predict") else self.model(frame)
+        if hasattr(self.model, "predict"):
+            predict_args = {"conf": self.confidence_threshold, "verbose": False}
+            if self.device:
+                predict_args["device"] = self.device
+            results = self.model.predict(frame, **predict_args)
+        else:
+            results = self.model(frame)
         detections: list[dict[str, Any]] = []
         for result in results:
             names = getattr(result, "names", {})
@@ -154,7 +160,7 @@ class BehaviorService:
         min_aspect_ratio = float(fall_config.get("min_width_height_ratio", 1.2))
         for idx, person in enumerate(persons):
             bbox = person.get("bbox")
-            if not bbox:
+            if bbox is None or len(bbox) == 0:
                 continue
             width = abs(float(bbox[2]) - float(bbox[0]))
             height = abs(float(bbox[3]) - float(bbox[1]))

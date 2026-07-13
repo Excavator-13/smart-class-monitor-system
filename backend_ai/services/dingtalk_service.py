@@ -59,6 +59,38 @@ def _get_token() -> str:
 WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=ef247487bb8129668aa09a122be9161f056afaf263488d0c9285814654b06618"
 
 
+def _upload_image(file_path: str) -> str:
+    """上传图片到钉钉，返回 media_id"""
+    try:
+        token = _get_token()
+        with open(file_path, "rb") as f:
+            resp = requests.post(
+                f"https://oapi.dingtalk.com/media/upload?access_token={token}&type=image",
+                files={"media": f},
+                timeout=15,
+            )
+        data = resp.json()
+        return data.get("media_id", "")
+    except Exception:
+        logger.exception("上传图片失败")
+        return ""
+
+
+def _send_markdown(title: str, text: str, at_mobiles: list[str] | None = None, at_all: bool = False):
+    """发送 Markdown 消息（支持图片 media_id）"""
+    at_info: dict[str, Any] = {}
+    if at_all:
+        at_info["isAtAll"] = True
+    elif at_mobiles:
+        at_info["atMobiles"] = at_mobiles
+
+    body = {"msgtype": "markdown", "markdown": {"title": title, "text": text}, "at": at_info}
+    resp = requests.post(WEBHOOK, json=body, timeout=10)
+    r = resp.json()
+    logger.info("发送Markdown: %s → %s", title, "ok" if r.get("errcode") == 0 else r)
+    return r
+
+
 def _send(content: str, at_mobiles: list[str] | None = None, at_all: bool = False):
     at_info: dict[str, Any] = {}
     if at_all:
@@ -137,16 +169,19 @@ _timers: dict[str, threading.Timer] = {}
 _stopped: set[str] = set()
 
 
-def trigger_alert(msg: str, start: str | None = None):
+def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
     c = _get_chain(start or PRIMARY)
-    _step(msg, c, 0)
+    _step(msg, c, 0, snapshot)
 
 
-def _step(msg: str, ch: list, idx: int):
+def _step(msg: str, ch: list, idx: int, snapshot: str = ""):
     if idx >= len(ch): return
     p = ch[idx]
     last = idx == len(ch) - 1
     now = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # 上传截图 → media_id
+    media_id = _upload_image(snapshot) if snapshot else ""
 
     if last:
         content = (
@@ -159,27 +194,32 @@ def _step(msg: str, ch: list, idx: int):
         )
         _send(content, at_all=True)
     elif idx == 0:
-        content = (
-            f"【告警通知】检测到异常事件\n\n"
-            f"告警内容：{msg}\n"
-            f"告警时间：{now}\n"
-            f"接收人：{p['name']}\n"
-            f"操作要求：请在 {STEP_TIMEOUT} 秒内回复「已处理」或「误报」\n"
-            f"超时处理：将自动上报至直属上级"
+        title = f"告警通知 - {p['name']}"
+        text = (
+            f"## 检测到异常事件\n\n"
+            f"**告警内容：** {msg}\n\n"
+            f"**告警时间：** {now}\n\n"
+            f"**接收人：** @{p['name']}\n\n"
+            f"**操作要求：** 请在 {STEP_TIMEOUT} 秒内回复 '已处理' 或 '误报'\n\n"
+            f"**超时处理：** 将自动上报至直属上级"
         )
-        _send(content, at_mobiles=[p["mobile"]] if p["mobile"] else None)
+        if media_id:
+            text += f"\n\n![截图]({media_id})"
+        _send_markdown(title, text, at_mobiles=[p["mobile"]] if p["mobile"] else None)
     else:
         prev = ch[idx - 1]["name"]
-        content = (
-            f"【告警升级】{prev} 未在规定时间内响应\n\n"
-            f"告警内容：{msg}\n"
-            f"告警时间：{now}\n"
-            f"原始接收人：{ch[0]['name']}\n"
-            f"当前接收人：{p['name']}\n"
-            f"操作要求：请立即处理，回复「已处理」或「误报」\n"
-            f"超时处理：将继续上报"
+        title = f"告警升级 - {p['name']}"
+        text = (
+            f"## {prev} 未在规定时间内响应\n\n"
+            f"**告警内容：** {msg}\n\n"
+            f"**告警时间：** {now}\n\n"
+            f"**原始接收人：** {ch[0]['name']}\n\n"
+            f"**当前接收人：** @{p['name']}\n\n"
+            f"**操作要求：** 请立即处理，回复 '已处理' 或 '误报'"
         )
-        _send(content, at_mobiles=[p["mobile"]] if p["mobile"] else None)
+        if media_id:
+            text += f"\n\n![截图]({media_id})"
+        _send_markdown(title, text, at_mobiles=[p["mobile"]] if p["mobile"] else None)
 
     if idx >= len(ch) - 1: return
 

@@ -250,10 +250,12 @@ Java 内部仍使用驼峰，由 Jackson 自动转换。
 | 🟢 | `/auth/login` | POST | 系统登录 | `username`、`password` | `token`、用户信息、角色 | 区分 admin 和 teacher |
 | 🟢 | `/auth/info` | GET | 获取当前登录用户信息 | Header: token | 用户名、角色、头像 | 路由守卫、页面刷新恢复登录态 |
 | 🟡 | `/auth/logout` | POST | 退出登录 | Header: token | 操作结果 | 初版可前端直接清 token |
-| 🔵 | `/users` | GET | 用户列表 | `keyword`、`role`、分页 | 用户分页 | 管理员功能 |
-| 🔵 | `/users` | POST | 新增用户 | `username`、`password`、`role` | 新增结果 | 管理员功能 |
-| 🔵 | `/users/{id}` | PUT | 编辑用户 | `role`、`status`、`nickname` | 更新结果 | 管理员功能 |
-| 🔵 | `/users/{id}/password` | PUT | 重置密码 | `new_password` | 更新结果 | 管理员功能 |
+| 🟢 | `/users` | GET | 用户列表 | `role`、`status`、`page`、`pageSize` | 用户分页 | 仅管理员；前端用户管理页使用 |
+| 🟢 | `/users/{id}` | GET | 用户详情 | `id` | 用户基本信息 | 仅管理员 |
+| 🟢 | `/users/{id}` | PUT | 编辑用户资料 | `nickname`、`avatar_url` | 更新后的用户 | 仅管理员 |
+| 🟢 | `/users/{id}/role` | PUT | 修改用户角色 | `role`：`admin`/`teacher` | 更新结果 | 仅管理员；不能修改自己 |
+| 🟢 | `/users/{id}/status` | PUT | 启停用户 | `status`：`enabled`/`disabled` | 更新结果 | 仅管理员；不能禁用自己 |
+| 🟢 | `/users/{id}` | DELETE | 软删除用户 | `id` | 删除结果 | 仅管理员；不能删除自己 |
 
 > **前端对齐说明**: 前端文档中 `/auth/info` 已确认。`/auth/logout` 在前端文档中未单独列出，前端初版可能直接清 token，后端可先提供空实现。
 
@@ -293,10 +295,10 @@ Java 内部仍使用驼峰，由 Jackson 自动转换。
 
 | 状态 | 接口 | 方法 | 使用场景 | 主要入参 | 主要返回 | 备注 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 🟢 | `/zones` | GET | 查询区域配置 | `stream_id`、`zone_type` | 区域名称、坐标、阈值 | 前端用坐标绘制 ROI |
+| 🟢 | `/zones` | GET | 查询区域配置 | `stream_id`、`zone_type` | 区域名称、坐标、阈值 | 前端用于区域管理和告警匹配；持久化区域由 AI 视频流绘制，前端不重复叠加 |
 | 🟡 | `/zones` | POST | 新增区域 | `stream_id`、`zone_name`、`zone_type`、`coordinates`、`threshold_seconds`、`safe_distance` | 保存结果 | `coordinates` 为归一化坐标 JSON；`safe_distance` 用于接近预警（人员距边缘低于此值时触发 `danger_zone_approach`） |
 | 🟡 | `/zones/{id}` | GET | 区域详情 | `id` | 区域详情 | 编辑弹窗回填 |
-| 🟡 | `/zones/{id}` | PUT | 修改区域 | `zone_name`、`coordinates`、`threshold_seconds`、`safe_distance`、`enabled` | 更新结果 | 修改后需通知 AI 刷新 |
+| 🟢 | `/zones/{id}` | PUT | 修改区域 | `zone_name`、`zone_type`、`coordinates`、`threshold_seconds`、`safe_distance`、`enabled` | 更新结果 | `zone_type` 限 `danger`/`seat`/`phone_forbidden`/`roi`；修改后通知 AI 刷新 |
 | 🟡 | `/zones/{id}` | DELETE | 删除区域 | `id` | 删除结果 | 建议软删除 |
 | 🟡 | `/streams/{stream_id}/zones` | GET | 获取某视频源全部区域 | `stream_id` | 区域列表 | 首页初始化或 AI 同步可用 |
 
@@ -935,7 +937,7 @@ com.smartclass.monitor
 | 人员库页 | `GET /students`、`POST /students` | 前端 → SpringBoot |
 | 人脸注册 | `POST /students/{id}/face` | 前端 → SpringBoot → Flask AI |
 | 视频源管理 | `GET /streams`、`POST /streams`、`GET /streams/{stream_id}/status` | 前端 → SpringBoot |
-| 区域配置页 | `GET /zones`、`POST /zones` | 前端 → SpringBoot |
+| 实时监控 / 区域配置页 | `POST /zones`；`GET/PUT/DELETE /zones` | 监控画面拖拽新增；配置页查询、编辑、启停和删除；持久化区域由 AI 视频流统一标注 |
 | 规则配置页 | `GET /rules`、`PUT /rules/{id}` | 前端 → SpringBoot |
 | 录像查询 | `GET /recordings` | 前端 → SpringBoot |
 | 系统日志页 | `GET /operation-logs` | 前端 → SpringBoot |

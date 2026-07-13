@@ -109,7 +109,7 @@ class AntiSpoofService:
                 )
 
             # --- 纹理分析 + CNN 换脸检测 ---
-            if frame is not None and bbox:
+            if frame is not None and bbox is not None and len(bbox) > 0:
                 x1, y1, x2, y2 = [int(v) for v in bbox]
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)

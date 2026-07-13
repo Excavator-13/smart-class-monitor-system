@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import platform
+import sys
+from pathlib import Path
 from typing import Any
 
 import cv2
@@ -10,14 +13,34 @@ from backend_ai.services.config_client import parse_json_field
 from backend_ai.utils.image_utils import decode_base64_image
 
 
+_CUDA_DLL_HANDLES: list[Any] = []
+
+
+def _configure_windows_cuda_dlls(device: str | None) -> None:
+    """Expose PyTorch-bundled CUDA/cuDNN DLLs to ONNX Runtime on Windows."""
+    if platform.system() != "Windows" or device not in {"cuda", "auto"}:
+        return
+    torch_lib = Path(sys.prefix) / "Lib" / "site-packages" / "torch" / "lib"
+    if not torch_lib.is_dir():
+        return
+    torch_lib_text = str(torch_lib)
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if torch_lib_text not in path_entries:
+        os.environ["PATH"] = torch_lib_text + os.pathsep + os.environ.get("PATH", "")
+    if hasattr(os, "add_dll_directory"):
+        _CUDA_DLL_HANDLES.append(os.add_dll_directory(torch_lib_text))
+
+
 def _detect_onnx_providers(device: str | None = None) -> tuple[list[str], int]:
     if device == "cpu":
         return ["CPUExecutionProvider"], -1
     is_apple_silicon = platform.system() == "Darwin" and platform.machine() == "arm64"
-    if device == "cuda" or (device is None and not is_apple_silicon):
+    if device == "cuda":
         return ["CUDAExecutionProvider", "CPUExecutionProvider"], 0
     if is_apple_silicon:
         return ["CoreMLExecutionProvider", "CPUExecutionProvider"], -1
+    if device in {"auto", None}:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"], 0
     return ["CPUExecutionProvider"], -1
 
 
@@ -72,12 +95,22 @@ class FaceService:
             self.last_error = None
             return
         try:
+            _configure_windows_cuda_dlls(self.device)
             from insightface.app import FaceAnalysis
 
             detected_providers, detected_ctx_id = _detect_onnx_providers(self.device)
             app = FaceAnalysis(name=self.model_name, providers=detected_providers)
             app.prepare(ctx_id=detected_ctx_id, det_size=self.det_size)
             self.model = app
+            actual_providers = []
+            for model in getattr(app, "models", {}).values():
+                session = getattr(model, "session", None)
+                if session is not None and hasattr(session, "get_providers"):
+                    for provider in session.get_providers():
+                        if provider not in actual_providers:
+                            actual_providers.append(provider)
+            self.providers = actual_providers or detected_providers
+            self.ctx_id = detected_ctx_id
             self.loaded = True
             self.last_error = None
         except Exception as exc:
@@ -120,7 +153,8 @@ class FaceService:
             resized = np.zeros(self.feature_dim, dtype=float)
             resized[: min(embedding.size, self.feature_dim)] = embedding[: self.feature_dim]
             embedding = resized
-        bbox = face["bbox"] if isinstance(face, dict) else [int(v) for v in face.bbox]
+        bbox_source = face["bbox"] if isinstance(face, dict) else face.bbox
+        bbox = [int(v) for v in np.asarray(bbox_source).tolist()]
         return {
             "face_count": 1,
             "feature_dim": self.feature_dim,

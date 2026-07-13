@@ -6,7 +6,7 @@ from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, Response, request
+from flask import Flask, Response, request, send_from_directory
 
 from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.dingtalk_service import start_stream, trigger_alert
@@ -18,6 +18,8 @@ from backend_ai.services.config_client import ConfigClient
 from backend_ai.services.event_service import EVENT_NAMES, EventService
 from backend_ai.services.face_service import FaceError, FaceService
 from backend_ai.services.fire_service import FireService
+from backend_ai.utils import resolve_device
+from backend_ai.services.snapshot_push import SnapshotPusher
 from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
@@ -76,7 +78,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         max_items=int(events_cfg.get("max_items", 500)),
         default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
     )
-    device_config = model_config.get("device")
+    device_config = resolve_device(model_config.get("device"))
     face_settings = (model_config.get("models") or {}).get("face", {})
     face_service = (overrides or {}).get("face_service") if overrides else None
     face_service = face_service or FaceService(
@@ -90,6 +92,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     )
     if not (overrides or {}).get("face_service"):
         face_service.load_model(face_settings)
+        if face_service.loaded:
+            print(f"[Face] InsightFace 模型加载成功: {face_service.model_name}, providers={face_service.providers}, ctx_id={face_service.ctx_id}")
+        else:
+            print(f"[Face] InsightFace 模型加载失败: {face_service.model_name}, error={face_service.last_error}")
     zone_service = (overrides or {}).get("zone_service") if overrides else None
     zone_service = zone_service or ZoneService()
     behavior_service = (overrides or {}).get("behavior_service") if overrides else None
@@ -100,6 +106,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     )
     if not (overrides or {}).get("behavior_service"):
         behavior_service.load_model(behavior_settings, BASE_DIR)
+        if behavior_service.loaded:
+            print(f"[Behavior] YOLOv8 模型加载成功: {behavior_service.weights_path}, device={device_config}")
+        else:
+            print(f"[Behavior] YOLOv8 模型加载失败: {behavior_service.last_error}")
 
     fire_settings = (model_config.get("models") or {}).get("fire", {})
     fire_service = (overrides or {}).get("fire_service") if overrides else None
@@ -108,13 +118,16 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             from ultralytics import YOLO
             weights = fire_settings.get("weights", "models/yolo/yolo_fire.pt")
             fire_model = YOLO(BASE_DIR / weights if not Path(weights).is_absolute() else Path(weights))
+            if device_config:
+                fire_model.to(device_config)
             fire_service = FireService(
                 model=fire_model,
                 confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
                 max_detections=int(fire_settings.get("max_detections", 20)),
                 min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+                device=device_config,
             )
-            print(f"[Fire] 明火检测模型加载成功: {weights}")
+            print(f"[Fire] 明火检测模型加载成功: {weights}, device={device_config}")
         except Exception as exc:
             print(f"[Fire] 明火检测模型加载失败: {exc}")
             fire_service = FireService(model=None)
@@ -160,6 +173,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
     )
+    snapshot_remote = app_config.get("snapshot_remote", {})
+    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
+    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
+    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
+    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
+
     analysis_service = AnalysisService(
         face_service=face_service,
         zone_service=zone_service,
@@ -171,6 +190,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         audio_service=audio_service,
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_pusher=snapshot_pusher,
     )
 
     app.extensions["ai_services"] = {
@@ -215,7 +235,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": nalysis_service.avg_latency_ms("fire")},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]
@@ -325,6 +345,27 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+    @app.get("/snapshots/<path:filename>")
+    def serve_snapshot(filename: str):
+        snapshot_dir = BASE_DIR / "static" / "snapshots"
+        return send_from_directory(snapshot_dir, filename)
+
+    @app.post("/api/contacts/sync")
+    def contacts_sync():
+        body = request.get_json(silent=True) or {}
+        contacts = body.get("contacts", [])
+        new_persons = {}
+        for c in contacts:
+            if c.get("name") and c.get("mobile"):
+                new_persons[c["name"]] = {"name": c["name"], "mobile": c["mobile"]}
+        from backend_ai.services import dingtalk_service as ds
+        ds.PERSONS = new_persons
+        r = body.get("responsible", "")
+        if r: ds.PRIMARY = r
+        i = body.get("alertInterval")
+        if i: ds.STEP_TIMEOUT = int(i)
+        return json_response({"ok": True, "count": len(new_persons)})
 
     return app
 
