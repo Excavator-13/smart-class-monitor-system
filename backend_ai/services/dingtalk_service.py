@@ -30,10 +30,7 @@ PERSONS: dict[str, dict[str, Any]] = {
 }
 PRIMARY = "项重善"
 
-PRIMARY = "项重善"      # 第一责任人
-RECOGNIZE_KEYWORDS = ["已处理", "误报"]  # 触发停止的关键词
-
-STEP_TIMEOUT = 30  # 秒
+STEP_TIMEOUT = 45  # 秒
 
 
 # ── Token ──────────────────────────────────────────────────
@@ -167,6 +164,7 @@ def _get_chain(start_name: str) -> list[dict]:
 
 _timers: dict[str, threading.Timer] = {}
 _stopped: set[str] = set()
+_event_keys: dict[str, str] = {}
 
 
 def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
@@ -194,18 +192,24 @@ def _step(msg: str, ch: list, idx: int, snapshot: str = ""):
         )
         _send(content, at_all=True)
     elif idx == 0:
-        title = f"告警通知 - {p['name']}"
-        text = (
-            f"## 检测到异常事件\n\n"
-            f"**告警内容：** {msg}\n\n"
-            f"**告警时间：** {now}\n\n"
-            f"**接收人：** @{p['name']}\n\n"
-            f"**操作要求：** 请在 {STEP_TIMEOUT} 秒内回复 '已处理' 或 '误报'\n\n"
-            f"**超时处理：** 将自动上报至直属上级"
+        event_id = f"evt_{int(time.time())}_{threading.get_ident()}"
+        _event_keys[event_id] = msg + "-" + str(idx)
+        # Text 消息（蓝色 @）
+        text_content = (
+            f"【告警通知】检测到异常事件\n\n"
+            f"告警内容：{msg}\n"
+            f"告警时间：{now}\n"
+            f"接收人：{p['name']}\n"
+            f"回复「已处理」停止上报\n"
+            f"超时处理：将自动上报至直属上级\n\n"
+            f"事件ID：{event_id}"
         )
+        _send(text_content, at_mobiles=[p["mobile"]] if p["mobile"] else None)
+        # Markdown 消息（截图）
         if media_id:
-            text += f"\n\n![截图]({media_id})"
-        _send_markdown(title, text, at_mobiles=[p["mobile"]] if p["mobile"] else None)
+            md_title = f"告警截图 - {event_id}"
+            md_text = f"## 告警截图\n\n事件ID：{event_id}\n\n![截图]({media_id})"
+            _send_markdown(md_title, md_text)
     else:
         prev = ch[idx - 1]["name"]
         title = f"告警升级 - {p['name']}"
@@ -252,11 +256,33 @@ class AlertHandler(ChatbotHandler):
         logger.info("收到: %s → %s", sender, text)
 
         if "已处理" in text or "误报" in text:
-            _stopped.clear()
-            for t in _timers.values():
-                t.cancel()
-            _timers.clear()
-            _send(sender + " 已标记为「" + text + "」，上报链停止")
+            # 从回复原文中找事件ID
+            replied = ""
+            try:
+                replied = data["text"]["repliedMsg"]["content"]["text"]
+            except (KeyError, TypeError):
+                pass
+            if not replied:
+                replied = text
+
+            target_key = None
+            matched_eid = ""
+            for eid, ekey in _event_keys.items():
+                if eid in replied:
+                    target_key = ekey
+                    matched_eid = eid
+                    break
+            if target_key and target_key in _timers:
+                _timers[target_key].cancel()
+                del _timers[target_key]
+                _stopped.add(target_key)
+                _send(f"{sender} 已标记事件 {matched_eid} ，停止上报")
+            else:
+                _stopped.clear()
+                for t in _timers.values():
+                    t.cancel()
+                _timers.clear()
+                _send(f"{sender} 未找到对应事件，已停止全部上报链")
             logger.info("上报链已停止")
 
         return AckMessage.STATUS_OK, "ok"
