@@ -47,7 +47,8 @@ class AnalysisService:
             if "anti_spoof" in enabled and self.anti_spoof_service is not None:
                 faces_with_bbox = [
                     {"track_id": r.get("target", {}).get("track_id", f"face_{i}"),
-                     "bbox": r.get("target", {}).get("bbox")}
+                     "bbox": r.get("target", {}).get("bbox"),
+                     "landmarks": r.get("target", {}).get("landmarks")}
                     for i, r in enumerate(face_detections)
                 ]
                 detected.extend(self.anti_spoof_service.detect(stream_id, faces_with_bbox, frame))
