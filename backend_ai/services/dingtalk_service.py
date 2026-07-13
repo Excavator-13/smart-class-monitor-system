@@ -112,7 +112,6 @@ def _find_manager(name: str) -> dict | None:
     try:
         token = _get_token()
 
-        # 1. 手机号 → userid (OAPI 格式)
         resp = requests.post(
             f"https://oapi.dingtalk.com/topapi/v2/user/getbymobile?access_token={token}",
             json={"mobile": mobile}, timeout=10,
@@ -121,7 +120,6 @@ def _find_manager(name: str) -> dict | None:
         if not uid:
             return None
 
-        # 2. userid → 直属上级
         resp2 = requests.get(
             f"https://oapi.dingtalk.com/topapi/v2/user/get?access_token={token}",
             params={"userid": uid}, timeout=10,
@@ -130,13 +128,11 @@ def _find_manager(name: str) -> dict | None:
         if not mgr_id:
             return None
 
-        # 3. 上级 userid → 姓名
         resp3 = requests.get(
             f"https://oapi.dingtalk.com/topapi/v2/user/get?access_token={token}",
             params={"userid": mgr_id}, timeout=10,
         ).json()
         mgr_name = resp3.get("result", {}).get("name", mgr_id)
-        # 从 PERSONS 取手机号（API 不返回）
         mgr_mobile = PERSONS.get(mgr_name, {}).get("mobile", "")
         return {"name": mgr_name, "mobile": mgr_mobile}
     except Exception:
@@ -144,11 +140,10 @@ def _find_manager(name: str) -> dict | None:
 
 
 def _get_chain(start_name: str) -> list[dict]:
-    """自动获取上报链：start → 上级 → 上上级 → @所有人"""
     chain = [{"name": start_name, "mobile": PERSONS.get(start_name, {}).get("mobile", "")}]
     current = start_name
     seen = {start_name}
-    for _ in range(3):  # 最多查 3 级
+    for _ in range(3):
         manager = _find_manager(current)
         if not manager:
             break
@@ -168,17 +163,17 @@ _event_keys: dict[str, str] = {}
 
 
 def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
-    c = _get_chain(start or PRIMARY)
-    _step(msg, c, 0, snapshot)
+    event_id = f"evt_{int(time.time())}_{threading.get_ident()}"
+    _event_keys[event_id] = msg
+    _step(msg, event_id, _get_chain(start or PRIMARY), 0, snapshot)
 
 
-def _step(msg: str, ch: list, idx: int, snapshot: str = ""):
+def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
     if idx >= len(ch): return
     p = ch[idx]
     last = idx == len(ch) - 1
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    # 上传截图 → media_id
     media_id = _upload_image(snapshot) if snapshot else ""
 
     if last:
@@ -188,13 +183,11 @@ def _step(msg: str, ch: list, idx: int, snapshot: str = ""):
             f"告警时间：{now}\n"
             f"当前状态：未处理\n"
             f"操作建议：请立即响应\n\n"
+            f"事件ID：{event_id}\n\n"
             f"@全体成员"
         )
         _send(content, at_all=True)
     elif idx == 0:
-        event_id = f"evt_{int(time.time())}_{threading.get_ident()}"
-        _event_keys[event_id] = msg + "-" + str(idx)
-        # Text 消息（蓝色 @）
         text_content = (
             f"【告警通知】检测到异常事件\n\n"
             f"告警内容：{msg}\n"
@@ -205,38 +198,33 @@ def _step(msg: str, ch: list, idx: int, snapshot: str = ""):
             f"事件ID：{event_id}"
         )
         _send(text_content, at_mobiles=[p["mobile"]] if p["mobile"] else None)
-        # Markdown 消息（截图）
         if media_id:
             md_title = f"告警截图 - {event_id}"
             md_text = f"## 告警截图\n\n事件ID：{event_id}\n\n![截图]({media_id})"
             _send_markdown(md_title, md_text)
     else:
         prev = ch[idx - 1]["name"]
-        title = f"告警升级 - {p['name']}"
-        text = (
-            f"## {prev} 未在规定时间内响应\n\n"
-            f"**告警内容：** {msg}\n\n"
-            f"**告警时间：** {now}\n\n"
-            f"**原始接收人：** {ch[0]['name']}\n\n"
-            f"**当前接收人：** @{p['name']}\n\n"
-            f"**操作要求：** 请立即处理，回复 '已处理' 或 '误报'"
+        content = (
+            f"【告警升级】{prev} 未在规定时间内响应\n\n"
+            f"告警内容：{msg}\n"
+            f"告警时间：{now}\n"
+            f"原始接收人：{ch[0]['name']}\n"
+            f"当前接收人：{p['name']}\n"
+            f"请立即处理，回复「已处理」停止上报\n\n"
+            f"事件ID：{event_id}"
         )
-        if media_id:
-            text += f"\n\n![截图]({media_id})"
-        _send_markdown(title, text, at_mobiles=[p["mobile"]] if p["mobile"] else None)
+        _send(content, at_mobiles=[p["mobile"]] if p["mobile"] else None)
 
     if idx >= len(ch) - 1: return
 
-    key = msg + "-" + str(idx)
-
     def check():
-        if key in _stopped:
+        if event_id in _stopped:
             logger.info("已停止上报: %s", msg)
             return
-        _step(msg, ch, idx + 1)
+        _step(msg, event_id, ch, idx + 1)
 
     t = threading.Timer(STEP_TIMEOUT, check)
-    _timers[key] = t
+    _timers[event_id] = t
     t.start()
 
 
@@ -256,7 +244,6 @@ class AlertHandler(ChatbotHandler):
         logger.info("收到: %s → %s", sender, text)
 
         if "已处理" in text or "误报" in text:
-            # 从回复原文中找事件ID
             replied = ""
             try:
                 replied = data["text"]["repliedMsg"]["content"]["text"]
@@ -269,7 +256,7 @@ class AlertHandler(ChatbotHandler):
             matched_eid = ""
             for eid, ekey in _event_keys.items():
                 if eid in replied:
-                    target_key = ekey
+                    target_key = eid
                     matched_eid = eid
                     break
             if target_key and target_key in _timers:
@@ -277,13 +264,16 @@ class AlertHandler(ChatbotHandler):
                 del _timers[target_key]
                 _stopped.add(target_key)
                 _send(f"{sender} 已标记事件 {matched_eid} ，停止上报")
-            else:
+                logger.info("已停止事件 %s", matched_eid)
+            elif _event_keys:
                 _stopped.clear()
                 for t in _timers.values():
                     t.cancel()
                 _timers.clear()
-                _send(f"{sender} 未找到对应事件，已停止全部上报链")
-            logger.info("上报链已停止")
+                _send(f"{sender} 未找到对应事件ID，已停止全部上报链")
+                logger.info("上报链已停止")
+            else:
+                _send(f"{sender} 当前无活动告警需要停止")
 
         return AckMessage.STATUS_OK, "ok"
 

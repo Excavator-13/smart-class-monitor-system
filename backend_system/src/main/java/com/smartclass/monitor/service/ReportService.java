@@ -92,6 +92,13 @@ public class ReportService {
                 .map(a -> String.valueOf(a.getOrDefault("alertType", a.getOrDefault("type", "未知"))))
                 .collect(Collectors.toSet());
 
+        // 完整类型计数（给前端统计图）
+        Map<String, Long> typeCounts = alerts.stream()
+                .collect(Collectors.groupingBy(
+                    a -> String.valueOf(a.getOrDefault("alertType", a.getOrDefault("type", "未知"))),
+                    Collectors.counting()
+                ));
+
         // 模板总结
         String template = String.format(
                 "今日共触发 %d 次告警，其中高危 %d 次、一般 %d 次，告警类型包括：%s。%s",
@@ -112,7 +119,7 @@ public class ReportService {
         report.put("time", java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         report.put("summary", summary);
         report.put("alertsCount", total);
-        report.put("raw", Map.of("high", high, "warning", warning, "types", types));
+        report.put("raw", Map.of("high", high, "warning", warning, "types", types, "type_counts", typeCounts));
 
         // VL 分析每张截图
         List<Map<String, Object>> details = new ArrayList<>();
