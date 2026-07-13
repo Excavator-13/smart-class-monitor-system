@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant SM as StreamManager
+    participant AS as AnalysisService
+    participant BS as BehaviorService
+    participant FS as FireService
+    participant ES as EventService
+    participant AC as AlertClient
+    participant SB as Spring Boot
+    
+    SM->>AS: get_frame(stream_id)
+    AS->>BS: detect_objects(frame)
+    BS-->>AS: objects[]
+    AS->>BS: detect_from_objects(objects, rules)
+    BS-->>AS: behavior_events[]
+    AS->>FS: detect(frame, rules)
+    FS-->>AS: fire_events[]
+    loop 每个事件
+        AS->>ES: observe(event)
+        ES-->>AS: event, should_confirm
+        alt should_confirm=true
+            AS->>AC: push_alert(event)
+            AC->>SB: POST /alerts/ai
+        end
+    end

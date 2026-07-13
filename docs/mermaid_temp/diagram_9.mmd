@@ -1,0 +1,33 @@
+flowchart TD
+    A[视频帧到达] --> B[BehaviorService.detect_objects]
+    B --> C[返回 objects 列表]
+    C --> D[筛选 persons 和 phones]
+    D --> E{phone_usage 规则启用?}
+    E -->|是| F[遍历 person-phone 对]
+    F --> G{phone 中心在人框内?}
+    G -->|是| H[生成 phone_usage 事件]
+    G -->|否| F
+    E -->|否| I{head_down 规则启用?}
+    H --> I
+    I -->|是| J[遍历 persons]
+    J --> K{head_down_ratio >= 阈值?}
+    K -->|是| L[生成 head_down 事件]
+    K -->|否| J
+    I -->|否| M{crowd_gathering 启用?}
+    L --> M
+    M -->|是| N{人数 >= min_count?}
+    N -->|是| O[计算人员中心点距离]
+    O --> P{存在聚集?}
+    P -->|是| Q[生成 crowd_gathering 事件]
+    P -->|否| R[不触发]
+    N -->|否| R
+    M -->|否| R
+    H --> S[EventService.observe]
+    L --> S
+    Q --> S
+    S --> T{duration >= threshold?}
+    T -->|是| U{cooldown 已过?}
+    U -->|是| V[标记 confirmed]
+    V --> W[AlertClient.push_alert]
+    T -->|否| X[不确认]
+    U -->|否| X

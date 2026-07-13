@@ -1,0 +1,19 @@
+flowchart TD
+    A[视频帧到达] --> B[BehaviorService.detect_objects]
+    B --> C[YOLO 推理]
+    C --> D[返回 objects 列表]
+    D --> E[筛选 person 目标]
+    E --> F[获取危险区域配置]
+    F --> G[遍历每个人员]
+    G --> H[计算脚部坐标 foot_point]
+    H --> I{foot_point 在多边形内?}
+    I -->|是| J[生成 danger_zone_intrusion 事件]
+    J --> K[生成 danger_zone_stay 事件]
+    I -->|否| L[计算到多边形距离]
+    L --> M{距离 < safe_distance?}
+    M -->|是| N[生成 danger_zone_approach 事件]
+    M -->|否| G
+    K --> G
+    N --> G
+    G -->|遍历结束| O[绘制红色区域多边形]
+    O --> P[绘制红色检测标注框]

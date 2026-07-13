@@ -1,0 +1,20 @@
+flowchart TD
+    A[前端采集人脸图像] --> B[Base64 编码]
+    B --> C[POST /students/id/face]
+    C --> D[Flask /face/feature/extract]
+    D --> E[InsightFace 检测人脸]
+    E --> F{检测到几张人脸?}
+    F -->|0 张| G[返回错误 40002]
+    F -->|多张| H[返回错误 40003]
+    F -->|恰好 1 张| I[提取 512 维特征向量]
+    I --> J[保存到 face_feature 表]
+    J --> K[更新 student.face_registered = true]
+    K --> L[返回注册成功]
+    L --> M[后续视频帧到达]
+    M --> N[InsightFace 检测帧中所有人脸]
+    N --> O[与已注册特征计算余弦相似度]
+    O --> P{最高相似度 >= 0.45?}
+    P -->|是| Q[生成 face_recognized 事件]
+    P -->|否| R[生成 stranger_detected 事件]
+    Q --> S[绘制绿色标注框]
+    R --> S

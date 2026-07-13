@@ -1,0 +1,42 @@
+classDiagram
+    class StreamManager {
+        -config_client : ConfigClient
+        -offline_after_seconds : float
+        -reconnect_interval_seconds : float
+        -_states : dict
+        -_captures : dict
+        -_threads : dict
+        +ensure_stream(stream_id) StreamState
+        -_read_loop(stream_id) void
+        +get_frame(stream_id) ndarray
+        +status() list
+        +stop() void
+    }
+    
+    class StreamState {
+        +stream_id : str
+        +rtmp_url : str
+        +online : bool
+        +fps : float
+        +last_frame_at : float
+        +frame : ndarray
+    }
+    
+    class ConfigClient {
+        -cache : ConfigCache
+        +load_streams() int
+        +get_stream(stream_id) dict
+        +reload() dict
+    }
+    
+    class StreamController {
+        -streamService : StreamService
+        +list() PageResult
+        +create() StreamVO
+        +status() StreamStatusVO
+        +previewUrl() StreamPreviewVO
+    }
+    
+    StreamManager --> StreamState
+    StreamManager --> ConfigClient
+    StreamController --> StreamManager

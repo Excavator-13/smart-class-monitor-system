@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant FE as 前端
+    participant SB as Spring Boot
+    participant Flask as Flask AI
+    participant FS as FaceService
+    participant CC as ConfigClient
+    
+    Note over FE,CC: 人脸注册
+    FE->>SB: POST /students/{id}/face
+    SB->>Flask: POST /face/feature/extract
+    Flask->>FS: extract_feature_from_base64
+    FS->>FS: InsightFace 检测+提取特征
+    FS-->>SB: feature_vector
+    SB->>SB: 保存到 face_feature 表
+    SB-->>FE: 注册成功
+    
+    Note over FE,CC: 实时识别
+    Flask->>CC: get_face_features()
+    Flask->>FS: recognize_frame(frame, cache)
+    FS->>FS: 计算余弦相似度
+    FS-->>Flask: 事件列表

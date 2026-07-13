@@ -1,0 +1,16 @@
+flowchart TD
+    A[AI 分析检测到异常事件] --> B[EventService 判断是否确认]
+    B --> C{持续时间 >= 阈值 且 冷却已过?}
+    C -->|否| D[记录事件但不推送告警]
+    C -->|是| E[AlertClient 构建告警载荷]
+    E --> F[POST /alerts/ai 推送到 Spring Boot]
+    F --> G[保存到 alert_event 表]
+    G --> H[钉钉通知相关人员]
+    H --> I[管理员在告警列表中查看]
+    I --> J{管理员标记状态}
+    J -->|已处理| K[填写 remark 并记录 handled_at]
+    J -->|误报| L[填写误报原因]
+    J -->|忽略| M[填写忽略原因]
+    K --> N[告警状态更新完成]
+    L --> N
+    M --> N

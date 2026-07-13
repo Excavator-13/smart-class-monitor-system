@@ -1,0 +1,40 @@
+classDiagram
+    class FaceService {
+        -model : FaceAnalysis
+        -feature_dim : int = 512
+        -similarity_threshold : float = 0.45
+        +loaded : bool
+        +load_model() void
+        -_faces(frame) list
+        +extract_feature(frame) dict
+        +recognize_frame(frame, cache) list
+    }
+    
+    class FaceController {
+        -faceService : FaceService
+        +registerFace(id, request) FaceRegisterResponse
+        +faceFeatures(id) List
+    }
+    
+    class FaceRegisterRequest {
+        +image : String
+    }
+    
+    class FaceFeature {
+        +id : Long
+        +student_id : Long
+        +feature_vector : String
+        +image_path : String
+        +enabled : Boolean
+    }
+    
+    class Student {
+        +id : Long
+        +student_no : String
+        +name : String
+        +face_registered : Boolean
+    }
+    
+    FaceService --> FaceFeature
+    FaceController --> FaceRegisterRequest
+    Student --> FaceFeature

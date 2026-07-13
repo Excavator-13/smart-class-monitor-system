@@ -1,8 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
-from backend_ai.services.config_client import parse_json_field
 from backend_ai.utils.geometry import (
     bbox_foot_point,
     distance_point_to_polygon,
@@ -14,8 +13,6 @@ from backend_ai.utils.geometry import (
 class ZoneService:
     def detect(self, stream_id: str, persons: list[dict[str, Any]], zones: list[dict[str, Any]], rule: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         detections: list[dict[str, Any]] = []
-        config = parse_json_field((rule or {}).get("config_json"), {})
-        safe_distance = float(config.get("safe_distance", 0.05))
         for person in persons:
             bbox = person.get("bbox")
             if not bbox:
@@ -26,6 +23,8 @@ class ZoneService:
                 polygon = parse_polygon_coordinates(zone.get("coordinates") or [])
                 if len(polygon) < 3:
                     continue
+                # 从区域配置读取 safe_distance，而不是从规则配置
+                safe_distance = float(zone.get("safe_distance", 0.05))
                 zone_info = {
                     "zone_id": zone.get("zone_id"),
                     "zone_name": zone.get("zone_name"),

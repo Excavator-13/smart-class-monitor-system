@@ -1,0 +1,47 @@
+classDiagram
+    class BehaviorService {
+        -model : YOLO
+        +detect_objects(frame) list
+        +detect_from_objects(stream_id, objects, rules) list
+        -_has_crowd(persons, min_count, max_distance) bool
+    }
+    
+    class FireService {
+        -model : YOLO
+        -confidence_threshold : float
+        +detect(stream_id, frame, rules) list
+        -_classify_level(confidence) str
+    }
+    
+    class EventService {
+        -events : deque
+        -_states : dict
+        +observe() tuple
+        +query() list
+        +mark_confirmed() void
+    }
+    
+    class EventState {
+        +first_seen : float
+        +last_seen : float
+        +last_alert_at : float
+        +event_id : str
+        +event_status : str
+    }
+    
+    class AlertClient {
+        +push_alert(event) dict
+        +map_event_to_alert(event) dict
+    }
+    
+    class BehaviorRule {
+        +id : Long
+        +rule_type : String
+        +threshold_seconds : Integer
+        +confidence_threshold : Double
+        +cooldown_seconds : Integer
+    }
+    
+    BehaviorService --> BehaviorRule
+    EventService --> EventState
+    EventService --> AlertClient

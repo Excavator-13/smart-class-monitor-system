@@ -1,0 +1,37 @@
+classDiagram
+    class BehaviorService {
+        -model : YOLO
+        +detect_objects(frame) list
+        +detect_from_objects(objects, rules) list
+    }
+    
+    class ZoneService {
+        +detect(stream_id, persons, zones, rule) list
+    }
+    
+    class ZoneController {
+        -zoneService : ZoneService
+        +list() List
+        +create() ZoneVO
+        +update() void
+        +delete() void
+    }
+    
+    class DangerZone {
+        +id : Long
+        +stream_id : String
+        +zone_name : String
+        +zone_type : String
+        +coordinates : String
+        +threshold_seconds : Integer
+    }
+    
+    class GeometryUtils {
+        +point_in_polygon(point, polygon) bool
+        +distance_point_to_polygon(point, polygon) float
+        +bbox_foot_point(bbox) tuple
+    }
+    
+    BehaviorService --> GeometryUtils
+    ZoneService --> GeometryUtils
+    ZoneController --> DangerZone

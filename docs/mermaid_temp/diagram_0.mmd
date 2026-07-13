@@ -1,0 +1,16 @@
+flowchart TD
+    A[摄像头/OBS 推流] -->|RTMP| B[Nginx-RTMP 服务器]
+    B --> C[StreamManager 拉流线程]
+    C --> D{VideoCapture 连接成功?}
+    D -->|否| E[等待 3s 重连]
+    E --> C
+    D -->|是| F[持续读取视频帧]
+    F --> G[更新 StreamState.frame]
+    G --> H[前端请求 MJPEG 流]
+    H --> I[AnalysisService 分析帧]
+    I --> J[编码 JPEG 推送]
+    J --> H
+    F --> K{超过 10s 无新帧?}
+    K -->|是| L[标记 offline]
+    L --> C
+    K -->|否| F

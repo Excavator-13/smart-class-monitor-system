@@ -1,0 +1,17 @@
+sequenceDiagram
+    participant Flask as Flask AI
+    participant AS as AnalysisService
+    participant BS as BehaviorService
+    participant ZS as ZoneService
+    participant CC as ConfigClient
+    
+    Flask->>AS: analyze_frame(stream_id, frame)
+    AS->>BS: detect_objects(frame)
+    BS->>BS: YOLO 推理
+    BS-->>AS: objects[]
+    AS->>CC: get_zones(stream_id)
+    CC-->>AS: zones[]
+    AS->>ZS: detect(stream_id, persons, zones, rule)
+    ZS->>ZS: point_in_polygon / distance
+    ZS-->>AS: zone_events[]
+    AS->>AS: 绘制标注

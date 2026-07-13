@@ -1,0 +1,56 @@
+classDiagram
+    class AlertController {
+        -alertService : AlertService
+        +list() PageResult
+        +detail() AlertVO
+        +updateStatus() void
+        +stats() AlertStatsVO
+    }
+    
+    class AiAlertController {
+        -alertService : AlertService
+        +ingest() AlertIngestResponse
+    }
+    
+    class AlertService {
+        +listAlerts() PageResult
+        +getAlertDetail() AlertVO
+        +updateStatus() void
+        +getStats() AlertStatsVO
+        +ingestAlert() AlertIngestResponse
+    }
+    
+    class AlertEvent {
+        +id : Long
+        +stream_id : String
+        +alert_type : String
+        +level : String
+        +status : String
+        +confidence : Double
+        +snapshot_path : String
+        +occurred_at : LocalDateTime
+        +handled_at : LocalDateTime
+        +remark : String
+    }
+    
+    class AlertVO {
+        +id : Long
+        +stream_name : String
+        +student_name : String
+        +alert_name : String
+        +level : String
+        +status : String
+        +snapshot_url : String
+    }
+    
+    class AlertStatsVO {
+        +today_total : Integer
+        +unhandled_count : Integer
+        +by_type : Map
+    }
+    
+    AlertController --> AlertService
+    AiAlertController --> AlertService
+    AlertService --> AlertEvent
+    AlertService --> AlertVO
+    AlertService --> AlertStatsVO

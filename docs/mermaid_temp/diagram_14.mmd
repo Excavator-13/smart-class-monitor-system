@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Flask as Flask AI
+    participant ES as EventService
+    participant AC as AlertClient
+    participant SB as Spring Boot
+    participant DB as MySQL
+    participant DD as 钉钉
+    participant FE as 前端
+    
+    Flask->>ES: observe(event)
+    ES-->>Flask: should_confirm=true
+    Flask->>AC: push_alert(event)
+    AC->>SB: POST /alerts/ai
+    SB->>DB: INSERT alert_event
+    AC->>DD: trigger_alert
+    DD-->>DD: 发送通知
+    
+    FE->>SB: GET /alerts
+    SB->>DB: SELECT with filters
+    DB-->>SB: 告警记录
+    SB-->>FE: PageResult
+    
+    FE->>SB: PUT /alerts/{id}/status
+    SB->>DB: UPDATE status, handled_at
+    SB-->>FE: 200 OK

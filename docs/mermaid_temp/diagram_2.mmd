@@ -1,0 +1,17 @@
+sequenceDiagram
+    participant FE as 前端
+    participant Flask as Flask AI
+    participant SM as StreamManager
+    participant Nginx as Nginx-RTMP
+    participant CC as ConfigClient
+    
+    FE->>Flask: GET /video_feed/{stream_id}
+    Flask->>CC: get_stream(stream_id)
+    Flask->>SM: ensure_stream(stream_id)
+    SM->>Nginx: VideoCapture(rtmp_url)
+    Nginx-->>SM: 视频帧流
+    loop MJPEG 推送
+        SM-->>Flask: get_frame()
+        Flask->>Flask: analyze_frame()
+        Flask-->>FE: MJPEG 帧
+    end
