@@ -16,10 +16,16 @@ from backend_ai.utils.logger import get_logger
 
 class AnalysisService:
     SNAPSHOT_EVENT_TYPES = {"danger_zone_intrusion"}
-    VISIBLE_DETECTION_EVENT_TYPES = {"face_recognized"}
+    VISIBLE_DETECTION_EVENT_TYPES = {
+        "face_recognized",
+        "phone_usage",
+        "spoof_detected",
+        "deepfake_detected",
+        "flame_detected",
+    }
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
 
-    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, recording_config: dict[str, Any] | None = None):
+    def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, recording_config: dict[str, Any] | None = None, alert_cooldown_seconds: float = 10.0, alert_overlay_seconds: float = 2.0):
         self.face_service = face_service
         self.zone_service = zone_service
         self.behavior_service = behavior_service
@@ -31,9 +37,12 @@ class AnalysisService:
         self.alert_client = alert_client
         self.snapshot_root = snapshot_root
         self.snapshot_pusher = snapshot_pusher
+        self.alert_cooldown_seconds = alert_cooldown_seconds
+        self.alert_overlay_seconds = alert_overlay_seconds
         self.recording_config = recording_config or {}
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
+        self._alert_overlays: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
 
     def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None, audio_chunk: np.ndarray | None = None) -> list[dict[str, Any]]:
         enabled = modules or {"face", "zone", "behavior"}
@@ -53,7 +62,9 @@ class AnalysisService:
                      "landmarks": r.get("target", {}).get("landmarks")}
                     for i, r in enumerate(face_detections)
                 ]
-                detected.extend(self.anti_spoof_service.detect(stream_id, faces_with_bbox, frame))
+                anti_spoof_detections = self.anti_spoof_service.detect(stream_id, faces_with_bbox, frame)
+                detected.extend(anti_spoof_detections)
+                self._draw_detections(frame, anti_spoof_detections, color=(0, 0, 255))
 
         object_list = objects if objects is not None else []
         needs_objects = "behavior" in enabled or "zone" in enabled
@@ -68,7 +79,7 @@ class AnalysisService:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
             behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules)
             detected.extend(behavior_detections)
-            self._draw_detections(frame, behavior_detections, color=(80, 180, 255))
+            self._draw_detections(frame, behavior_detections, color=(0, 255, 255))
 
         if "zone" in enabled:
             started = time.perf_counter()
@@ -88,13 +99,13 @@ class AnalysisService:
             self._observe_latency("zone", started)
 
         if "fire" in enabled and self.fire_service is not None:
-            detected.extend(
-                self.fire_service.detect(
-                    stream_id,
-                    frame,
-                    {k: v for k, v in self.config_client.cache.rules.items()},
-                )
+            fire_detections = self.fire_service.detect(
+                stream_id,
+                frame,
+                {k: v for k, v in self.config_client.cache.rules.items()},
             )
+            detected.extend(fire_detections)
+            self._draw_detections(frame, fire_detections, color=(0, 80, 255))
 
         if "audio" in enabled and self.audio_service is not None:
             detected.extend(self.audio_service.process_audio(stream_id, audio_chunk))
@@ -107,11 +118,21 @@ class AnalysisService:
                 track_key=str(item.get("track_key", item["event_type"])),
                 confidence=float(item.get("confidence", 0)),
                 threshold_seconds=float(item.get("threshold_seconds", 0)),
-                cooldown_seconds=item.get("cooldown_seconds"),
+                cooldown_seconds=self.alert_cooldown_seconds,
                 level=item.get("level", "warning"),
                 target=item.get("target"),
                 zone=item.get("zone"),
             )
+            if should_confirm:
+                self._add_alert_overlay(stream_id, event)
+                if self.alert_client is not None:
+                    try:
+                        if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
+                            event["snapshot_path"] = self._save_snapshot(frame, event["event_id"])
+                        self.alert_client.push_alert(event)
+                        self.event_service.mark_confirmed(event["event_id"])
+                    except Exception as exc:
+                        self.logger.warning("Failed to push alert event_id=%s type=%s: %s", event.get("event_id"), event.get("event_type"), exc)
             if should_confirm and self.alert_client is not None:
                 try:
                     if event["event_type"] in self.SNAPSHOT_EVENT_TYPES:
@@ -124,6 +145,7 @@ class AnalysisService:
                 except Exception as exc:
                     self.logger.warning("Failed to push alert event_id=%s type=%s: %s", event.get("event_id"), event.get("event_type"), exc)
             events.append(event)
+        self._draw_alert_overlays(frame, stream_id)
         return events
 
     def observe_stream_offline(self, stream_id: str) -> dict[str, Any]:
@@ -133,7 +155,7 @@ class AnalysisService:
             track_key=stream_id,
             confidence=1.0,
             threshold_seconds=0,
-            cooldown_seconds=60,
+            cooldown_seconds=self.alert_cooldown_seconds,
             level="high",
             target={"track_id": stream_id},
         )
@@ -212,7 +234,17 @@ class AnalysisService:
             bbox = target.get("bbox")
             if bbox is None or len(bbox) == 0:
                 continue
-            label_parts = [str(item.get("event_type", "event"))]
+            event_type = str(item.get("event_type", "event"))
+            if event_type == "face_recognized":
+                label = target.get("student_no") or target.get("student_id") or target.get("student_name") or "recognized"
+            else:
+                label = {
+                    "phone_usage": "Using phone",
+                    "spoof_detected": "Spoof detected",
+                    "deepfake_detected": "Deepfake detected",
+                    "flame_detected": "Fire",
+                }.get(event_type, event_type)
+            label_parts = [str(label)]
             zone = item.get("zone") or {}
             if zone.get("zone_name"):
                 label_parts.append(str(zone["zone_name"]))
@@ -244,6 +276,34 @@ class AnalysisService:
         y = max(text_height + 10, 28)
         cv2.rectangle(frame, (x - 6, y - text_height - 8), (width - 6, y + 6), (0, 0, 0), -1)
         draw_text(frame, text, (x, y), font_scale=scale, color=color, thickness=thickness)
+
+    def _add_alert_overlay(self, stream_id: str, event: dict[str, Any], now: float | None = None) -> None:
+        current = time.time() if now is None else now
+        labels = {
+            "flame_detected": "Fire detected",
+            "phone_usage": "Using phone",
+            "spoof_detected": "Spoof detected",
+            "deepfake_detected": "Deepfake detected",
+            "fall_detected": "Fall detected",
+        }
+        event_type = str(event.get("event_type") or "alert")
+        self._alert_overlays[stream_id].append({
+            "event_id": event.get("event_id"),
+            "text": labels.get(event_type, event_type),
+            "expires_at": current + self.alert_overlay_seconds,
+        })
+
+    def _draw_alert_overlays(self, frame: np.ndarray, stream_id: str, now: float | None = None) -> None:
+        current = time.time() if now is None else now
+        queue = self._alert_overlays[stream_id]
+        while queue and float(queue[0]["expires_at"]) <= current:
+            queue.popleft()
+        for index, item in enumerate(queue):
+            text = str(item["text"])
+            y = 28 + index * 28
+            (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.58, 2)
+            cv2.rectangle(frame, (8, y - text_height - 8), (text_width + 20, y + 6), (0, 0, 0), -1)
+            draw_text(frame, text, (14, y), font_scale=0.58, color=(0, 80, 255), thickness=2)
 
     def _draw_bbox(self, frame: np.ndarray, bbox: list[float], label: str, color: tuple[int, int, int]) -> None:
         x1f, y1f, x2f, y2f = [float(v) for v in bbox]

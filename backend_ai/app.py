@@ -138,9 +138,23 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     anti_spoof_service = (overrides or {}).get("anti_spoof_service") if overrides else None
     if anti_spoof_service is None and anti_spoof_settings.get("enabled", False):
         try:
+            deepfake_detector = None
+            deepfake_weights = str(anti_spoof_settings.get("deepfake_weights") or "").strip()
+            if deepfake_weights:
+                from backend_ai.services.deepfake_detector import DeepfakeDetector
+
+                weights_path = Path(deepfake_weights)
+                if not weights_path.is_absolute():
+                    weights_path = BASE_DIR / weights_path
+                deepfake_detector = DeepfakeDetector(str(weights_path))
+                if deepfake_detector.loaded:
+                    print(f"[AntiSpoof] MesoNet CNN loaded: {weights_path}, device={deepfake_detector.device}")
+                else:
+                    print(f"[AntiSpoof] MesoNet CNN weights not loaded: {weights_path}; using rule fallback")
             anti_spoof_service = AntiSpoofService(
                 blink_threshold_seconds=float(anti_spoof_settings.get("blink_threshold_seconds", 5.0)),
                 texture_variance_threshold=float(anti_spoof_settings.get("texture_variance_threshold", 8.0)),
+                deepfake_detector=deepfake_detector,
             )
             print("[AntiSpoof] 活体检测模块已启用")
         except Exception as exc:
@@ -196,6 +210,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         alert_client=alert_client,
         snapshot_root=BASE_DIR / "static" / "snapshots",
         snapshot_pusher=snapshot_pusher,
+        alert_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
+        alert_overlay_seconds=float(events_cfg.get("alert_overlay_seconds", 2)),
         recording_config=recording_config,
     )
 
