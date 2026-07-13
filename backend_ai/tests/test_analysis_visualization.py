@@ -82,7 +82,30 @@ def test_draw_detections_accepts_numpy_bbox():
     assert frame.sum() > 0
 
 
-def test_only_person_objects_and_recognized_faces_are_visible():
+def test_recognized_face_label_uses_registered_student_number():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=FakeZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=FakeConfigClient(),
+    )
+    labels = []
+    service._draw_bbox = lambda frame, bbox, label, color: labels.append(label)
+
+    service._draw_detections(
+        np.zeros((80, 120, 3), dtype=np.uint8),
+        [{
+            "event_type": "face_recognized",
+            "target": {"student_id": "TEST-001", "student_name": "Test User", "bbox": [10, 10, 30, 40]},
+        }],
+        color=(80, 220, 80),
+    )
+
+    assert labels == ["TEST-001"]
+
+
+def test_only_person_phone_usage_and_recognized_faces_are_visible():
     service = AnalysisService(
         face_service=FakeFaceService(),
         zone_service=FakeZoneService(),
@@ -103,7 +126,6 @@ def test_only_person_objects_and_recognized_faces_are_visible():
         frame,
         [
             {"event_type": "stranger_detected", "target": {"bbox": [10, 10, 30, 40]}},
-            {"event_type": "phone_usage", "target": {"bbox": [10, 10, 30, 40]}},
             {"event_type": "head_down", "target": {"bbox": [10, 10, 30, 40]}},
             {"event_type": "danger_zone_intrusion", "target": {"bbox": [10, 10, 30, 40]}},
         ],
@@ -111,6 +133,14 @@ def test_only_person_objects_and_recognized_faces_are_visible():
     )
 
     assert frame.sum() == 0
+
+    service._draw_detections(
+        frame,
+        [{"event_type": "phone_usage", "target": {"bbox": [10, 10, 30, 40]}}],
+        color=(0, 255, 255),
+    )
+
+    assert np.any(np.all(frame == [0, 255, 255], axis=2))
 
     service._draw_objects(frame, [{"class_name": "person", "bbox": [10, 10, 30, 40]}])
     service._draw_detections(

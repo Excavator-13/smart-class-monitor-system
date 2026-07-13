@@ -15,7 +15,7 @@ from backend_ai.utils.logger import get_logger
 
 class AnalysisService:
     SNAPSHOT_EVENT_TYPES = {"danger_zone_intrusion"}
-    VISIBLE_DETECTION_EVENT_TYPES = {"face_recognized"}
+    VISIBLE_DETECTION_EVENT_TYPES = {"face_recognized", "phone_usage"}
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
 
     def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None):
@@ -65,7 +65,7 @@ class AnalysisService:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
             behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules)
             detected.extend(behavior_detections)
-            self._draw_detections(frame, behavior_detections, color=(80, 180, 255))
+            self._draw_detections(frame, behavior_detections, color=(0, 255, 255))
 
         if "zone" in enabled:
             started = time.perf_counter()
@@ -184,7 +184,12 @@ class AnalysisService:
             bbox = target.get("bbox")
             if bbox is None or len(bbox) == 0:
                 continue
-            label_parts = [str(item.get("event_type", "event"))]
+            event_type = str(item.get("event_type", "event"))
+            if event_type == "face_recognized":
+                label = target.get("student_no") or target.get("student_id") or target.get("student_name") or "recognized"
+            else:
+                label = {"phone_usage": "Using phone"}.get(event_type, event_type)
+            label_parts = [str(label)]
             zone = item.get("zone") or {}
             if zone.get("zone_name"):
                 label_parts.append(str(zone["zone_name"]))
