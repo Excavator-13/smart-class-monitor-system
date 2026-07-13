@@ -74,8 +74,8 @@ class AlertClient:
             "extra": {"source": "backend_ai"},
         })
 
-    def push_alert(self, event: dict[str, Any], record_path: str | None = None) -> dict[str, Any]:
-        payload = self.map_event_to_alert(event, record_path=record_path)
+    def push_alert(self, event: dict[str, Any], record_path: str | None = None, event_time_offset: float | None = None) -> dict[str, Any]:
+        payload = self.map_event_to_alert(event, record_path=record_path, event_time_offset=event_time_offset)
         headers = {}
         if self.internal_token:
             headers["X-Internal-Token"] = self.internal_token

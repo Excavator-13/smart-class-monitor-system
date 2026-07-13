@@ -133,6 +133,7 @@ export function normalizeAlert(item = {}) {
         item.record_path ||
         item.recordPath,
     ),
+    event_time_offset: item.event_time_offset ?? item.eventTimeOffset ?? null,
     occurred_at: optional(
       item.occurred_at,
       item.occurredAt || item.time || item.created_at || item.createdAt || "",

@@ -96,6 +96,10 @@ const alertProcessForm = ref({
   status: "handled",
   remark: "",
 });
+const replayVisible = ref(false);
+const replayUrl = ref("");
+const replayOffset = ref(0);
+const replayVideoRef = ref(null);
 const personForm = ref({
   student_no: "",
   name: "",
@@ -1837,6 +1841,29 @@ function resourceUrl(path) {
   return joinResourceUrl(path);
 }
 
+function openReplayDialog(row) {
+  replayUrl.value = resourceUrl(row.record_url);
+  replayOffset.value = row.event_time_offset ?? 0;
+  replayVisible.value = true;
+}
+
+function onReplayReady() {
+  if (replayVideoRef.value && replayOffset.value > 0) {
+    replayVideoRef.value.currentTime = replayOffset.value;
+  }
+  if (replayVideoRef.value) {
+    replayVideoRef.value.play().catch(() => {});
+  }
+}
+
+function closeReplayDialog() {
+  if (replayVideoRef.value) {
+    replayVideoRef.value.pause();
+    replayVideoRef.value.src = "";
+  }
+  replayVisible.value = false;
+}
+
 function toggleThemeMode() {
   isDay.value = !isDay.value;
 }
@@ -3308,14 +3335,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                       <el-button
                         size="small"
                         text
-                        tag="a"
-                        target="_blank"
                         :disabled="!row.record_url"
-                        :href="
-                          row.record_url
-                            ? resourceUrl(row.record_url)
-                            : undefined
-                        "
+                        @click="openReplayDialog(row)"
                         >录像</el-button
                       >
                     </div>
@@ -3892,6 +3913,22 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             >保存处理结果</el-button
           >
         </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="replayVisible"
+        title="事件回放"
+        width="640px"
+        class="local-edit-dialog"
+        @close="closeReplayDialog"
+      >
+        <video
+          ref="replayVideoRef"
+          :src="replayUrl"
+          controls
+          style="width: 100%; max-height: 480px; background: #000"
+          @loadedmetadata="onReplayReady"
+        />
       </el-dialog>
 
       <el-dialog
