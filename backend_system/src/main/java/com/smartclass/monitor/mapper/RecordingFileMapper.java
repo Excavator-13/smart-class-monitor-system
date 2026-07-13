@@ -37,6 +37,14 @@ public interface RecordingFileMapper {
                           @Param("startTime") LocalDateTime startTime,
                           @Param("endTime") LocalDateTime endTime);
 
+    @Select("SELECT * FROM recording_file WHERE deleted_at IS NULL " +
+            "AND stream_id = #{streamId} " +
+            "AND started_at <= #{timestamp} " +
+            "AND (ended_at IS NULL OR ended_at >= #{timestamp}) " +
+            "ORDER BY started_at DESC LIMIT 1")
+    RecordingFile findContainingRecording(@Param("streamId") String streamId,
+                                           @Param("timestamp") LocalDateTime timestamp);
+
     @Delete("TRUNCATE TABLE recording_file")
     void truncate();
 }

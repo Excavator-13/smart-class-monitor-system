@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -35,15 +36,25 @@ def _to_json_safe(value: Any) -> Any:
 class AlertClient:
     def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0,
                  session: Any | None = None, internal_token: str | None = None,
-                 dingtalk: Any | None = None):
+                 dingtalk: Any | None = None, snapshot_root: Path | None = None):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
         self.internal_token = internal_token
         self.dingtalk = dingtalk
+        self.snapshot_root = snapshot_root
 
     def _headers(self) -> dict[str, str] | None:
         return {"X-Internal-Token": self.internal_token} if self.internal_token else None
+
+    def _resolve_local_snapshot(self, snapshot_path: str) -> str:
+        if not snapshot_path or self.snapshot_root is None:
+            return snapshot_path
+        if snapshot_path.startswith("/snapshots/"):
+            local = self.snapshot_root / snapshot_path[len("/snapshots/"):]
+            if local.exists():
+                return str(local)
+        return snapshot_path
 
     def map_event_to_alert(self, event: dict[str, Any], record_path: str | None = None, event_time_offset: float | None = None) -> dict[str, Any]:
         target = event.get("target") or {}
@@ -92,7 +103,8 @@ class AlertClient:
                     alert_name = EVENT_NAMES.get(event_type, event_type)
                     stream = event.get("stream_id", "")
                     snapshot = event.get("snapshot_path", "")
-                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=snapshot)
+                    local_snapshot = self._resolve_local_snapshot(snapshot)
+                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=local_snapshot)
             except Exception:
                 logger.exception("钉钉通知失败")
 

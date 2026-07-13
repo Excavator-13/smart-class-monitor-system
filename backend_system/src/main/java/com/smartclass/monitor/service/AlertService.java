@@ -3,11 +3,16 @@ package com.smartclass.monitor.service;
 import com.smartclass.monitor.common.exception.BusinessException;
 import com.smartclass.monitor.common.response.PageResult;
 import com.smartclass.monitor.dto.AlertStatusUpdateRequest;
+import com.smartclass.monitor.entity.RecordingFile;
 import com.smartclass.monitor.mapper.AlertEventMapper;
+import com.smartclass.monitor.mapper.RecordingFileMapper;
 import com.smartclass.monitor.vo.AlertStatsVO;
 import com.smartclass.monitor.vo.AlertVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -18,14 +23,17 @@ import java.util.Set;
 @Service
 public class AlertService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertService.class);
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Set<String> VALID_STATUSES = Set.of(
             "unhandled", "processing", "handled", "false_alarm", "ignored");
 
     private final AlertEventMapper mapper;
+    private final RecordingFileMapper recordingMapper;
 
-    public AlertService(AlertEventMapper mapper) {
+    public AlertService(AlertEventMapper mapper, RecordingFileMapper recordingMapper) {
         this.mapper = mapper;
+        this.recordingMapper = recordingMapper;
     }
 
     public PageResult<AlertVO> listAlerts(String streamId, String alertType, String status,
@@ -85,9 +93,41 @@ public class AlertService {
         vo.setLevel((String) row.get("level"));
         vo.setStatus((String) row.get("status"));
         vo.setConfidence(toDouble(row.get("confidence")));
-        // 相对路径：snapshot_path → snapshot_url
         vo.setSnapshotUrl((String) row.get("snapshot_path"));
-        vo.setRecordUrl((String) row.get("record_path"));
+
+        String recordPath = (String) row.get("record_path");
+        Double eventTimeOffset = toDouble(row.get("event_time_offset"));
+
+        if (recordPath != null && !recordPath.isEmpty()) {
+            vo.setRecordUrl(recordPath);
+            vo.setEventTimeOffset(eventTimeOffset);
+        } else {
+            String streamId = (String) row.get("stream_id");
+            LocalDateTime occurredAt = (LocalDateTime) row.get("occurred_at");
+            if (streamId != null && occurredAt != null) {
+                try {
+                    RecordingFile rec = recordingMapper.findContainingRecording(streamId, occurredAt);
+                    if (rec != null) {
+                        String urlDir = rec.getFilePath();
+                        if (urlDir != null && urlDir.startsWith("/segments")) {
+                            urlDir = "/records" + urlDir.substring("/segments".length());
+                        }
+                        if (urlDir == null || urlDir.isEmpty()) {
+                            vo.setRecordUrl("/" + rec.getFileName());
+                        } else {
+                            vo.setRecordUrl(urlDir + "/" + rec.getFileName());
+                        }
+                        if (rec.getStartedAt() != null) {
+                            long offsetSec = Duration.between(rec.getStartedAt(), occurredAt).getSeconds();
+                            vo.setEventTimeOffset(Math.max(0, (double) offsetSec));
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("录像查找失败 event_id={}: {}", row.get("event_id"), e.getMessage());
+                }
+            }
+        }
+
         if (row.get("occurred_at") != null) {
             vo.setOccurredAt(((LocalDateTime) row.get("occurred_at")).format(DTF));
         }

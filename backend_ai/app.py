@@ -178,8 +178,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     elif audio_service is None and not audio_settings.get("enabled", False):
         audio_service = None
 
+    snapshot_root = BASE_DIR / "static" / "snapshots"
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
@@ -193,11 +195,6 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
     snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
-    recording_config = {
-        "segment_seconds": int(os.environ.get("RECORDING_SEGMENT_SECONDS") or app_config.get("recording", {}).get("segment_seconds", 30)),
-        "segment_dir": os.environ.get("RECORDING_SEGMENT_DIR") or app_config.get("recording", {}).get("segment_dir", "/records"),
-    }
-
     analysis_service = AnalysisService(
         face_service=face_service,
         zone_service=zone_service,
@@ -208,11 +205,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         anti_spoof_service=anti_spoof_service,
         audio_service=audio_service,
         alert_client=alert_client,
-        snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_root=snapshot_root,
         snapshot_pusher=snapshot_pusher,
         alert_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
         alert_overlay_seconds=float(events_cfg.get("alert_overlay_seconds", 2)),
-        recording_config=recording_config,
     )
 
     app.extensions["ai_services"] = {
