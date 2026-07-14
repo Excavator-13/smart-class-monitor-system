@@ -33,13 +33,13 @@ models:
     allowed_classes: [fire, flame, 火, 火焰]
     cooldown_seconds: 10
   anti_spoof:
-    enabled: false
+    enabled: true
     provider: rule
     blink_threshold_seconds: 5.0
     texture_variance_threshold: 8.0
     deepfake_weights: models/mesonet/meso4_weights.pth
   audio:
-    enabled: false
+    enabled: true
     provider: signal
     sample_rate: 16000
     window_ms: 1000
