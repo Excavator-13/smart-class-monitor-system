@@ -170,12 +170,12 @@ public class DataInitializer implements CommandLineRunner {
     private void seedRules() {
         log.info("插入测试规则...");
         List<BehaviorRule> rules = Arrays.asList(
-                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "info"),
-                createRule("flame_detected", "明火检测", true, 3, 0.60, 20, "high"),
-                createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20, "high"),
-                createRule("head_down", "长时间低头", true, 6, 0.70, 60, "info"),
-                createRule("crowd_gathering", "异常人流聚集", true, 3, 0.70, 30, "high"),
-                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30, "warning")
+                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30),
+                createRule("flame_detected", "明火检测", true, 3, 0.40, 20),
+                createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20),
+                createRule("head_down", "长时间低头", true, 6, 0.70, 60),
+                createRule("crowd_gathering", "异常人流聚集", true, 3, 0.70, 30),
+                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30)
         );
         for (BehaviorRule r : rules) {
             if (behaviorRuleMapper.findAll(r.getRuleType()).isEmpty()) {
