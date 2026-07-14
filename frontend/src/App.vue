@@ -58,7 +58,11 @@ import {
 import lineDogGif from "./assets/line-dog.gif";
 
 const activePage = ref("monitor");
-const loginBackgroundVideo = `${import.meta.env.BASE_URL}auth/login-moonset.mp4`;
+const loginBackgroundVideo = `${import.meta.env.BASE_URL}auth/login-background.mp4`;
+const loginBackgroundPoster = new URL(
+  `${import.meta.env.BASE_URL}auth/login-background.webp`,
+  document.baseURI,
+).href;
 const authVideoReady = ref(false);
 const authVideoFailed = ref(false);
 const isAuthenticated = ref(Boolean(getStoredToken()));
@@ -2478,7 +2482,11 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 </script>
 
 <template>
-  <section v-if="!isAuthenticated" class="auth-shell">
+  <section
+    v-if="!isAuthenticated"
+    class="auth-shell"
+    :style="{ '--auth-background-poster': `url('${loginBackgroundPoster}')` }"
+  >
     <video
       v-if="!authVideoFailed"
       class="auth-bg-video"
@@ -2488,6 +2496,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
       loop
       playsinline
       preload="auto"
+      :poster="loginBackgroundPoster"
       aria-hidden="true"
       @canplay="authVideoReady = true"
       @error="authVideoFailed = true"
