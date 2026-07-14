@@ -8,6 +8,7 @@ public class ScoreConfig {
     private Long id;
     private String alertType;
     private String label;
+    private String level;
     private Integer score;
     private String note;
     private LocalDateTime createdAt;

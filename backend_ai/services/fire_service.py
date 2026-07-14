@@ -55,7 +55,7 @@ class FireService:
         threshold = float(rule.get("confidence_threshold", self.confidence_threshold))
         cooldown = float(rule.get("cooldown_seconds", 10))
         threshold_seconds = float(rule.get("threshold_seconds", 0))
-        level = rule.get("level", "high")
+        level = "high"
 
         if hasattr(self.model, "predict"):
             predict_args: dict[str, Any] = {"verbose": False}

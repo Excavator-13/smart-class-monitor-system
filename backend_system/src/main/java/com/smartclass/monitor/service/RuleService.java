@@ -39,7 +39,6 @@ public class RuleService {
         entity.setThresholdSeconds(req.getThresholdSeconds());
         entity.setConfidenceThreshold(req.getConfidenceThreshold());
         entity.setCooldownSeconds(req.getCooldownSeconds());
-        entity.setLevel(req.getLevel() != null ? req.getLevel() : "warning");
         entity.setConfigJson(req.getConfigJson());
         mapper.insert(entity);
 
@@ -61,7 +60,6 @@ public class RuleService {
         if (req.getThresholdSeconds() != null) entity.setThresholdSeconds(req.getThresholdSeconds());
         if (req.getConfidenceThreshold() != null) entity.setConfidenceThreshold(req.getConfidenceThreshold());
         if (req.getCooldownSeconds() != null) entity.setCooldownSeconds(req.getCooldownSeconds());
-        if (req.getLevel() != null) entity.setLevel(req.getLevel());
         if (req.getEnabled() != null) entity.setEnabled(req.getEnabled());
         if (req.getConfigJson() != null) entity.setConfigJson(req.getConfigJson());
         mapper.update(entity);
@@ -93,7 +91,6 @@ public class RuleService {
         vo.setThresholdSeconds(e.getThresholdSeconds());
         vo.setConfidenceThreshold(e.getConfidenceThreshold());
         vo.setCooldownSeconds(e.getCooldownSeconds());
-        vo.setLevel(e.getLevel());
         vo.setConfigJson(e.getConfigJson());
         if (e.getCreatedAt() != null) vo.setCreatedAt(e.getCreatedAt().format(DTF));
         return vo;

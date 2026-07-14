@@ -41,6 +41,7 @@ class ConfigCache:
     streams: dict[str, dict[str, Any]] = field(default_factory=dict)
     zones_by_stream: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     rules: dict[str, dict[str, Any]] = field(default_factory=dict)
+    event_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
     face_features: dict[str, dict[str, Any]] = field(default_factory=dict)
     updated_at: float = field(default_factory=time.time)
 
@@ -98,6 +99,16 @@ class ConfigClient:
         self.cache.updated_at = time.time()
         return len(self.cache.rules)
 
+    def load_event_configs(self) -> int:
+        items = _items(self._get("/score-config"))
+        self.cache.event_configs = {
+            str(item.get("alert_type")): item
+            for item in items
+            if item.get("alert_type")
+        }
+        self.cache.updated_at = time.time()
+        return len(self.cache.event_configs)
+
     def load_face_features(self, student_id: str | None = None) -> int:
         items = _items(self._get("/students/face-features"))
         features = {
@@ -114,7 +125,7 @@ class ConfigClient:
         return len(self.cache.face_features)
 
     def reload(self, stream_id: str | None = None, reload_items: list[str] | None = None) -> dict[str, Any]:
-        items = set(reload_items or ["streams", "zones", "rules"])
+        items = set(reload_items or ["streams", "zones", "rules", "event_configs"])
         result: dict[str, Any] = {"stream_id": stream_id, "updated_at": time.time()}
         if "streams" in items:
             result["streams_loaded"] = self.load_streams()
@@ -122,6 +133,8 @@ class ConfigClient:
             result["zones_loaded"] = self.load_zones(stream_id)
         if "rules" in items:
             result["rules_loaded"] = self.load_rules()
+        if "event_configs" in items:
+            result["event_configs_loaded"] = self.load_event_configs()
         return result
 
     def reload_face_features(self, scope: str = "all", student_id: str | None = None) -> dict[str, Any]:
@@ -137,13 +150,17 @@ class ConfigClient:
     def get_rule(self, rule_type: str) -> dict[str, Any]:
         return self.cache.rules.get(rule_type, {})
 
+    def get_event_level(self, event_type: str, default: str = "warning") -> str:
+        level = self.cache.event_configs.get(event_type, {}).get("level")
+        return str(level) if level in {"info", "warning", "high"} else default
+
     def get_face_features(self) -> dict[str, dict[str, Any]]:
         return self.cache.face_features
 
     def bootstrap(self) -> dict[str, Any]:
         result: dict[str, Any] = {"updated_at": time.time()}
         try:
-            result.update(self.reload(reload_items=["streams", "zones", "rules"]))
+            result.update(self.reload(reload_items=["streams", "zones", "rules", "event_configs"]))
             result["face_features_loaded"] = self.load_face_features()
             self.last_error = None
         except Exception as exc:
@@ -158,13 +175,14 @@ class ConfigClient:
         streams_seconds = float(cfg.get("streams_poll_seconds", 60))
         zones_seconds = float(cfg.get("zones_poll_seconds", 120))
         rules_seconds = float(cfg.get("rules_poll_seconds", 120))
+        event_configs_seconds = float(cfg.get("event_configs_poll_seconds", rules_seconds))
         face_seconds = float(cfg.get("face_features_poll_seconds", 300))
 
         def due(last_at: float, seconds: float) -> bool:
             return time.time() - last_at >= seconds
 
         def loop() -> None:
-            last_streams = last_zones = last_rules = last_face = 0.0
+            last_streams = last_zones = last_rules = last_event_configs = last_face = 0.0
             while not self._poll_stop.is_set():
                 try:
                     if due(last_streams, streams_seconds):
@@ -176,6 +194,9 @@ class ConfigClient:
                     if due(last_rules, rules_seconds):
                         self.load_rules()
                         last_rules = time.time()
+                    if due(last_event_configs, event_configs_seconds):
+                        self.load_event_configs()
+                        last_event_configs = time.time()
                     if due(last_face, face_seconds):
                         self.load_face_features()
                         last_face = time.time()

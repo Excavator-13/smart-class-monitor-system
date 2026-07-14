@@ -134,6 +134,9 @@ class AnalysisService:
 
         events = []
         for item in detected:
+            configured_level = self._event_level(
+                item["event_type"], item.get("level", "warning")
+            )
             event, should_confirm = self.event_service.observe(
                 stream_id=stream_id,
                 event_type=item["event_type"],
@@ -141,7 +144,7 @@ class AnalysisService:
                 confidence=float(item.get("confidence", 0)),
                 threshold_seconds=float(item.get("threshold_seconds", 0)),
                 cooldown_seconds=self.alert_cooldown_seconds,
-                level=item.get("level", "warning"),
+                level=configured_level,
                 target=item.get("target"),
                 zone=item.get("zone"),
             )
@@ -167,7 +170,7 @@ class AnalysisService:
             confidence=1.0,
             threshold_seconds=0,
             cooldown_seconds=self.alert_cooldown_seconds,
-            level="high",
+            level=self._event_level("stream_offline", "high"),
             target={"track_id": stream_id},
         )
         if should_confirm and self.alert_client is not None:
@@ -177,6 +180,10 @@ class AnalysisService:
             except Exception as exc:
                 self.logger.warning("Failed to push stream_offline alert stream_id=%s: %s", stream_id, exc)
         return event
+
+    def _event_level(self, event_type: str, default: str) -> str:
+        resolver = getattr(self.config_client, "get_event_level", None)
+        return resolver(event_type, default) if callable(resolver) else default
 
     def avg_latency_ms(self, module: str) -> float | None:
         values = self._latencies.get(module)

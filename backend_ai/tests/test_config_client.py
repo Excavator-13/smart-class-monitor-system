@@ -24,6 +24,8 @@ class FakeSession:
             return FakeResponse({"data": [{"zone_id": 1, "stream_id": params.get("streamId", params.get("stream_id")), "enabled": True}]})
         if url.endswith("/rules"):
             return FakeResponse({"data": [{"rule_type": "phone_usage", "enabled": True, "threshold_seconds": 3}]})
+        if url.endswith("/score-config"):
+            return FakeResponse({"data": [{"alert_type": "phone_usage", "level": "info", "score": 62}]})
         if url.endswith("/students/face-features"):
             return FakeResponse({"data": [{"student_id": "2024001", "feature_vector": [0.1], "enabled": True}]})
         return FakeResponse({})
@@ -48,6 +50,14 @@ def test_reload_face_features():
 
     assert result["loaded_count"] == 1
     assert "2024001" in client.get_face_features()
+
+
+def test_load_event_configs_and_resolve_level():
+    client = ConfigClient(base_url="http://spring", session=FakeSession())
+
+    assert client.load_event_configs() == 1
+    assert client.get_event_level("phone_usage", "warning") == "info"
+    assert client.get_event_level("unknown", "high") == "high"
 
 
 def test_internal_token_header_is_sent():

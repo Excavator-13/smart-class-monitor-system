@@ -385,7 +385,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     def video_feed(stream_id: str):
         if not config_client.get_stream(stream_id):
             try:
-                config_client.reload(stream_id=stream_id, reload_items=["streams", "zones", "rules"])
+                config_client.reload(stream_id=stream_id, reload_items=["streams", "zones", "rules", "event_configs"])
             except Exception:
                 pass
         if not config_client.get_stream(stream_id):
