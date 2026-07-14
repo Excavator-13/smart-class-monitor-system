@@ -16,6 +16,14 @@ export function isMockEnabled() {
   if (typeof runtimeValue === "boolean") return runtimeValue;
   if (typeof runtimeValue === "string")
     return runtimeValue.toLowerCase() === "true";
+  // 开发者模式：点击登录页 logo 进入
+  if (typeof window.__DEV_MODE__ !== 'undefined') return window.__DEV_MODE__;
+  try {
+    if (localStorage.getItem('dev_mode') === 'true') {
+      window.__DEV_MODE__ = true;
+      return true;
+    }
+  } catch {}
   return import.meta.env.VITE_USE_MOCK === "true";
 }
 

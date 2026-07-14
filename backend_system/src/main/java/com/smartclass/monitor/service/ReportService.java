@@ -260,7 +260,10 @@ public class ReportService {
 
     public List<Map<String, Object>> queryTodayAlerts() {
         try {
-            var page = alertService.listAlerts(null, null, null, null, null, null, 1, 500);
+            String today = LocalDate.now().toString();
+            String startTime = today + " 00:00:00";
+            String endTime = today + " 23:59:59";
+            var page = alertService.listAlerts(null, null, null, null, startTime, endTime, 1, 500);
             var records = page.getRecords();
             log.info("queryTodayAlerts: 查到 {} 条告警，第一条 streamId={}", records.size(),
                      records.isEmpty() ? "无" : records.get(0).getStreamId());
