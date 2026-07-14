@@ -4,8 +4,10 @@ import com.smartclass.monitor.common.exception.BusinessException;
 import com.smartclass.monitor.dto.RuleCreateRequest;
 import com.smartclass.monitor.dto.RuleUpdateRequest;
 import com.smartclass.monitor.entity.BehaviorRule;
+import com.smartclass.monitor.entity.ScoreConfig;
 import com.smartclass.monitor.integration.AiClient;
 import com.smartclass.monitor.mapper.BehaviorRuleMapper;
+import com.smartclass.monitor.mapper.ScoreConfigMapper;
 import com.smartclass.monitor.vo.RuleVO;
 import org.springframework.stereotype.Service;
 
@@ -18,12 +20,15 @@ public class RuleService {
 
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final List<String> RELOAD_ITEMS = List.of("rules");
+    private static final String DANGER_ZONE = "danger_zone";
 
     private final BehaviorRuleMapper mapper;
+    private final ScoreConfigMapper scoreConfigMapper;
     private final AiClient aiClient;
 
-    public RuleService(BehaviorRuleMapper mapper, AiClient aiClient) {
+    public RuleService(BehaviorRuleMapper mapper, ScoreConfigMapper scoreConfigMapper, AiClient aiClient) {
         this.mapper = mapper;
+        this.scoreConfigMapper = scoreConfigMapper;
         this.aiClient = aiClient;
     }
 
@@ -93,6 +98,9 @@ public class RuleService {
         vo.setCooldownSeconds(e.getCooldownSeconds());
         vo.setConfigJson(e.getConfigJson());
         if (e.getCreatedAt() != null) vo.setCreatedAt(e.getCreatedAt().format(DTF));
+        String lookupType = DANGER_ZONE.equals(e.getRuleType()) ? "danger_zone_intrusion" : e.getRuleType();
+        ScoreConfig sc = scoreConfigMapper.findByType(lookupType);
+        if (sc != null) vo.setLevel(sc.getLevel());
         return vo;
     }
 }
