@@ -136,10 +136,23 @@ public class ReportService {
     }
 
     public Map<String, Object> getLatestReport() {
+        // 优先返回今日内存缓存
         if (latestReport != null) {
-            return latestReport;
+            String cacheDate = String.valueOf(latestReport.getOrDefault("date", ""));
+            if (today().equals(cacheDate)) {
+                return latestReport;
+            }
+            // 缓存过期，清空
+            latestReport = null;
         }
+        // 从文件加载，只取今天的
         latestReport = loadLatestReportFromFile();
+        if (latestReport != null) {
+            String fileDate = String.valueOf(latestReport.getOrDefault("date", ""));
+            if (!today().equals(fileDate)) {
+                latestReport = null;
+            }
+        }
         return latestReport;
     }
 
