@@ -601,6 +601,13 @@ export async function updateUserRole(id, role) {
   });
 }
 
+export async function deleteUser(id) {
+  return requestData(apiClient, {
+    method: "delete",
+    url: `/users/${id}`,
+  });
+}
+
 export async function registerStudentFace(id, image) {
   return requestData(apiClient, {
     method: "post",
