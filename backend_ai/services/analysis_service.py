@@ -57,6 +57,8 @@ class AnalysisService:
         self.logger = get_logger(__name__)
         self._latencies: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=100))
         self._alert_overlays: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+        # 音视频联动：近 5 秒音频事件历史
+        self._audio_history: deque[dict[str, Any]] = deque(maxlen=50)
 
     def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None, audio_chunk: np.ndarray | None = None) -> list[dict[str, Any]]:
         enabled = modules or {"face", "zone", "behavior"}
@@ -127,6 +129,9 @@ class AnalysisService:
         if "audio" in enabled and self.audio_service is not None:
             detected.extend(self.audio_service.process_audio(stream_id, audio_chunk))
 
+        # 音视频联动：同帧内音频事件增强视频事件置信度
+        detected = self._fuse_audio_video(detected)
+
         events = []
         for item in detected:
             event, should_confirm = self.event_service.observe(
@@ -181,6 +186,66 @@ class AnalysisService:
 
     def _observe_latency(self, module: str, started: float) -> None:
         self._latencies[module].append((time.perf_counter() - started) * 1000)
+
+    # 音视频联动规则：音频事件类型 → 视频事件类型 → 置信度提升
+    AUDIO_VIDEO_FUSION: dict[str, dict[str, float]] = {
+        "abnormal_sound": {
+            "fall_detected": 0.15,
+            "stranger_detected": 0.12,
+            "danger_zone_intrusion": 0.10,
+            "danger_zone_stay": 0.10,
+            "danger_zone_approach": 0.08,
+            "crowd_gathering": 0.10,
+            "phone_usage": 0.05,
+            "head_down": 0.05,
+            "leave_seat": 0.05,
+        },
+    }
+
+    def _fuse_audio_video(self, detected: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """音视频联动：近 5 秒内音频+视频同时出现时互相提升置信度"""
+        now = time.time()
+
+        # 将本次检测到的音频事件加入历史队列
+        audio_events = [d for d in detected if d.get("event_type") == "abnormal_sound"]
+        for ae in audio_events:
+            self._audio_history.append({"time": now, "confidence": float(ae.get("confidence", 0))})
+
+        # 清理超过 5 秒的历史
+        while self._audio_history and now - self._audio_history[0]["time"] > 5.0:
+            self._audio_history.popleft()
+
+        # 没有音频历史或没有视频事件 → 跳过
+        video_events = [d for d in detected if d.get("event_type") != "abnormal_sound"]
+        if not self._audio_history or not video_events:
+            return detected
+
+        # 最近 5 秒内音频的最高置信度
+        best_audio = max(e["confidence"] for e in self._audio_history)
+        if best_audio < 0.6:
+            return detected
+
+        fusion_map = self.AUDIO_VIDEO_FUSION.get("abnormal_sound", {})
+
+        # 增强视频事件：有音频异常 → 对应视频事件置信度提升
+        for ve in video_events:
+            et = ve.get("event_type", "")
+            boost = fusion_map.get(et, 0.03)
+            old_conf = float(ve.get("confidence", 0))
+            ve["confidence"] = round(min(1.0, old_conf + boost), 4)
+            ve["fusion"] = True  # 标记为音视频联动
+            if ve.get("level") == "warning" and ve["confidence"] >= 0.85:
+                ve["level"] = "high"
+
+        # 增强音频事件：有视频异常 → 音频置信度也提升
+        video_event_types = {ve.get("event_type") for ve in video_events}
+        if any(et in fusion_map for et in video_event_types):
+            for ae in audio_events:
+                old_conf = float(ae.get("confidence", 0))
+                ae["confidence"] = round(min(1.0, old_conf + 0.08), 4)
+                ae["fusion"] = True
+
+        return detected
 
     def _save_snapshot(self, frame: np.ndarray, event_id: str) -> str | None:
         if self.snapshot_root is None:

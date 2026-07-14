@@ -11,7 +11,9 @@ class AudioService:
     """异常声学事件检测"""
 
     SOUND_TYPES = {
-        "scream": {"freq_range": (500, 4000), "energy_ratio": 3.0, "label": "尖叫声"},
+        "scream": {"freq_range": (500, 4000), "energy_ratio": 3.0, "label": "尖叫声/呼救声"},
+        "fight": {"freq_range": (100, 3000), "energy_ratio": 4.0, "label": "打架/撞击声"},
+        "arguing": {"freq_range": (200, 3000), "energy_ratio": 2.5, "label": "激烈争吵声"},
         "glass_break": {"freq_range": (3000, 8000), "energy_ratio": 2.5, "label": "玻璃破碎"},
         "gunshot": {"freq_range": (200, 2000), "energy_ratio": 8.0, "label": "疑似枪声"},
         "explosion": {"freq_range": (50, 500), "energy_ratio": 10.0, "label": "疑似爆炸声"},

@@ -82,7 +82,7 @@ class AlertClient:
             "snapshot_path": event.get("snapshot_path"),
             "record_path": record_path,
             "event_time_offset": event_time_offset,
-            "extra": {"source": "backend_ai"},
+            "extra": {"source": "backend_ai", **({"fusion": True} if event.get("fusion") else {})},
         })
 
     def push_alert(self, event: dict[str, Any], record_path: str | None = None, event_time_offset: float | None = None) -> dict[str, Any]:
@@ -104,7 +104,8 @@ class AlertClient:
                     stream = event.get("stream_id", "")
                     snapshot = event.get("snapshot_path", "")
                     local_snapshot = self._resolve_local_snapshot(snapshot)
-                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=local_snapshot)
+                    prefix = "【音视频联动】" if event.get("fusion") else ""
+                    self.dingtalk(f"{prefix}{alert_name} | 摄像头：{stream}", snapshot=local_snapshot)
             except Exception:
                 logger.exception("钉钉通知失败")
 
