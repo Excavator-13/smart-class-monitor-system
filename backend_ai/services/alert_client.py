@@ -109,7 +109,12 @@ class AlertClient:
                     stream = event.get("stream_id", "")
                     snapshot = event.get("snapshot_path", "")
                     local_snapshot = self._resolve_local_snapshot(snapshot)
-                    self.dingtalk(f"{alert_name} | 摄像头：{stream}", snapshot=local_snapshot)
+                    self.dingtalk(
+                        f"{alert_name} | 摄像头：{stream}",
+                        snapshot=local_snapshot,
+                        event_id=event.get("event_id"),
+                        occurred_at=event.get("occurred_at"),
+                    )
             except Exception:
                 logger.exception("钉钉通知失败")
 
