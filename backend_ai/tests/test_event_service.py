@@ -3,6 +3,18 @@ from concurrent.futures import ThreadPoolExecutor
 from backend_ai.services.event_service import EventService
 
 
+def test_event_specific_continuity_gap_keeps_phone_candidate():
+    service = EventService(continuity_gap_seconds=2)
+    first, _ = service.observe("classroom_01", "phone_usage", "p1", 0.8, threshold_seconds=5, now=100)
+    second, confirmed = service.observe(
+        "classroom_01", "phone_usage", "p1", 0.8,
+        threshold_seconds=5, continuity_gap_seconds=6, now=105,
+    )
+
+    assert first["event_id"] == second["event_id"]
+    assert confirmed
+
+
 def test_query_filters_events():
     service = EventService()
     service.add_event(service.build_event("classroom_01", "phone_usage", 0.9))

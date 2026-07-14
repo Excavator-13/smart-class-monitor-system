@@ -475,11 +475,9 @@ function isPhoneRelated(item = {}) {
   return /手机|phone/i.test(text);
 }
 
-const displayAlerts = computed(() => {
-  return alerts.value.filter(
-    (item) => !isPhoneRelated(item) || isPhoneItemInForbiddenZone(item),
-  );
-});
+// SpringBoot 中的 phone_usage 已经由 AI 完成禁用区判定并确认入库。
+// 历史告警可能没有 target_info，不能因缺少 bbox 再次从管理列表过滤。
+const displayAlerts = computed(() => alerts.value);
 
 const alertLevelOptions = [
   { label: "全部等级", value: "全部" },
@@ -3264,16 +3262,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <el-button size="small" text @click="latestReport = null">关闭</el-button>
               </div>
             </div>
-            <p
+            <div
+              v-html="renderMd(latestReport.summary)"
               style="
                 margin: 6px 0 0;
                 font-size: 14px;
                 line-height: 1.7;
                 white-space: pre-wrap;
               "
-            >
-              <p v-html="renderMd(latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
-            </p>
+            ></div>
 
             <!-- 统计条形图 -->
             <div v-if="reportChart.length > 0" style="margin:12px 0;padding:12px;background:#fff;border-radius:8px">

@@ -135,6 +135,15 @@ def test_model_status_route():
     assert payload["data"]["service_status"] == "running"
 
 
+def test_legacy_events_route_matches_analysis_events():
+    client = app_client()
+    legacy = client.get("/events?event_type=phone_usage&limit=5")
+    canonical = client.get("/analysis/events?event_type=phone_usage&limit=5")
+
+    assert legacy.status_code == 200
+    assert legacy.get_json()["data"] == canonical.get_json()["data"]
+
+
 def test_analysis_events_route_empty():
     response = app_client().get("/analysis/events?stream_id=classroom_01")
 

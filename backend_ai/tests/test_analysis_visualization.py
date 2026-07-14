@@ -163,6 +163,27 @@ def test_alert_overlay_is_drawn_for_two_seconds_then_removed():
     assert len(service._alert_overlays["classroom_01"]) == 0
 
 
+def test_confirmed_phone_overlay_keeps_target_bbox_visible():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=FakeZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=FakeConfigClient(),
+        alert_overlay_seconds=5,
+    )
+    service._add_alert_overlay(
+        "classroom_01",
+        {"event_id": "evt_phone", "event_type": "phone_usage", "target": {"bbox": [10, 10, 40, 60]}},
+        now=10,
+    )
+    frame = np.zeros((80, 120, 3), dtype=np.uint8)
+
+    service._draw_alert_overlays(frame, "classroom_01", now=14.9)
+
+    assert np.any(np.all(frame == [0, 255, 255], axis=2))
+
+
 def test_person_phone_zone_and_recognized_faces_are_visible():
     service = AnalysisService(
         face_service=FakeFaceService(),
