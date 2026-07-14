@@ -171,7 +171,6 @@ const alertSettings = ref({
   generating: false,
 });
 
-const latestReport = ref(null);
 const reportHistory = ref([]);
 
 watch(alertSettings, saveSettings, { deep: true });
@@ -233,6 +232,7 @@ const removeContact = (name) => {
 
 // 日报
 const showReportModal = ref(false);
+const expandedReportIndex = ref(null);
 const generateAiReport = async () => {
   alertSettings.value.generating = true;
   try {
@@ -259,7 +259,6 @@ const generateAiReport = async () => {
         alertsCount: 0,
       };
     }
-    latestReport.value = report;
     reportHistory.value.unshift(report);
   } finally {
     alertSettings.value.generating = false;
@@ -284,8 +283,7 @@ const renderMd = (text) => {
     .replace(/\n/g, "<br>");
 };
 
-const reportChart = computed(() => {
-  const r = latestReport.value;
+const reportChartFor = (r) => {
   if (!r || !r.raw || !r.raw.type_counts) return [];
   const counts = r.raw.type_counts;
   const max = Math.max(...Object.values(counts), 1);
@@ -294,10 +292,9 @@ const reportChart = computed(() => {
     count,
     pct: ((count / max) * 100).toFixed(0),
   }));
-});
+};
 
-const exportReportPdf = () => {
-  const report = latestReport.value;
+const exportReportPdf = (report) => {
   if (!report) return;
   const items = (report.alerts || [])
     .map((a) => {
@@ -1698,10 +1695,9 @@ async function loadLatestReport() {
     if (resp.ok) {
       const data = await resp.json();
       if (data && data.date) {
-        // 只显示今天的日报，过滤历史缓存
         const today = new Date().toISOString().slice(0, 10);
         if (data.date === today) {
-          latestReport.value = data;
+          reportHistory.value.unshift(data);
         }
       }
     }
@@ -1787,6 +1783,21 @@ function navigateToPage(page) {
   if (page === "users" && !isAdmin.value) return;
   activePage.value = page;
   if (page === "users") loadUsers();
+  if (page === "system") refreshSystemPage();
+}
+
+async function refreshSystemPage() {
+  try {
+    const [, healthResult, modelResult] = await Promise.all([
+      refreshStreamStatuses(),
+      fetchSystemHealth().catch(() => null),
+      fetchModelStatus().catch(() => null),
+    ]);
+    if (healthResult) health.value = normalizeHealth(healthResult);
+    if (modelResult) modelStatus.value = modelResult;
+  } catch {
+    /* best-effort */
+  }
 }
 
 function toggleRuleOverlay() {
@@ -3293,17 +3304,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >生成日报</el-button
               >
               <el-button
-                v-if="latestReport"
+                v-if="reportHistory.length"
                 size="small"
-                type="success"
-                @click="exportReportPdf"
-                >导出 PDF</el-button
-              >
-              <el-button
-                v-if="latestReport"
-                size="small"
-                @click="showReportModal = true"
-                >往期日报</el-button
+                @click="
+                  showReportModal = true;
+                  expandedReportIndex = null;
+                "
+                >往期日报（{{ reportHistory.length }}）</el-button
               >
             </label>
           </section>
@@ -3458,36 +3465,167 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
             <div
               v-for="(r, i) in reportHistory"
+              :key="i"
               style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
             >
-              <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
-                {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
-              </div>
-            </div>
-            
-            <!-- 历史日报列表 -->
-            <div v-if="reportHistory.length > 0">
-              <h3 style="font-size: 16px; margin-bottom: 12px; color: #1d2129">历史日报（{{ reportHistory.length }} 条）</h3>
               <div
-                v-for="(r, i) in reportHistory"
-                :key="i"
-                style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
+                style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                "
               >
-                <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
-                  {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
+                <div>
+                  <span style="font-size: 12px; color: #909399"
+                    >{{ r.date }} {{ r.time?.slice(11, 16) || "" }}</span
+                  >
+                  <span
+                    v-if="r.alertsCount"
+                    style="font-size: 12px; color: #409eff; margin-left: 8px"
+                    >{{ r.alertsCount }} 条告警</span
+                  >
                 </div>
-                <div v-html="renderMd(r.summary)" style="font-size: 14px; line-height: 1.7"></div>
+                <div style="display: flex; gap: 6px">
+                  <el-button
+                    size="small"
+                    :type="expandedReportIndex === i ? 'primary' : ''"
+                    @click="
+                      expandedReportIndex = expandedReportIndex === i ? null : i
+                    "
+                    >{{
+                      expandedReportIndex === i ? "收起" : "查看详情"
+                    }}</el-button
+                  >
+                  <el-button
+                    size="small"
+                    type="success"
+                    @click="exportReportPdf(r)"
+                    >导出</el-button
+                  >
+                </div>
+              </div>
+              <div
+                v-html="renderMd(r.summary)"
+                style="
+                  font-size: 14px;
+                  line-height: 1.7;
+                  margin-top: 6px;
+                  white-space: pre-wrap;
+                "
+              ></div>
+
+              <div v-if="expandedReportIndex === i" style="margin-top: 12px">
+                <div
+                  v-if="reportChartFor(r).length > 0"
+                  style="
+                    padding: 12px;
+                    background: #fff;
+                    border-radius: 8px;
+                    border: 1px solid #ebeef5;
+                  "
+                >
+                  <div
+                    style="
+                      font-size: 14px;
+                      font-weight: 600;
+                      margin-bottom: 10px;
+                      color: #1d2129;
+                    "
+                  >
+                    告警统计
+                  </div>
+                  <div
+                    v-for="c in reportChartFor(r)"
+                    :key="c.type"
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 10px;
+                      margin: 6px 0;
+                    "
+                  >
+                    <span
+                      style="
+                        width: 100px;
+                        font-size: 13px;
+                        text-align: right;
+                        color: #4e5969;
+                        flex-shrink: 0;
+                      "
+                      >{{ c.type }}</span
+                    >
+                    <div
+                      style="
+                        flex: 1;
+                        height: 24px;
+                        background: #f2f3f5;
+                        border-radius: 6px;
+                        overflow: hidden;
+                      "
+                    >
+                      <div
+                        :style="
+                          'width:' +
+                          c.pct +
+                          '%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'
+                        "
+                      >
+                        <span
+                          style="color: #fff; font-size: 12px; font-weight: 500"
+                          >{{ c.count }}</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  v-for="(a, ai) in r.alerts || []"
+                  :key="ai"
+                  style="
+                    margin-top: 10px;
+                    padding: 10px;
+                    background: #fff;
+                    border: 1px solid #e0e0e0;
+                    border-radius: 6px;
+                  "
+                >
+                  <div style="font-weight: bold; font-size: 13px">
+                    {{ a.alertType || a.type }} —
+                    {{ a.stream_id || a.streamId }}
+                  </div>
+                  <div
+                    v-if="a.snapshot_url || a.snapshotUrl"
+                    style="margin-top: 6px"
+                  >
+                    <img
+                      :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)"
+                      style="
+                        max-width: 100%;
+                        max-height: 200px;
+                        border-radius: 4px;
+                      "
+                      @error="$event.target.style.display = 'none'"
+                    />
+                  </div>
+                  <div
+                    v-if="a.vl_analysis || a.vlAnalysis"
+                    style="
+                      margin-top: 4px;
+                      font-size: 12px;
+                      color: #555;
+                      background: #f5f7fa;
+                      padding: 6px;
+                      border-radius: 4px;
+                    "
+                  >
+                    AI分析：{{ a.vl_analysis || a.vlAnalysis }}
+                  </div>
+                </div>
               </div>
             </div>
-            
-            <div v-else style="color: #909399; text-align: center; padding: 40px">
-              暂无历史日报
-            </div>
-            
+
             <div style="text-align: right; margin-top: 20px">
-              <el-button type="primary" size="small" @click="exportReportPdf" :disabled="!latestReport"
-                >导出 HTML</el-button
-              >
               <el-button @click="showReportModal = false">关闭</el-button>
             </div>
           </div>
@@ -3720,21 +3858,23 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <span>{{ ruleSummaryText(rule) }}</span>
                 </div>
                 <div class="rule-threshold-control">
-                    <template v-if="rule.threshold_seconds > 0">
-                      <span>持续阈值（秒）</span>
-                      <el-input-number
-                        v-model="rule.threshold_seconds"
-                        :min="1"
-                        :max="300"
-                        size="small"
-                        :disabled="!isAdmin || isRuleNotImplemented(rule)"
-                        @change="handleUpdateRule(rule)"
-                      />
-                    </template>
-                    <template v-else>
-                      <span style="color: #909399; font-size: 13px">立即触发</span>
-                    </template>
-                  </div>
+                  <template v-if="rule.threshold_seconds > 0">
+                    <span>持续阈值（秒）</span>
+                    <el-input-number
+                      v-model="rule.threshold_seconds"
+                      :min="1"
+                      :max="300"
+                      size="small"
+                      :disabled="!isAdmin || isRuleNotImplemented(rule)"
+                      @change="handleUpdateRule(rule)"
+                    />
+                  </template>
+                  <template v-else>
+                    <span style="color: #909399; font-size: 13px"
+                      >立即触发</span
+                    >
+                  </template>
+                </div>
                 <el-switch
                   :model-value="rule.enabled"
                   :disabled="
