@@ -55,6 +55,7 @@ dlib_face_recognition_resnet_model_v1.dat
 
 # 数据文件（人脸库/日志）
 backend-ai/data/
+data/
 *.json
 *.sqlite3
 *.db

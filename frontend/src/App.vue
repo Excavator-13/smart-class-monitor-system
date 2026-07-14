@@ -66,8 +66,6 @@ const authMode = ref("login");
 const authLoading = ref(false);
 const authNotice = ref("");
 const authNoticeType = ref("info");
-const canUseDeveloperLogin =
-  import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_LOGIN === "true";
 const authForm = ref({
   username: "",
   password: "",
@@ -96,6 +94,10 @@ const alertProcessForm = ref({
   status: "handled",
   remark: "",
 });
+const replayVisible = ref(false);
+const replayUrl = ref("");
+const replayOffset = ref(0);
+const replayVideoRef = ref(null);
 const personForm = ref({
   student_no: "",
   name: "",
@@ -357,9 +359,7 @@ const statusOptions = [
 
 const zoneTypeOptions = [
   { label: "危险区", value: "danger" },
-  { label: "座位区", value: "seat" },
   { label: "手机禁用区", value: "phone_forbidden" },
-  { label: "识别区域", value: "roi" },
 ];
 
 const currentStream = computed(() => {
@@ -542,10 +542,10 @@ const onlineStreamCount = computed(
 );
 
 const healthItems = computed(() => [
-  { label: "RTMP 流媒体", value: health.value.rtmp || "unknown" },
-  { label: "AI 分析服务", value: health.value.ai || "unknown" },
-  { label: "业务后端", value: health.value.api || "unknown" },
-  { label: "MySQL 数据库", value: health.value.database || "unknown" },
+  { label: "视频传输", value: health.value.rtmp || "unknown" },
+  { label: "智能分析", value: health.value.ai || "unknown" },
+  { label: "业务服务", value: health.value.api || "unknown" },
+  { label: "数据服务", value: health.value.database || "unknown" },
 ]);
 
 const metricCards = computed(() => [
@@ -654,12 +654,12 @@ const activeSummary = computed(() => {
   const topRiskText = riskTypeText(topEvent.risk_type);
   return {
     risk_score: combinedScore,
-    title: `${topRiskText}风险：${topEvent.alert_name || topEvent.event_name || topEvent.alert_type || topEvent.event_type || "AI 告警"}`,
+    title: `${topRiskText}风险：${topEvent.alert_name || topEvent.event_name || alertTypeText(topEvent.alert_type || topEvent.event_type)}`,
     summary: `综合 ${activeRiskEvents.value.length} 条有效告警计算，当前最高风险为${topRiskText}，分数由告警危急程度、等级和置信度共同决定。`,
     actions: buildRiskActions(activeRiskEvents.value),
     timeline: activeRiskEvents.value.slice(0, 3).map((item) => ({
       time: formatEventTime(item.occurred_at),
-      text: `${riskTypeText(item.risk_type)} ${item.risk_score} 分：${item.alert_name || item.event_name || item.alert_type || item.event_type || "AI 告警"}`,
+      text: `${riskTypeText(item.risk_type)} ${item.risk_score} 分：${item.alert_name || item.event_name || alertTypeText(item.alert_type || item.event_type)}`,
     })),
   };
 });
@@ -702,7 +702,7 @@ const rulePageCards = computed(() => [
         : "未绘制",
     tone: "brand",
   },
-  { label: "最高优先级", value: "按接口规则", tone: "danger" },
+  { label: "最高优先级", value: "按当前规则", tone: "danger" },
   { label: "复核窗口", value: "按规则阈值", tone: "warn" },
 ]);
 
@@ -724,12 +724,12 @@ const systemPageCards = computed(() => [
     tone: "ok",
   },
   {
-    label: "模型版本",
+    label: "分析版本",
     value: modelStatus.value.version || modelStatus.value.model_name || "--",
     tone: "brand",
   },
   {
-    label: "推理耗时",
+    label: "分析耗时",
     value: modelStatus.value.inference_ms
       ? `${modelStatus.value.inference_ms} ms`
       : "--",
@@ -829,12 +829,9 @@ function zoneTypeText(type) {
   return (
     {
       danger: "危险区",
-      seat: "座位区",
       phone_forbidden: "手机禁用区",
-      roi: "识别区域",
     }[type] ||
-    type ||
-    "未分类"
+    (type ? "其他区域" : "未分类")
   );
 }
 
@@ -853,8 +850,12 @@ function zoneCoordinateText(zone = {}) {
 }
 
 function evidenceSummary(row = {}) {
-  if (row.snapshot_url) return "已保存告警截图";
-  return "未生成证据文件";
+  const hasSnapshot = !!row.snapshot_url;
+  const hasRecord = !!row.record_url;
+  if (hasSnapshot && hasRecord) return "截图 + 录像";
+  if (hasSnapshot) return "已保存截图";
+  if (hasRecord) return "仅录像";
+  return "证据生成中";
 }
 
 function statusType(status) {
@@ -870,6 +871,15 @@ function statusType(status) {
       running: "success",
       active: "success",
       connected: "success",
+      healthy: "success",
+      ok: "success",
+      up: "success",
+      available: "success",
+      normal: "success",
+      degraded: "warning",
+      error: "danger",
+      failed: "danger",
+      unavailable: "danger",
       offline: "danger",
       disabled: "info",
       unknown: "info",
@@ -895,30 +905,79 @@ function statusText(status) {
       running: "运行中",
       active: "活跃",
       connected: "已连接",
+      healthy: "正常",
+      ok: "正常",
+      up: "在线",
+      available: "正常",
+      normal: "正常",
+      degraded: "需关注",
+      error: "异常",
+      failed: "异常",
+      unavailable: "不可用",
       offline: "离线",
       enabled: "已启用",
       disabled: "已停用",
       unknown: "未知",
     }[status] ||
-    status ||
-    "--"
+    (status ? "未知" : "--")
   );
+}
+
+function userFacingError(error, fallback = "操作未完成，请稍后重试。") {
+  const status = Number(error?.response?.status || 0);
+  if (status === 401) return "账号或密码错误，或登录状态已过期。";
+  if (status === 403) return "当前账号没有执行此操作的权限。";
+  if (status === 404) return "未找到所需内容，请刷新后重试。";
+  if (status === 409) return "该信息已存在，请检查后重新提交。";
+  if (status >= 500) return "系统暂时无法完成此操作，请稍后重试。";
+
+  const serverMessage = error?.response?.data?.message;
+  const containsTechnicalDetails =
+    typeof serverMessage === "string" &&
+    /(接口|后端|服务端|数据库|SQL|HTTP|token|JWT|VITE|Spring|Flask|Nginx|status code|request|response|exception|trace|\/api)/i.test(
+      serverMessage,
+    );
+  if (
+    typeof serverMessage === "string" &&
+    /[\u4e00-\u9fff]/.test(serverMessage) &&
+    !containsTechnicalDetails
+  ) {
+    return serverMessage;
+  }
+
+  if (
+    !error?.response &&
+    /(Network Error|timeout|Failed to fetch)/i.test(error?.message || "")
+  ) {
+    return "暂时无法连接系统，请稍后重试。";
+  }
+  return fallback;
 }
 
 function alertTypeText(type) {
   return (
     {
       fire_detected: "明火检测",
+      flame_detected: "明火检测",
       smoke_detected: "烟雾检测",
       fall_detected: "摔倒检测",
       stranger_detected: "陌生人",
+      face_recognized: "身份识别",
       phone_usage: "手机违规",
       head_down: "低头异常",
       zone_intrusion: "区域入侵",
+      danger_zone_intrusion: "区域入侵",
+      danger_zone_stay: "区域停留超时",
+      danger_zone_approach: "接近危险区域",
       sleep_detected: "睡觉检测",
+      crowd_gathering: "人员聚集",
+      leave_seat: "长时间离座",
+      spoof_detected: "身份核验异常",
+      deepfake_detected: "异常人脸画面",
+      abnormal_sound: "异常声音",
+      stream_offline: "视频中断",
     }[type] ||
-    type ||
-    "--"
+    (type ? "其他告警" : "--")
   );
 }
 
@@ -935,16 +994,16 @@ function ruleNameText(rule) {
 
 function ruleSummaryText(rule) {
   const summary = ruleSummary(rule);
-  return (
-    {
-      "Enabled only after forbidden zone confirmation": "仅在确认禁用区后生效",
-      "High-priority safety event": "高优先级安全事件",
-      "Triggered after a sustained fall posture": "倒地持续确认后告警",
-      "Evaluated by seat area and duration": "结合座位区域和时间窗口判断",
-    }[summary] ||
-    summary ||
-    "--"
-  );
+  const mappedSummary = {
+    "Enabled only after forbidden zone confirmation": "仅在确认禁用区后生效",
+    "High-priority safety event": "高优先级安全事件",
+    "Triggered after a sustained fall posture": "倒地持续确认后告警",
+    "Evaluated by seat area and duration": "结合座位区域和时间窗口判断",
+  }[summary];
+
+  if (mappedSummary) return mappedSummary;
+  if (typeof summary === "string" && /[\u4e00-\u9fff]/.test(summary)) return summary;
+  return `${alertTypeText(rule?.rule_type)}将在满足识别条件后提醒`;
 }
 
 function ruleSummary(rule) {
@@ -1112,7 +1171,7 @@ async function handleScoreConfigChange(item) {
   try {
     await updateScoreConfig(item.id, { score: item.score });
   } catch (e) {
-    ElMessage.error("评分配置保存失败：" + (e.message || "未知错误"));
+    ElMessage.error(userFacingError(e, "评分配置保存失败，请稍后重试。"));
   }
 }
 
@@ -1401,9 +1460,9 @@ async function confirmForbiddenZone() {
       created,
     ];
     pendingForbiddenZone.value = null;
-    ElMessage.success("区域已保存，后续标注由 AI 视频流统一绘制。");
+    ElMessage.success("区域已保存，将在实时画面中显示。");
   } catch (error) {
-    ElMessage.error(error?.message || "禁用区保存失败，请检查后端服务。");
+    ElMessage.error(userFacingError(error, "区域保存失败，请稍后重试。"));
   } finally {
     zoneSaving.value = false;
   }
@@ -1466,7 +1525,7 @@ async function saveZone() {
     ElMessage.success("区域已更新。");
     zoneDialogVisible.value = false;
   } catch (error) {
-    ElMessage.error(error?.message || "区域保存失败。");
+    ElMessage.error(userFacingError(error, "区域保存失败，请稍后重试。"));
   } finally {
     zoneFormSaving.value = false;
   }
@@ -1492,7 +1551,7 @@ async function handleDeleteZone(zone) {
     );
     ElMessage.success(`${zone.zone_name || "区域"}已删除。`);
   } catch (error) {
-    ElMessage.error(error?.message || "区域删除失败。");
+    ElMessage.error(userFacingError(error, "区域删除失败，请稍后重试。"));
   } finally {
     const nextIds = new Set(deletingZoneIds.value);
     nextIds.delete(id);
@@ -1511,7 +1570,7 @@ async function handleToggleZone(zone) {
         : item,
     );
   } catch (error) {
-    ElMessage.error(error?.message || "切换区域开关失败。");
+    ElMessage.error(userFacingError(error, "区域状态更新失败，请稍后重试。"));
   }
 }
 
@@ -1524,7 +1583,7 @@ async function handleToggleRule(rule) {
       item.id === id ? { ...item, enabled: newEnabled } : item,
     );
   } catch (error) {
-    ElMessage.error(error?.message || "切换规则开关失败。");
+    ElMessage.error(userFacingError(error, "规则状态更新失败，请稍后重试。"));
   }
 }
 
@@ -1540,7 +1599,7 @@ async function loadUsers() {
     loadErrors.value.users = "";
   } catch (error) {
     users.value = [];
-    loadErrors.value.users = error?.message || "用户列表接口请求失败";
+    loadErrors.value.users = userFacingError(error, "用户列表加载失败。");
     ElMessage.error(loadErrors.value.users);
   } finally {
     usersLoading.value = false;
@@ -1561,7 +1620,7 @@ async function handleUserRoleChange(user, role) {
     );
     ElMessage.success(`${user.username} 的权限已更新。`);
   } catch (error) {
-    ElMessage.error(error?.message || "用户权限更新失败。");
+    ElMessage.error(userFacingError(error, "用户权限更新失败，请稍后重试。"));
   } finally {
     userRoleUpdatingId.value = null;
   }
@@ -1625,6 +1684,7 @@ function normalizeUser(loginPayload, username) {
 async function enterAuthenticatedApp(user, token, remember = true) {
   currentUser.value = user;
   isAuthenticated.value = true;
+  activePage.value = "monitor";
   storeAuthSession(token, user, remember);
   await loadDashboard();
   startAlertRefresh();
@@ -1643,36 +1703,17 @@ async function submitLogin() {
     const token = payload?.token || payload?.access_token || payload?.jwt || "";
     const user = normalizeUser(payload, authForm.value.username);
     if (!token) {
-      throw new Error("登录响应缺少 token");
+      throw new Error("登录信息不完整");
     }
     await enterAuthenticatedApp(user, token, authForm.value.remember);
   } catch (error) {
     setAuthNotice(
-      error?.message || "登录失败，请确认后端认证接口可用且账号密码正确。",
+      userFacingError(error, "登录失败，请检查账号和密码后重试。"),
       "error",
     );
   } finally {
     authLoading.value = false;
   }
-}
-
-async function submitDeveloperLogin() {
-  window.__SMART_CLASS_CONFIG__ = {
-    ...(window.__SMART_CLASS_CONFIG__ || {}),
-    USE_MOCK: true,
-  };
-  const user = {
-    user_id: "dev-local",
-    username: "dev",
-    nickname: "开发者模式",
-    role: "admin",
-    avatar_url: "",
-  };
-  setAuthNotice(
-    "已进入开发者模式：当前使用本地 mock 数据，不代表真实后端登录。",
-    "warning",
-  );
-  await enterAuthenticatedApp(user, "dev-local-token", false);
 }
 
 async function submitRegister() {
@@ -1690,11 +1731,11 @@ async function submitRegister() {
     const payload = await register(registerForm.value);
     const token = payload?.token || payload?.access_token || payload?.jwt || "";
     const user = normalizeUser(payload, registerForm.value.username);
-    if (!token) throw new Error("注册响应缺少 token");
+    if (!token) throw new Error("注册信息不完整");
     await enterAuthenticatedApp(user, token, true);
   } catch (error) {
     setAuthNotice(
-      error?.message || "注册请求失败，请确认后端服务可用。",
+      userFacingError(error, "注册失败，请检查填写内容后重试。"),
       "error",
     );
   } finally {
@@ -1721,7 +1762,7 @@ function startAlertRefresh() {
         loadErrors.value.alerts = "";
       })
       .catch((error) => {
-        loadErrors.value.alerts = error?.message || "告警接口请求失败";
+        loadErrors.value.alerts = userFacingError(error, "告警信息加载失败。");
       });
   }, 5000);
 }
@@ -1766,7 +1807,7 @@ async function loadDashboard() {
   loadErrors.value = Object.fromEntries(
     Object.entries(results)
       .filter(([, result]) => !result.ok)
-      .map(([key, result]) => [key, result.error?.message || "接口请求失败"]),
+      .map(([key, result]) => [key, userFacingError(result.error, "数据加载失败。")]),
   );
 
   streams.value = results.streams.ok
@@ -1816,7 +1857,7 @@ async function loadDashboard() {
       analysisEvents.value = normalizeList(nextEvents);
       zones.value = normalizeList(nextZones);
     } catch (error) {
-      loadErrors.value.summary = error?.message || "AI 分析接口请求失败";
+      loadErrors.value.summary = userFacingError(error, "智能分析结果加载失败。");
     }
   }
 }
@@ -1841,7 +1882,7 @@ async function switchStream(streamId) {
   } catch (error) {
     summary.value = {};
     analysisEvents.value = [];
-    loadErrors.value.summary = error?.message || "AI 分析接口请求失败";
+    loadErrors.value.summary = userFacingError(error, "智能分析结果加载失败。");
   } finally {
     streamSwitching.value = false;
   }
@@ -1859,6 +1900,31 @@ function handleVideoError() {
 
 function resourceUrl(path) {
   return joinResourceUrl(path);
+}
+
+function openReplayDialog(row) {
+  replayUrl.value = resourceUrl(row.record_url);
+  replayOffset.value = row.event_time_offset ?? 0;
+  replayVisible.value = true;
+}
+
+function onReplayReady() {
+  if (replayVideoRef.value && replayOffset.value > 0) {
+    replayVideoRef.value.currentTime = replayOffset.value;
+  }
+  if (replayVideoRef.value) {
+    replayVideoRef.value.play().catch(() => {});
+  }
+}
+
+function closeReplayDialog() {
+  if (replayVideoRef.value) {
+    replayVideoRef.value.pause();
+  }
+  replayUrl.value = "";
+  replayOffset.value = 0;
+  replayVideoRef.value?.load();
+  replayVisible.value = false;
 }
 
 function toggleThemeMode() {
@@ -1902,15 +1968,15 @@ async function savePerson() {
     };
   } catch (error) {
     if (!isMockEnabled()) {
-      ElMessage.error(error?.message || "新增人员接口请求失败。");
+      ElMessage.error(userFacingError(error, "新增人员失败，请稍后重试。"));
       return;
     }
-    ElMessage.warning("人员接口不可用，已在开发模式下临时新增人员。");
+    ElMessage.warning("当前为开发预览，人员信息已临时添加。");
   }
 
   if (newPersonFaceImageBase64.value) {
     if (!savedPerson.id) {
-      ElMessage.warning("人员已新增，但后端未返回人员 ID，暂时无法注册人脸。");
+      ElMessage.warning("人员已新增，但暂时无法继续录入人脸，请刷新后重试。");
     } else {
       try {
         await registerStudentFace(
@@ -1924,12 +1990,12 @@ async function savePerson() {
           students.value = [savedPerson, ...students.value];
           personDialogVisible.value = false;
           ElMessage.error(
-            error?.message || "人员已新增，但人脸注册接口请求失败。",
+            userFacingError(error, "人员已新增，但人脸录入失败，请稍后重试。"),
           );
           return;
         }
         savedPerson = { ...savedPerson, face_registered: true };
-        ElMessage.warning("人脸注册接口不可用，开发模式下已临时标记为已注册。");
+        ElMessage.warning("当前为开发预览，人脸状态已临时更新。");
       }
     }
   } else {
@@ -1978,15 +2044,15 @@ async function saveStream() {
     const created = await createStream(localStream);
     streams.value = [created, ...streams.value];
     activeStreamId.value = created.stream_id;
-    ElMessage.success("已通过接口新增视频源。");
+    ElMessage.success("视频源新增成功。");
   } catch (error) {
     if (!isMockEnabled()) {
-      ElMessage.error(error?.message || "新增视频源接口请求失败。");
+      ElMessage.error(userFacingError(error, "新增视频源失败，请稍后重试。"));
       return;
     }
     streams.value = [localStream, ...streams.value];
     activeStreamId.value = localStream.stream_id;
-    ElMessage.warning("接口不可用，已在开发模式下临时新增视频源。");
+    ElMessage.warning("当前为开发预览，视频源已临时添加。");
   }
   streamDialogVisible.value = false;
 }
@@ -2085,7 +2151,7 @@ function normalizeFaceValidationError(error) {
   const code = error?.response?.data?.code;
   const message = error?.message || "";
   if (status >= 500) {
-    return "AI 人脸识别服务异常，请确认 AI 服务已启动且人脸模型加载正常。";
+    return "暂时无法完成人脸检测，请稍后重试或联系管理员。";
   }
   if (code === 40001 || message.includes("invalid image")) {
     return "图片格式无效，请重新选择清晰的人脸照片。";
@@ -2097,9 +2163,9 @@ function normalizeFaceValidationError(error) {
     return "图片中识别到多张人脸，请上传单人脸照片。";
   }
   if (message.includes("Network Error")) {
-    return "无法连接 AI 人脸识别服务，请检查 VITE_AI_BASE 或服务端口。";
+    return "暂时无法进行人脸检测，请稍后重试或联系管理员。";
   }
-  return message || "人脸图片校验失败。";
+  return "人脸图片校验失败，请重新选择照片。";
 }
 
 async function validateFaceFile(file, studentId) {
@@ -2204,7 +2270,7 @@ async function saveFaceRegistration() {
     ElMessage.success("人脸注册成功。");
   } catch (error) {
     if (!isMockEnabled()) {
-      ElMessage.error(error?.message || "人脸注册接口请求失败。");
+      ElMessage.error(userFacingError(error, "人脸录入失败，请稍后重试。"));
       return;
     }
     students.value = students.value.map((item) =>
@@ -2213,7 +2279,7 @@ async function saveFaceRegistration() {
         : item,
     );
     faceDialogVisible.value = false;
-    ElMessage.warning("接口不可用，已在开发模式下标记为已注册。");
+    ElMessage.warning("当前为开发预览，人脸状态已临时更新。");
   }
 }
 
@@ -2247,7 +2313,7 @@ async function saveAlertProcess() {
     ElMessage.success("告警状态已更新。");
   } catch (error) {
     if (!isMockEnabled()) {
-      ElMessage.error(error?.message || "告警处理接口请求失败。");
+      ElMessage.error(userFacingError(error, "告警处理失败，请稍后重试。"));
       return;
     }
     alerts.value = alerts.value.map((item) =>
@@ -2261,7 +2327,7 @@ async function saveAlertProcess() {
         : item,
     );
     alertProcessDialogVisible.value = false;
-    ElMessage.warning("接口不可用，已在开发模式下临时更新状态。");
+    ElMessage.warning("当前为开发预览，告警状态已临时更新。");
   }
 }
 
@@ -2277,6 +2343,7 @@ onMounted(async () => {
     setAuthNotice("登录状态已失效，请重新登录。", "warning");
     return;
   }
+  activePage.value = "monitor";
   await loadDashboard();
   startAlertRefresh();
 });
@@ -2320,21 +2387,20 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
       </div>
       <h1>智慧教室实时行为分析与安全监测系统</h1>
       <p>
-        统一接入 SpringBoot 鉴权、AI 视频分析和 Nginx
-        静态资源，为教师和管理员提供安全、清晰的值守入口。
+        集中查看课堂动态、风险提醒与处置进展，为教师和管理员提供安全、清晰的值守入口。
       </p>
       <div class="auth-feature-grid">
         <article>
-          <b>JWT 鉴权</b>
-          <span>登录成功后访问业务接口自动携带 Token。</span>
+          <b>安全登录</b>
+          <span>通过身份验证后进入专属工作空间。</span>
         </article>
         <article>
-          <b>角色访问</b>
-          <span>初版区分 admin 与 teacher 两类角色。</span>
+          <b>角色权限</b>
+          <span>根据教师或管理员身份展示对应功能。</span>
         </article>
         <article>
-          <b>接口一致</b>
-          <span>登录走 `/auth/login`，当前用户走 `/auth/info`。</span>
+          <b>数据同步</b>
+          <span>监控、告警和人员信息保持同步更新。</span>
         </article>
       </div>
     </div>
@@ -2362,7 +2428,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         <p>
           {{
             authMode === "login"
-              ? "使用后端已确定的 /auth/login 接口进入系统。"
+              ? "使用已有账号进入智慧课堂工作台。"
               : "注册成功后自动登录，默认角色为教师。"
           }}
         </p>
@@ -2400,7 +2466,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
         </el-form-item>
         <div class="auth-row">
           <el-checkbox v-model="authForm.remember">记住登录状态</el-checkbox>
-          <span>Token 失效时返回登录页</span>
+          <span>登录状态过期后需重新验证</span>
         </div>
         <el-button
           class="auth-submit"
@@ -2409,14 +2475,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           @click="submitLogin"
           >登录</el-button
         >
-        <button
-          v-if="canUseDeveloperLogin"
-          class="dev-login-button"
-          type="button"
-          @click="submitDeveloperLogin"
-        >
-          开发者模式临时进入
-        </button>
       </el-form>
 
       <el-form
@@ -2454,11 +2512,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
       </el-form>
 
       <div class="auth-contract">
-        <b>接口契约</b>
-        <span
-          >已确定：`POST /auth/login`、`POST /auth/register`、`GET
-          /auth/info`。开发者模式仅本地调试使用，不会创建真实后端会话。</span
-        >
+        <b>使用提示</b>
+        <span>教师可查看和处理课堂告警，管理员还可维护规则、人员与用户权限。</span>
       </div>
     </div>
   </section>
@@ -2644,7 +2699,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                       ? "视频不可用"
                       : streamSwitching
                         ? "切换中..."
-                        : "实时联调"
+                        : "实时画面"
                   }}
                 </span>
               </div>
@@ -2666,7 +2721,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 v-if="showRuleOverlay && !activeForbiddenRect"
                 class="draw-hint"
               >
-                {{ "按住鼠标左键拖拽新增区域，已保存区域由 AI 视频流标注" }}
+                {{ "按住鼠标左键拖拽新增区域，保存后将在实时画面中显示" }}
               </div>
               <div v-if="!showRuleOverlay" class="draw-hint muted">
                 区域规则层已关闭
@@ -2738,7 +2793,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   size="small"
                 />
               </div>
-              <el-table :data="filteredAlerts" height="420" class="clean-table">
+              <el-table
+                :data="filteredAlerts"
+                height="420"
+                class="clean-table"
+                empty-text="暂无告警记录"
+              >
                 <el-table-column prop="occurred_at" label="时间" width="150" />
                 <el-table-column label="类型" min-width="110">
                   <template #default="{ row }">
@@ -2844,7 +2904,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </div>
                 <p>
                   {{ alert.stream_name || alert.stream_id }}，{{
-                    alert.remark || alert.event_id || "暂无说明"
+                    alert.remark || "暂无补充说明"
                   }}
                 </p>
               </article>
@@ -3243,10 +3303,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>告警管理</h2>
-                <span
-                  >来自 SpringBoot `/alerts`，截图和录像路径由 Nginx
-                  静态服务访问。</span
-                >
+                <span>集中查看告警等级、处理状态与关联证据。</span>
               </div>
               <div class="alert-filter-bar">
                 <el-input
@@ -3294,7 +3351,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 </el-select>
               </div>
             </div>
-            <el-table :data="filteredAlerts" height="360" class="clean-table">
+            <el-table
+              :data="filteredAlerts"
+              height="360"
+              class="clean-table"
+              empty-text="暂无告警记录"
+            >
               <el-table-column prop="occurred_at" label="时间" width="150" />
               <el-table-column label="告警类型" width="130">
                 <template #default="{ row }">
@@ -3355,14 +3417,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                       <el-button
                         size="small"
                         text
-                        tag="a"
-                        target="_blank"
                         :disabled="!row.record_url"
-                        :href="
-                          row.record_url
-                            ? resourceUrl(row.record_url)
-                            : undefined
-                        "
+                        @click="openReplayDialog(row)"
                         >录像</el-button
                       >
                     </div>
@@ -3417,7 +3473,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               </article>
               <el-empty
                 v-if="!riskScoreSettings.length"
-                description="评分配置接口暂无数据"
+                description="暂无评分配置"
               />
             </div>
           </section>
@@ -3445,10 +3501,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>区域规则配置</h2>
-                <span
-                  >规则来自 `/rules`，区域来自
-                  `/zones`；数值表示触发前需要持续命中的秒数。</span
-                >
+                <span>调整各类异常的持续时间与启用状态。</span>
               </div>
             </div>
             <div class="rule-editor">
@@ -3480,13 +3533,15 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>区域管理</h2>
-                <span
-                  >区域从实时监控画面拖拽新增；此处通过 `/zones`
-                  查询、编辑、启停和删除。</span
-                >
+                <span>在实时监控画面新增区域，并在此编辑、启停或删除。</span>
               </div>
             </div>
-            <el-table :data="zoneRows" height="390" class="clean-table">
+            <el-table
+              :data="zoneRows"
+              height="390"
+              class="clean-table"
+              empty-text="暂无区域"
+            >
               <el-table-column label="区域名称" min-width="110">
                 <template #default="{ row }">
                   {{ row.zone_name || "未命名区域" }}
@@ -3530,7 +3585,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button
-                    v-if="isAdmin"
                     size="small"
                     type="primary"
                     text
@@ -3538,7 +3592,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     >编辑</el-button
                   >
                   <el-button
-                    v-if="isAdmin"
                     size="small"
                     type="danger"
                     text
@@ -3573,10 +3626,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>人员与人脸库</h2>
-                <span
-                  >人员基础信息来自 `/students`，人脸注册提交到
-                  `/students/{id}/face`。</span
-                >
+                <span>统一维护人员档案与人脸信息，支持后续身份识别。</span>
               </div>
               <el-button
                 v-if="isAdmin"
@@ -3586,7 +3636,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >新增人员</el-button
               >
             </div>
-            <el-table :data="students" height="480" class="clean-table">
+            <el-table
+              :data="students"
+              height="480"
+              class="clean-table"
+              empty-text="暂无人员档案"
+            >
               <el-table-column prop="student_no" label="编号" width="110" />
               <el-table-column prop="name" label="姓名" width="120" />
               <el-table-column
@@ -3645,10 +3700,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>用户管理</h2>
-                <span
-                  >用户信息来自 `/users`，角色修改提交到
-                  `/users/{id}/role`。不能修改自己的角色。</span
-                >
+                <span>查看账号基本信息并调整用户角色；当前账号不能修改自身角色。</span>
               </div>
               <el-button
                 :icon="Refresh"
@@ -3662,6 +3714,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               :data="users"
               height="520"
               class="clean-table"
+              empty-text="暂无用户信息"
             >
               <el-table-column prop="username" label="用户名" min-width="130" />
               <el-table-column label="昵称" min-width="130">
@@ -3729,9 +3782,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>视频源与服务状态</h2>
-                <span
-                  >对应 `/streams`、`/model/status`、`/system/health`。</span
-                >
+                <span>集中查看视频源、智能分析与系统运行情况。</span>
               </div>
               <el-button v-if="isAdmin" :icon="Switch" @click="openStreamDialog"
                 >新增视频源</el-button
@@ -3744,7 +3795,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               >
                 <div>
                   <b>{{ stream.stream_name }}</b>
-                  <span>{{ stream.rtmp_url }}</span>
+                  <span>{{ stream.location || stream.remark || stream.stream_id }}</span>
                 </div>
                 <el-tag :type="statusType(stream.status)">{{
                   statusText(stream.status)
@@ -3760,16 +3811,16 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="health-grid">
               <article v-for="item in healthItems" :key="item.label">
                 <span>{{ item.label }}</span>
-                <b :class="item.value">{{ item.value }}</b>
+                <b :class="item.value">{{ statusText(item.value) }}</b>
               </article>
               <article>
-                <span>模型版本</span>
+                <span>分析版本</span>
                 <b>{{
                   modelStatus.version || modelStatus.model_name || "--"
                 }}</b>
               </article>
               <article>
-                <span>推理耗时</span>
+                <span>分析耗时</span>
                 <b>{{
                   modelStatus.inference_ms
                     ? `${modelStatus.inference_ms} ms`
@@ -3777,6 +3828,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 }}</b>
               </article>
             </div>
+          </section>
+        </div>
+      </section>
+      <section v-else class="page-grid module-page centered-module-page">
+        <div class="module-board">
+          <section class="panel span-12">
+            <el-empty description="页面未找到，请从左侧导航选择" />
           </section>
         </div>
       </section>
@@ -3936,6 +3994,22 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
       </el-dialog>
 
       <el-dialog
+        v-model="replayVisible"
+        title="事件回放"
+        width="640px"
+        class="local-edit-dialog"
+        @close="closeReplayDialog"
+      >
+        <video
+          ref="replayVideoRef"
+          :src="replayUrl"
+          controls
+          style="width: 100%; max-height: 480px; background: #000"
+          @loadedmetadata="onReplayReady"
+        />
+      </el-dialog>
+
+      <el-dialog
         v-model="faceDialogVisible"
         title="注册人脸"
         width="480px"
@@ -3975,8 +4049,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             {{ faceValidationMessage }}
           </p>
           <p class="dialog-hint">
-            图片需先通过 `/face/feature/extract` 识别出清晰人脸，再提交到
-            `/students/{id}/face`。
+            请上传清晰的单人正脸照片；检测通过后即可提交注册。
           </p>
         </el-form>
         <template #footer>
@@ -4021,9 +4094,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           <el-form-item label="区域类型">
             <el-select v-model="zoneForm.zone_type" style="width: 100%">
               <el-option label="危险区" value="danger" />
-              <el-option label="座位区" value="seat" />
               <el-option label="手机禁用区" value="phone_forbidden" />
-              <el-option label="识别区域" value="roi" />
             </el-select>
           </el-form-item>
           <el-form-item label="停留阈值（秒）">

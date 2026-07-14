@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend_ai.services.config_client import parse_json_field
+from backend_ai.utils.geometry import parse_polygon_coordinates, point_in_polygon
 
 
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
@@ -18,6 +19,16 @@ def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bo
 
 def _bbox_center(bbox: list[float]) -> tuple[float, float]:
     return ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
+
+
+def _find_matching_zone(point: tuple[float, float], zones: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for zone in zones:
+        polygon = parse_polygon_coordinates(zone.get("coordinates") or [])
+        if len(polygon) < 3:
+            continue
+        if point_in_polygon(point, polygon):
+            return zone
+    return None
 
 
 class BehaviorService:
@@ -101,23 +112,36 @@ class BehaviorService:
                 )
         return detections
 
-    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]], phone_forbidden_zones: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         persons = [obj for obj in objects if obj.get("class_name") in {"person", "student"}]
         phones = [obj for obj in objects if obj.get("class_name") in {"phone", "cell phone", "mobile_phone"}]
         detections: list[dict[str, Any]] = []
 
         phone_rule = rules.get("phone_usage", {})
-        phone_threshold = float(phone_rule.get("confidence_threshold", 0.6))
-        for idx, person in enumerate(persons):
-            for phone in phones:
-                if phone.get("confidence", 0) >= phone_threshold and _iou_like_relation(person["bbox"], phone["bbox"]):
+        if phones and phone_forbidden_zones:
+            phone_threshold = float(phone_rule.get("confidence_threshold", 0.6))
+            for idx, person in enumerate(persons):
+                for phone in phones:
+                    if phone.get("confidence", 0) < phone_threshold:
+                        continue
+                    if not _iou_like_relation(person["bbox"], phone["bbox"]):
+                        continue
+                    phone_center = _bbox_center(phone["bbox"])
+                    matched_zone = _find_matching_zone(phone_center, phone_forbidden_zones)
+                    if matched_zone is None:
+                        continue
                     detections.append(
                         {
                             "event_type": "phone_usage",
                             "confidence": min(1.0, float(phone.get("confidence", 0))),
                             "level": "warning",
                             "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": person["bbox"]},
-                            "track_key": person.get("track_id", f"person_{idx + 1}"),
+                            "zone": {
+                                "zone_id": matched_zone.get("zone_id"),
+                                "zone_name": matched_zone.get("zone_name"),
+                                "zone_type": matched_zone.get("zone_type"),
+                            },
+                            "track_key": f"{person.get('track_id', f'person_{idx + 1}')}:{matched_zone.get('zone_id')}:phone",
                             "threshold_seconds": float(phone_rule.get("threshold_seconds", 3)),
                             "cooldown_seconds": float(phone_rule.get("cooldown_seconds", 45)),
                         }

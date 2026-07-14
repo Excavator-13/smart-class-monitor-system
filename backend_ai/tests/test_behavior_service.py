@@ -52,15 +52,90 @@ def test_phone_usage_from_mock_objects():
         {"class_name": "person", "track_id": "person_1", "bbox": [0.1, 0.1, 0.5, 0.8], "confidence": 0.9},
         {"class_name": "phone", "bbox": [0.2, 0.3, 0.25, 0.35], "confidence": 0.88},
     ]
+    phone_forbidden_zones = [
+        {
+            "zone_id": 1,
+            "zone_name": "手机禁用区",
+            "zone_type": "phone_forbidden",
+            "coordinates": [{"x": 0.1, "y": 0.1}, {"x": 0.5, "y": 0.1}, {"x": 0.5, "y": 0.5}, {"x": 0.1, "y": 0.5}],
+        }
+    ]
 
     detections = service.detect_from_objects(
         "classroom_01",
         objects,
         {"phone_usage": {"confidence_threshold": 0.6, "threshold_seconds": 3, "cooldown_seconds": 45}},
+        phone_forbidden_zones=phone_forbidden_zones,
     )
 
+    assert len(detections) == 1
     assert detections[0]["event_type"] == "phone_usage"
     assert detections[0]["target"]["track_id"] == "person_1"
+    assert detections[0]["zone"]["zone_id"] == 1
+    assert detections[0]["zone"]["zone_type"] == "phone_forbidden"
+    assert ":1:phone" in detections[0]["track_key"]
+
+
+def test_phone_usage_outside_forbidden_zone_not_detected():
+    service = BehaviorService()
+    objects = [
+        {"class_name": "person", "track_id": "person_1", "bbox": [0.6, 0.6, 0.9, 0.9], "confidence": 0.9},
+        {"class_name": "phone", "bbox": [0.7, 0.7, 0.75, 0.75], "confidence": 0.88},
+    ]
+    phone_forbidden_zones = [
+        {
+            "zone_id": 1,
+            "zone_name": "手机禁用区",
+            "zone_type": "phone_forbidden",
+            "coordinates": [{"x": 0.0, "y": 0.0}, {"x": 0.3, "y": 0.0}, {"x": 0.3, "y": 0.3}, {"x": 0.0, "y": 0.3}],
+        }
+    ]
+
+    detections = service.detect_from_objects(
+        "classroom_01",
+        objects,
+        {"phone_usage": {"confidence_threshold": 0.6, "threshold_seconds": 3, "cooldown_seconds": 45}},
+        phone_forbidden_zones=phone_forbidden_zones,
+    )
+
+    phone_events = [d for d in detections if d["event_type"] == "phone_usage"]
+    assert len(phone_events) == 0
+
+
+def test_phone_usage_no_forbidden_zones_skips_detection():
+    service = BehaviorService()
+    objects = [
+        {"class_name": "person", "track_id": "person_1", "bbox": [0.1, 0.1, 0.5, 0.8], "confidence": 0.9},
+        {"class_name": "phone", "bbox": [0.2, 0.3, 0.25, 0.35], "confidence": 0.88},
+    ]
+
+    detections = service.detect_from_objects(
+        "classroom_01",
+        objects,
+        {"phone_usage": {"confidence_threshold": 0.6, "threshold_seconds": 3, "cooldown_seconds": 45}},
+        phone_forbidden_zones=None,
+    )
+
+    phone_events = [d for d in detections if d["event_type"] == "phone_usage"]
+    assert len(phone_events) == 0
+
+
+def test_phone_usage_empty_forbidden_zones_skips_detection():
+    service = BehaviorService()
+    objects = [
+        {"class_name": "person", "track_id": "person_1", "bbox": [0.1, 0.1, 0.5, 0.8], "confidence": 0.9},
+        {"class_name": "phone", "bbox": [0.2, 0.3, 0.25, 0.35], "confidence": 0.88},
+    ]
+
+    detections = service.detect_from_objects(
+        "classroom_01",
+        objects,
+        {"phone_usage": {"confidence_threshold": 0.6, "threshold_seconds": 3, "cooldown_seconds": 45}},
+        phone_forbidden_zones=[],
+    )
+
+    phone_events = [d for d in detections if d["event_type"] == "phone_usage"]
+    assert len(phone_events) == 0
 
 
 def test_head_down_from_mock_person_ratio():

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from typing import Any
@@ -17,12 +18,12 @@ from dingtalk_stream import (
 
 logger = logging.getLogger(__name__)
 
-# ── 配置 ───────────────────────────────────────────────────
+# ── 配置（从环境变量读取）──────────────────────────────────
 
-APP_KEY = "dingvd9kkjc0bofwbqhu"
-APP_SECRET = "813aXbnZ6zbPM8ryKCma_8qVLzTj1D4kWSkujkjLYavI22xYHv3rhCCuxU-uYdUy"
-ROBOT_CODE = "dingvd9kkjc0bofwbqhu"
-GROUP_ID = "cid+kYdFkRFkyGbzYUZc/QJCQ=="
+APP_KEY = os.environ.get("DINGTALK_APP_KEY", "")
+APP_SECRET = os.environ.get("DINGTALK_APP_SECRET", "")
+ROBOT_CODE = APP_KEY
+GROUP_ID = os.environ.get("DINGTALK_GROUP_ID", "")
 
 PERSONS: dict[str, dict[str, Any]] = {
     "项重善":  {"name": "项重善", "mobile": "18601033435"},
@@ -53,7 +54,7 @@ def _get_token() -> str:
 
 # ── 发消息（Webhook — 支持蓝色 @）───────────────────────
 
-WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=ef247487bb8129668aa09a122be9161f056afaf263488d0c9285814654b06618"
+WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
 
 
 def _upload_image(file_path: str) -> str:
@@ -163,9 +164,12 @@ _event_keys: dict[str, str] = {}
 
 
 def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
-    event_id = f"evt_{int(time.time())}_{threading.get_ident()}"
-    _event_keys[event_id] = msg
-    _step(msg, event_id, _get_chain(start or PRIMARY), 0, snapshot)
+    if not APP_KEY or not APP_SECRET or not WEBHOOK:       # ← 我们的改动
+        logger.warning("钉钉配置不完整（APP_KEY/APP_SECRET/WEBHOOK），跳过通知")
+        return
+    event_id = f"evt_{int(time.time())}_{threading.get_ident()}"  # ← dev 的改动
+    _event_keys[event_id] = msg                                     # ← dev 的改动
+    _step(msg, event_id, _get_chain(start or PRIMARY), 0, snapshot) # ← dev 的改动
 
 
 def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
@@ -244,6 +248,7 @@ class AlertHandler(ChatbotHandler):
         logger.info("收到: %s → %s", sender, text)
 
         if "已处理" in text or "误报" in text:
+            # 从回复原文中找事件ID
             replied = ""
             try:
                 replied = data["text"]["repliedMsg"]["content"]["text"]
@@ -252,33 +257,31 @@ class AlertHandler(ChatbotHandler):
             if not replied:
                 replied = text
 
-            target_key = None
             matched_eid = ""
-            for eid, ekey in _event_keys.items():
+            for eid in _event_keys:
                 if eid in replied:
-                    target_key = eid
                     matched_eid = eid
                     break
-            if target_key and target_key in _timers:
-                _timers[target_key].cancel()
-                del _timers[target_key]
-                _stopped.add(target_key)
+            if matched_eid and matched_eid in _timers:
+                _timers[matched_eid].cancel()
+                del _timers[matched_eid]
+                _stopped.add(matched_eid)
                 _send(f"{sender} 已标记事件 {matched_eid} ，停止上报")
-                logger.info("已停止事件 %s", matched_eid)
-            elif _event_keys:
+            else:
                 _stopped.clear()
                 for t in _timers.values():
                     t.cancel()
                 _timers.clear()
-                _send(f"{sender} 未找到对应事件ID，已停止全部上报链")
-                logger.info("上报链已停止")
-            else:
-                _send(f"{sender} 当前无活动告警需要停止")
+                _send(f"{sender} 未找到对应事件，已停止全部上报链")
+            logger.info("上报链已停止")
 
         return AckMessage.STATUS_OK, "ok"
 
 
 def start_stream():
+    if not APP_KEY or not APP_SECRET:
+        logger.warning("钉钉配置不完整（APP_KEY/APP_SECRET），跳过 Stream 启动")
+        return
     def _run():
         cred = Credential(APP_KEY, APP_SECRET)
         client = DingTalkStreamClient(cred)

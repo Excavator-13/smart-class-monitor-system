@@ -22,7 +22,9 @@ cache:
 events:
   max_items: 500
   default_limit: 20
-  default_cooldown_seconds: 45
+  default_cooldown_seconds: 10
+  alert_overlay_seconds: 2
+  continuity_gap_seconds: 2
   default_threshold_seconds: 3
   default_confidence_threshold: 0.6
 
@@ -30,3 +32,7 @@ snapshot_remote:
   host: ""
   user: "root"
   path: "/data/snapshots"
+
+recording:
+  segment_seconds: 30
+  segment_dir: "/records"

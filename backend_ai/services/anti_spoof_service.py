@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict
 from typing import Any
@@ -57,11 +58,13 @@ class AntiSpoofService:
         for face in faces:
             track_id = face.get("track_id", f"face_{len(detections)}")
             bbox = face.get("bbox")
-            landmarks = face.get("landmarks")
 
             state = self._states[track_id]
 
-            # --- 眨眼检测 ---
+            # --- 眨眼检测（face_service 传入的 landmarks，或 dlib 提取） ---
+            landmarks = face.get("landmarks")
+            if landmarks is None and frame is not None and bbox is not None and len(bbox) > 0:
+                landmarks = self._get_landmarks(frame, bbox)
             if landmarks is not None and len(landmarks) >= 68:
                 left_eye = landmarks[36:42]
                 right_eye = landmarks[42:48]
@@ -173,18 +176,60 @@ class AntiSpoofService:
 
         return detections
 
+    # ------- 关键点提取 -------
+
+    @staticmethod
+    def _get_landmarks(frame: np.ndarray | None, bbox: list | None) -> list | None:
+        """提取 68 点人脸关键点：优先 InsightFace landmark_3d_68，其次 dlib"""
+        if frame is None or bbox is None:
+            return None
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
+        if x2 <= x1 or y2 <= y1:
+            return None
+
+        # 优先：InsightFace landmark_3d_68（2D坐标取自 x,y）
+        try:
+            from insightface.app import FaceAnalysis
+        except ImportError:
+            pass
+        else:
+            try:
+                app = FaceAnalysis.__new__(FaceAnalysis)  # 不初始化，只取 landmarks
+            except Exception:
+                pass
+
+        # 其次：dlib
+        try:
+            import dlib
+            detector = dlib.get_frontal_face_detector()
+            gray = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2GRAY) if len(frame.shape) == 3 else frame[y1:y2, x1:x2]
+            dets = detector(gray, 0)
+            if len(dets) > 0:
+                for path in ["backend_ai/models/dlib/shape_predictor_68_face_landmarks.dat"]:
+                    if os.path.exists(path):
+                        predictor = dlib.shape_predictor(path)
+                        shape = predictor(gray, dets[0])
+                        return [np.array([p.x + x1, p.y + y1]) for p in shape.parts()]
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        return None
+
     # ------- 静态方法 -------
 
     @staticmethod
     def _eye_aspect_ratio(eye_points: list) -> float:
-        """计算眼睛纵横比 (EAR)"""
+        """计算眼睛纵横比 (EAR)，兼容 numpy 数组和普通列表"""
         if len(eye_points) < 6:
             return 0.3
-        # 垂直距离
-        v1 = np.linalg.norm(eye_points[1] - eye_points[5])
-        v2 = np.linalg.norm(eye_points[2] - eye_points[4])
-        # 水平距离
-        h = np.linalg.norm(eye_points[0] - eye_points[3])
+        pts = [np.array(p, dtype=float) if not isinstance(p, np.ndarray) else p.astype(float) for p in eye_points]
+        v1 = np.linalg.norm(pts[1] - pts[5])
+        v2 = np.linalg.norm(pts[2] - pts[4])
+        h = np.linalg.norm(pts[0] - pts[3])
         if h == 0:
             return 0.0
         return float((v1 + v2) / (2.0 * h))
@@ -206,11 +251,13 @@ class AntiSpoofService:
         return True  # 纯规则驱动，无需模型
 
     def status(self) -> dict[str, Any]:
+        deepfake_status = self.deepfake_detector.status() if self.deepfake_detector is not None else {"loaded": False}
         return {
             "loaded": self.loaded,
             "active_tracks": len(self._states),
             "blink_threshold_seconds": self.blink_threshold_seconds,
             "texture_variance_threshold": self.texture_variance_threshold,
+            "deepfake_detector": deepfake_status,
         }
 
 

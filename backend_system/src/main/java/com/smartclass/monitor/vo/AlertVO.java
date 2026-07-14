@@ -41,6 +41,9 @@ public class AlertVO {
     @Schema(description = "录像URL（相对路径）", example = "/classroom_01-2026-07-07-10_30_00.mp4")
     private String recordUrl;
 
+    @Schema(description = "事件在录像中的时间偏移（秒）", example = "17.0")
+    private Double eventTimeOffset;
+
     @Schema(description = "发生时间", example = "2026-07-07 10:21:35")
     private String occurredAt;
 
@@ -75,6 +78,8 @@ public class AlertVO {
     public void setSnapshotUrl(String v) { this.snapshotUrl = v; }
     public String getRecordUrl() { return recordUrl; }
     public void setRecordUrl(String v) { this.recordUrl = v; }
+    public Double getEventTimeOffset() { return eventTimeOffset; }
+    public void setEventTimeOffset(Double v) { this.eventTimeOffset = v; }
     public String getOccurredAt() { return occurredAt; }
     public void setOccurredAt(String v) { this.occurredAt = v; }
     public String getHandledAt() { return handledAt; }

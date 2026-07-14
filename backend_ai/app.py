@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
 from dotenv import load_dotenv
 from flask import Flask, Response, request, send_from_directory
@@ -36,6 +37,35 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return {}
     with path.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
+
+def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None):
+    try:
+        headers = {"X-Internal-Token": internal_token} if internal_token else None
+        resp = requests.get(f"{spring_base_url}/api/settings", headers=headers, timeout=5)
+        if not resp.ok:
+            return
+        data = resp.json()
+        from backend_ai.services import dingtalk_service as ds
+        contacts = data.get("contacts", [])
+        new_persons = {}
+        for c in contacts:
+            name = c.get("name", "")
+            mobile = c.get("mobile", "")
+            if name and mobile:
+                new_persons[name] = {"name": name, "mobile": mobile}
+        if new_persons:
+            ds.PERSONS.clear()
+            ds.PERSONS.update(new_persons)
+        responsible = data.get("responsible", "")
+        if responsible:
+            ds.PRIMARY = responsible
+        interval = data.get("alertInterval")
+        if interval:
+            ds.STEP_TIMEOUT = int(interval)
+        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}")
+    except Exception:
+        print("[DingTalk] 从 Spring Boot 恢复设置失败，使用默认值")
 
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
@@ -76,7 +106,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     event_service = (overrides or {}).get("event_service") if overrides else None
     event_service = event_service or EventService(
         max_items=int(events_cfg.get("max_items", 500)),
-        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
+        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
+        continuity_gap_seconds=float(events_cfg.get("continuity_gap_seconds", 2)),
     )
     device_config = resolve_device(model_config.get("device"))
     face_settings = (model_config.get("models") or {}).get("face", {})
@@ -138,9 +169,23 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     anti_spoof_service = (overrides or {}).get("anti_spoof_service") if overrides else None
     if anti_spoof_service is None and anti_spoof_settings.get("enabled", False):
         try:
+            deepfake_detector = None
+            deepfake_weights = str(anti_spoof_settings.get("deepfake_weights") or "").strip()
+            if deepfake_weights:
+                from backend_ai.services.deepfake_detector import DeepfakeDetector
+
+                weights_path = Path(deepfake_weights)
+                if not weights_path.is_absolute():
+                    weights_path = BASE_DIR / weights_path
+                deepfake_detector = DeepfakeDetector(str(weights_path))
+                if deepfake_detector.loaded:
+                    print(f"[AntiSpoof] MesoNet CNN loaded: {weights_path}, device={deepfake_detector.device}")
+                else:
+                    print(f"[AntiSpoof] MesoNet CNN weights not loaded: {weights_path}; using rule fallback")
             anti_spoof_service = AntiSpoofService(
                 blink_threshold_seconds=float(anti_spoof_settings.get("blink_threshold_seconds", 5.0)),
                 texture_variance_threshold=float(anti_spoof_settings.get("texture_variance_threshold", 8.0)),
+                deepfake_detector=deepfake_detector,
             )
             print("[AntiSpoof] 活体检测模块已启用")
         except Exception as exc:
@@ -164,8 +209,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     elif audio_service is None and not audio_settings.get("enabled", False):
         audio_service = None
 
+    snapshot_root = BASE_DIR / "static" / "snapshots"
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
+    _restore_dingtalk_settings(spring_base_url, internal_token)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
@@ -189,8 +237,10 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         anti_spoof_service=anti_spoof_service,
         audio_service=audio_service,
         alert_client=alert_client,
-        snapshot_root=BASE_DIR / "static" / "snapshots",
+        snapshot_root=snapshot_root,
         snapshot_pusher=snapshot_pusher,
+        alert_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
+        alert_overlay_seconds=float(events_cfg.get("alert_overlay_seconds", 2)),
     )
 
     app.extensions["ai_services"] = {
@@ -334,7 +384,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             while True:
                 frame = stream_manager.get_frame(stream_id)
                 if frame is None:
-                    analysis_service.observe_stream_offline(stream_id)
+                    if stream_manager.should_emit_offline_alert(stream_id):
+                        analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
                 elif annotate:
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
