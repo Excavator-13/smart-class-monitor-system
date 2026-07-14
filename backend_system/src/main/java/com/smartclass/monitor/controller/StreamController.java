@@ -11,6 +11,7 @@ import com.smartclass.monitor.vo.StreamStatusVO;
 import com.smartclass.monitor.vo.StreamVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,8 +33,10 @@ public class StreamController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int pageSize) {
-        return ApiResponse.success(streamService.listStreams(status, keyword, page, pageSize));
+            @RequestParam(defaultValue = "10") int pageSize,
+            HttpServletRequest httpRequest) {
+        return ApiResponse.success(streamService.listStreams(
+                status, keyword, page, pageSize, canViewRtmp(httpRequest)));
     }
 
     @PostMapping("/streams")
@@ -45,14 +48,14 @@ public class StreamController {
 
     @GetMapping("/streams/enabled")
     @Operation(summary = "获取已启用的视频源", description = "返回 status=enabled 的视频源列表，供首页下拉和 AI 同步使用")
-    public ApiResponse<List<StreamVO>> enabled() {
-        return ApiResponse.success(streamService.getEnabledStreams());
+    public ApiResponse<List<StreamVO>> enabled(HttpServletRequest httpRequest) {
+        return ApiResponse.success(streamService.getEnabledStreams(canViewRtmp(httpRequest)));
     }
 
     @GetMapping("/streams/{id}")
     @Operation(summary = "视频源详情", description = "根据数据库主键 id 查询视频源详情")
-    public ApiResponse<StreamVO> detail(@PathVariable Long id) {
-        return ApiResponse.success(streamService.getStreamById(id));
+    public ApiResponse<StreamVO> detail(@PathVariable Long id, HttpServletRequest httpRequest) {
+        return ApiResponse.success(streamService.getStreamById(id, canViewRtmp(httpRequest)));
     }
 
     @PutMapping("/streams/{id}")
@@ -78,8 +81,14 @@ public class StreamController {
     }
 
     @GetMapping("/streams/{stream_id}/preview-url")
-    @Operation(summary = "获取播放地址", description = "返回 MJPEG、RTMP、HLS 地址，不代理视频流。路径参数为 stream_id（业务标识）")
-    public ApiResponse<StreamPreviewVO> previewUrl(@PathVariable("stream_id") String streamId) {
-        return ApiResponse.success(streamService.getPreviewUrl(streamId));
+    @Operation(summary = "获取播放地址", description = "返回 MJPEG、HLS 地址；RTMP 地址仅管理员和内部服务可见。路径参数为 stream_id（业务标识）")
+    public ApiResponse<StreamPreviewVO> previewUrl(@PathVariable("stream_id") String streamId,
+                                                    HttpServletRequest httpRequest) {
+        return ApiResponse.success(streamService.getPreviewUrl(streamId, canViewRtmp(httpRequest)));
+    }
+
+    private boolean canViewRtmp(HttpServletRequest request) {
+        return "admin".equals(request.getAttribute("currentRole"))
+                || Boolean.TRUE.equals(request.getAttribute("internalRequest"));
     }
 }

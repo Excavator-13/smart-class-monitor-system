@@ -1,4 +1,16 @@
-from backend_ai.utils.response import envelope
+import numpy as np
+from flask import Flask
+
+from backend_ai.utils.response import envelope, json_response
+
+
+def test_json_response_converts_numpy_values():
+    app = Flask(__name__)
+    with app.app_context():
+        response, status = json_response({"bbox": np.array([1, 2]), "confidence": np.float32(0.5)})
+
+    assert status == 200
+    assert response.get_json()["data"]["bbox"] == [1, 2]
 
 
 def test_envelope_success_shape():

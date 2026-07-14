@@ -33,12 +33,15 @@ public class StreamService {
         this.aiBaseUrl = aiBaseUrl;
     }
 
-    public PageResult<StreamVO> listStreams(String status, String keyword, int page, int pageSize) {
+    public PageResult<StreamVO> listStreams(String status, String keyword, int page, int pageSize,
+                                            boolean includeRtmp) {
         List<VideoStream> all = mapper.findAll(status, keyword);
         int total = all.size();
         int from = Math.min((page - 1) * pageSize, total);
         int to = Math.min(from + pageSize, total);
-        List<StreamVO> records = all.subList(from, to).stream().map(this::toVO).collect(Collectors.toList());
+        List<StreamVO> records = all.subList(from, to).stream()
+                .map(item -> toVO(item, includeRtmp))
+                .collect(Collectors.toList());
         return PageResult.of(records, page, pageSize, total);
     }
 
@@ -55,13 +58,13 @@ public class StreamService {
         } catch (DuplicateKeyException e) {
             throw new BusinessException(409, "stream_id 已存在");
         }
-        return toVO(entity);
+        return toVO(entity, true);
     }
 
-    public StreamVO getStreamById(Long id) {
+    public StreamVO getStreamById(Long id, boolean includeRtmp) {
         VideoStream entity = mapper.findById(id);
         if (entity == null) throw new BusinessException(404, "视频源不存在");
-        return toVO(entity);
+        return toVO(entity, includeRtmp);
     }
 
     public void updateStream(Long id, StreamUpdateRequest req) {
@@ -81,8 +84,10 @@ public class StreamService {
         mapper.softDelete(id);
     }
 
-    public List<StreamVO> getEnabledStreams() {
-        return mapper.findEnabled().stream().map(this::toVO).collect(Collectors.toList());
+    public List<StreamVO> getEnabledStreams(boolean includeRtmp) {
+        return mapper.findEnabled().stream()
+                .map(item -> toVO(item, includeRtmp))
+                .collect(Collectors.toList());
     }
 
     public StreamStatusVO getStreamStatus(String streamId) {
@@ -91,23 +96,23 @@ public class StreamService {
         return nginxClient.getStreamStatus(streamId);
     }
 
-    public StreamPreviewVO getPreviewUrl(String streamId) {
+    public StreamPreviewVO getPreviewUrl(String streamId, boolean includeRtmp) {
         VideoStream entity = mapper.findByStreamId(streamId);
         if (entity == null) throw new BusinessException(404, "视频源不存在");
 
         StreamPreviewVO vo = new StreamPreviewVO();
         vo.setMjpegUrl(aiBaseUrl + "/video_feed/" + streamId);
-        vo.setRtmpUrl(entity.getRtmpUrl());
+        if (includeRtmp) vo.setRtmpUrl(entity.getRtmpUrl());
         vo.setHlsUrl(entity.getHlsUrl());
         return vo;
     }
 
-    private StreamVO toVO(VideoStream e) {
+    private StreamVO toVO(VideoStream e, boolean includeRtmp) {
         StreamVO vo = new StreamVO();
         vo.setId(e.getId());                        // id 必须返回
         vo.setStreamId(e.getStreamId());            // stream_id 必须返回
         vo.setStreamName(e.getStreamName());
-        vo.setRtmpUrl(e.getRtmpUrl());
+        if (includeRtmp) vo.setRtmpUrl(e.getRtmpUrl());
         vo.setStatus(e.getStatus());
         vo.setLocation(e.getLocation());
         vo.setRemark(e.getRemark());

@@ -22,6 +22,22 @@ def test_zone_intrusion_and_stay_detection():
     assert detections[0]["zone"]["zone_id"] == 1
 
 
+def test_pixel_person_bbox_matches_normalized_danger_zone():
+    service = ZoneService()
+    persons = [{"track_id": "person_1", "bbox": [128, 48, 192, 144]}]
+    zones = [{
+        "zone_id": 1,
+        "zone_name": "危险区",
+        "zone_type": "danger",
+        "coordinates": [{"x": 0.1, "y": 0.1}, {"x": 0.5, "y": 0.1}, {"x": 0.5, "y": 0.5}, {"x": 0.1, "y": 0.5}],
+    }]
+
+    detections = service.detect("classroom_01", persons, zones, frame_size=(640, 480))
+
+    assert "danger_zone_intrusion" in {item["event_type"] for item in detections}
+    assert detections[0]["target"]["bbox"] == [128, 48, 192, 144]
+
+
 def test_zone_approach_does_not_mark_intrusion():
     service = ZoneService()
     persons = [{"track_id": "person_1", "bbox": [0.51, 0.1, 0.53, 0.3]}]

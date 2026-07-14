@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ public class DataInitializer implements CommandLineRunner {
     private final OperationLogMapper operationLogMapper;
     private final ScoreConfigMapper scoreConfigMapper;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     public DataInitializer(UserMapper userMapper,
                            VideoStreamMapper videoStreamMapper,
@@ -41,7 +43,8 @@ public class DataInitializer implements CommandLineRunner {
                            RecordingFileMapper recordingFileMapper,
                            OperationLogMapper operationLogMapper,
                            ScoreConfigMapper scoreConfigMapper,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           JdbcTemplate jdbcTemplate) {
         this.userMapper = userMapper;
         this.videoStreamMapper = videoStreamMapper;
         this.studentMapper = studentMapper;
@@ -53,38 +56,31 @@ public class DataInitializer implements CommandLineRunner {
         this.operationLogMapper = operationLogMapper;
         this.scoreConfigMapper = scoreConfigMapper;
         this.passwordEncoder = passwordEncoder;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("===== DataInitializer: 开始清空并重建测试数据 =====");
-
-        truncateAll();
-
+        log.info("===== DataInitializer: 开始幂等补齐默认配置 =====");
+        ensureSchemaCompatibility();
         seedUsers();
         seedStreams();
-        seedStudents();
         seedRules();
-        seedZones();
-        seedAlerts();
         seedScoreConfig();
-
-        log.info("===== DataInitializer: 测试数据初始化完成 =====");
+        log.info("===== DataInitializer: 默认配置检查完成 =====");
     }
 
-    private void truncateAll() {
-        log.info("清空所有业务表...");
-        alertEventMapper.truncate();
-        recordingFileMapper.truncate();
-        faceFeatureMapper.truncate();
-        operationLogMapper.truncate();
-        scoreConfigMapper.truncate();
-        dangerZoneMapper.truncate();
-        behaviorRuleMapper.truncate();
-        studentMapper.truncate();
-        videoStreamMapper.truncate();
-        userMapper.truncate();
+    private void ensureSchemaCompatibility() {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                        "WHERE table_schema=DATABASE() AND table_name='score_config' AND column_name='level'",
+                Integer.class);
+        if (count != null && count == 0) {
+            jdbcTemplate.execute("ALTER TABLE score_config ADD COLUMN level VARCHAR(32) " +
+                    "NOT NULL DEFAULT 'warning' COMMENT '默认告警等级：info / warning / high' AFTER label");
+            log.info("score_config.level 字段已补齐");
+        }
     }
 
     private void seedUsers() {
@@ -92,21 +88,25 @@ public class DataInitializer implements CommandLineRunner {
         String adminHash = passwordEncoder.encode("admin123");
         String teacherHash = passwordEncoder.encode("teacher123");
 
-        User admin = new User();
-        admin.setUsername("admin");
-        admin.setPasswordHash(adminHash);
-        admin.setRole("admin");
-        admin.setNickname("管理员");
-        admin.setStatus("enabled");
-        userMapper.insert(admin);
+        if (userMapper.findByUsername("admin") == null) {
+            User admin = new User();
+            admin.setUsername("admin");
+            admin.setPasswordHash(adminHash);
+            admin.setRole("admin");
+            admin.setNickname("管理员");
+            admin.setStatus("enabled");
+            userMapper.insert(admin);
+        }
 
-        User teacher = new User();
-        teacher.setUsername("teacher");
-        teacher.setPasswordHash(teacherHash);
-        teacher.setRole("teacher");
-        teacher.setNickname("教师");
-        teacher.setStatus("enabled");
-        userMapper.insert(teacher);
+        if (userMapper.findByUsername("teacher") == null) {
+            User teacher = new User();
+            teacher.setUsername("teacher");
+            teacher.setPasswordHash(teacherHash);
+            teacher.setRole("teacher");
+            teacher.setNickname("教师");
+            teacher.setStatus("enabled");
+            userMapper.insert(teacher);
+        }
 
         log.info("测试用户: admin/admin123, teacher/teacher123");
     }
@@ -122,7 +122,9 @@ public class DataInitializer implements CommandLineRunner {
         stream1.setLocation("教学楼A101");
         stream1.setStatus("enabled");
         stream1.setRemark("云服务器RTMP测试流");
-        videoStreamMapper.insert(stream1);
+        if (videoStreamMapper.findByStreamId(stream1.getStreamId()) == null) {
+            videoStreamMapper.insert(stream1);
+        }
 
         VideoStream stream2 = new VideoStream();
         stream2.setStreamId("classroom_02");
@@ -133,7 +135,9 @@ public class DataInitializer implements CommandLineRunner {
         stream2.setLocation("教学楼B203");
         stream2.setStatus("enabled");
         stream2.setRemark("备用测试流");
-        videoStreamMapper.insert(stream2);
+        if (videoStreamMapper.findByStreamId(stream2.getStreamId()) == null) {
+            videoStreamMapper.insert(stream2);
+        }
     }
 
     private void seedStudents() {
@@ -166,21 +170,23 @@ public class DataInitializer implements CommandLineRunner {
     private void seedRules() {
         log.info("插入测试规则...");
         List<BehaviorRule> rules = Arrays.asList(
-                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "warning"),
-                createRule("fire_detected", "明火检测", true, 3, 0.80, 20, "high"),
-                createRule("fall_detected", "摔倒检测", true, 4, 0.78, 20, "high"),
-                createRule("head_down", "长时间低头", true, 6, 0.70, 60, "warning"),
-                createRule("stranger_detected", "陌生人检测", true, 3, 0.72, 30, "warning"),
-                createRule("zone_intrusion", "区域入侵检测", true, 5, 0.75, 30, "warning")
+                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "info"),
+                createRule("flame_detected", "明火检测", true, 3, 0.60, 20, "high"),
+                createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20, "high"),
+                createRule("head_down", "长时间低头", true, 6, 0.70, 60, "info"),
+                createRule("crowd_gathering", "异常人流聚集", true, 3, 0.70, 30, "high"),
+                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30, "warning")
         );
         for (BehaviorRule r : rules) {
-            behaviorRuleMapper.insert(r);
+            if (behaviorRuleMapper.findAll(r.getRuleType()).isEmpty()) {
+                behaviorRuleMapper.insert(r);
+            }
         }
     }
 
     private BehaviorRule createRule(String ruleType, String ruleName, boolean enabled,
                                    Integer thresholdSeconds, double confidenceThreshold,
-                                   Integer cooldownSeconds, String level) {
+                                   Integer cooldownSeconds) {
         BehaviorRule r = new BehaviorRule();
         r.setRuleType(ruleType);
         r.setRuleName(ruleName);
@@ -188,7 +194,6 @@ public class DataInitializer implements CommandLineRunner {
         r.setThresholdSeconds(thresholdSeconds);
         r.setConfidenceThreshold(confidenceThreshold);
         r.setCooldownSeconds(cooldownSeconds);
-        r.setLevel(level);
         return r;
     }
 
@@ -236,8 +241,8 @@ public class DataInitializer implements CommandLineRunner {
         AlertEvent alert2 = new AlertEvent();
         alert2.setEventId("evt-" + UUID.randomUUID().toString().substring(0, 8));
         alert2.setStreamId("classroom_01");
-        alert2.setAlertType("zone_intrusion");
-        alert2.setAlertName("区域入侵");
+        alert2.setAlertType("danger_zone");
+        alert2.setAlertName("区域入侵检测");
         alert2.setLevel("warning");
         alert2.setStatus("processing");
         alert2.setConfidence(0.76);
@@ -249,8 +254,8 @@ public class DataInitializer implements CommandLineRunner {
         AlertEvent alert3 = new AlertEvent();
         alert3.setEventId("evt-" + UUID.randomUUID().toString().substring(0, 8));
         alert3.setStreamId("classroom_01");
-        alert3.setAlertType("stranger_detected");
-        alert3.setAlertName("陌生人出现");
+        alert3.setAlertType("crowd_gathering");
+        alert3.setAlertName("异常人流聚集");
         alert3.setLevel("high");
         alert3.setStatus("unhandled");
         alert3.setConfidence(0.88);
@@ -277,23 +282,34 @@ public class DataInitializer implements CommandLineRunner {
     private void seedScoreConfig() {
         log.info("插入告警评分配置...");
         List<ScoreConfig> configs = Arrays.asList(
-                createScoreConfig("fire", "明火", 92, "最高危，发现后立即拉高综合分"),
-                createScoreConfig("fall", "摔倒", 86, "高危，需现场确认人员状态"),
-                createScoreConfig("stranger", "陌生人", 70, "中高风险，需核验身份"),
-                createScoreConfig("phone", "手机违规", 62, "必须命中已确认禁用区后才参与评分"),
-                createScoreConfig("zone", "区域入侵", 58, "按区域规则命中情况评分"),
-                createScoreConfig("behavior", "行为异常", 42, "低头、睡觉等课堂行为异常"),
-                createScoreConfig("general", "其他告警", 35, "未识别类型的兜底分")
+                createScoreConfig("stranger_detected", "陌生人员出现", "warning", 70, "需核验人员身份"),
+                createScoreConfig("danger_zone_intrusion", "危险区域入侵", "high", 78, "人员进入危险区域"),
+                createScoreConfig("danger_zone_stay", "危险区域停留超时", "high", 82, "人员在危险区域持续停留"),
+                createScoreConfig("danger_zone_approach", "接近危险区域", "warning", 55, "人员接近危险区域边界"),
+                createScoreConfig("phone_usage", "手机违规", "info", 42, "命中已启用手机禁用区后参与评分"),
+                createScoreConfig("head_down", "长时间低头", "info", 35, "课堂行为异常"),
+                createScoreConfig("crowd_gathering", "异常人流聚集", "high", 76, "人员异常聚集"),
+                createScoreConfig("fall_detected", "人员摔倒", "high", 86, "需立即确认人员状态"),
+                createScoreConfig("leave_seat", "长时间离座", "warning", 45, "人员长时间离开座位"),
+                createScoreConfig("flame_detected", "明火检测", "high", 92, "发现后立即处置"),
+                createScoreConfig("spoof_detected", "活体检测异常", "high", 80, "疑似照片或回放攻击"),
+                createScoreConfig("deepfake_detected", "疑似换脸攻击", "high", 90, "疑似 AI 换脸攻击"),
+                createScoreConfig("abnormal_sound", "异常声学事件", "warning", 65, "检测到异常声音"),
+                createScoreConfig("stream_offline", "视频流中断", "high", 75, "视频源推流中断"),
+                createScoreConfig("general", "其他告警", "warning", 35, "未识别事件类型的兜底配置")
         );
         for (ScoreConfig c : configs) {
-            scoreConfigMapper.insert(c);
+            if (scoreConfigMapper.findByType(c.getAlertType()) == null) {
+                scoreConfigMapper.insert(c);
+            }
         }
     }
 
-    private ScoreConfig createScoreConfig(String alertType, String label, int score, String note) {
+    private ScoreConfig createScoreConfig(String alertType, String label, String level, int score, String note) {
         ScoreConfig c = new ScoreConfig();
         c.setAlertType(alertType);
         c.setLabel(label);
+        c.setLevel(level);
         c.setScore(score);
         c.setNote(note);
         return c;

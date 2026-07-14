@@ -1,5 +1,7 @@
 """Utility helpers for the AI service."""
 
+from __future__ import annotations
+
 
 def resolve_device(device: str | None = None) -> str:
     if device not in (None, "auto"):

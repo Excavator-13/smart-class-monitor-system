@@ -101,6 +101,7 @@ Thumbs.db
 # Video / Media (非常关键)
 # =========================
 *.mp4
+!frontend/public/auth/login-background.mp4
 *.avi
 *.flv
 *.mkv
