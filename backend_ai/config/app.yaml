@@ -25,7 +25,7 @@ events:
   max_items: 500
   default_limit: 20
   default_cooldown_seconds: 10
-  alert_overlay_seconds: 2
+  alert_overlay_seconds: 5
   continuity_gap_seconds: 2
   default_threshold_seconds: 3
   default_confidence_threshold: 0.6

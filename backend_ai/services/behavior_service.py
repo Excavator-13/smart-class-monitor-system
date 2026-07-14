@@ -146,6 +146,9 @@ class BehaviorService:
                             "track_key": f"{person.get('track_id', f'person_{idx + 1}')}:{matched_zone.get('zone_id')}:phone",
                             "threshold_seconds": float(phone_rule.get("threshold_seconds", 3)),
                             "cooldown_seconds": float(phone_rule.get("cooldown_seconds", 45)),
+                            "continuity_gap_seconds": float(
+                                parse_json_field(phone_rule.get("config_json"), {}).get("continuity_gap_seconds", 6)
+                            ),
                         }
                     )
 

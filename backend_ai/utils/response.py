@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from typing import Any
 from uuid import uuid4
 
 from flask import jsonify
+import numpy as np
 
 
 TZ_SHANGHAI = timezone(timedelta(hours=8))
@@ -52,7 +53,21 @@ def json_response(
     message: str | None = None,
     status: int = 200,
 ):
-    return jsonify(envelope(data=data, code=code, message=message)), status
+    return jsonify(_to_json_safe(envelope(data=data, code=code, message=message))), status
+
+
+def _to_json_safe(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {str(key): _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_json_safe(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
 
 
 def error_response(code: int, message: str | None = None, status: int = 400):

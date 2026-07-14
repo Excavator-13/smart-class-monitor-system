@@ -147,6 +147,7 @@ class AnalysisService:
                 level=configured_level,
                 target=item.get("target"),
                 zone=item.get("zone"),
+                continuity_gap_seconds=item.get("continuity_gap_seconds"),
             )
             if should_confirm:
                 self._add_alert_overlay(stream_id, event)
@@ -291,6 +292,8 @@ class AnalysisService:
         self._alert_overlays[stream_id].append({
             "event_id": event.get("event_id"),
             "text": labels.get(event_type, event_type),
+            "event_type": event_type,
+            "bbox": (event.get("target") or {}).get("bbox"),
             "expires_at": current + self.alert_overlay_seconds,
         })
 
@@ -301,6 +304,10 @@ class AnalysisService:
             queue.popleft()
         for index, item in enumerate(queue):
             text = str(item["text"])
+            bbox = item.get("bbox")
+            if bbox is not None and len(bbox) == 4:
+                color = (0, 255, 255) if item.get("event_type") == "phone_usage" else (0, 80, 255)
+                self._draw_bbox(frame, bbox, text, color=color)
             y = 28 + index * 28
             (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.58, 2)
             cv2.rectangle(frame, (8, y - text_height - 8), (text_width + 20, y + 6), (0, 0, 0), -1)
