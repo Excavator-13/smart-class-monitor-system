@@ -8,6 +8,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -54,24 +56,25 @@ public class NginxClient {
         }
     }
 
-    private StreamStatusVO parseStat(String xml, String streamId) {
+    StreamStatusVO parseStat(String xml, String streamId) {
         try {
-            Document doc = DocumentBuilderFactory.newInstance()
-                    .newDocumentBuilder()
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setExpandEntityReferences(false);
+            Document doc = factory.newDocumentBuilder()
                     .parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
 
             NodeList streams = doc.getElementsByTagName("stream");
             for (int i = 0; i < streams.getLength(); i++) {
-                var stream = streams.item(i);
-                var nameNode = ((org.w3c.dom.Element) stream).getElementsByTagName("name").item(0);
+                Element stream = (Element) streams.item(i);
+                Node nameNode = stream.getElementsByTagName("name").item(0);
                 if (nameNode != null && streamId.equals(nameNode.getTextContent().trim())) {
-                    var publishNodes = ((org.w3c.dom.Element) stream).getElementsByTagName("publish");
-                    if (publishNodes.getLength() > 0) {
-                        var publish = (org.w3c.dom.Element) publishNodes.item(0);
-                        String active = publish.getAttribute("active");
-                        if ("true".equals(active)) {
-                            return online(streamId, publish.getAttribute("time"));
-                        }
+                    if (hasPublishingClient(stream) || hasLegacyActivePublisher(stream)) {
+                        Node timeNode = stream.getElementsByTagName("time").item(0);
+                        String uptime = timeNode == null ? null : timeNode.getTextContent().trim();
+                        return online(streamId, uptime);
                     }
                     return offline(streamId, "offline");
                 }
@@ -81,6 +84,24 @@ public class NginxClient {
             log.warn("Failed to parse Nginx /stat XML for stream {}: {}", streamId, e.getMessage());
             return offline(streamId, "unknown");
         }
+    }
+
+    private boolean hasPublishingClient(Element stream) {
+        NodeList clients = stream.getElementsByTagName("client");
+        for (int i = 0; i < clients.getLength(); i++) {
+            Element client = (Element) clients.item(i);
+            if (client.getElementsByTagName("publishing").getLength() > 0) return true;
+        }
+        return false;
+    }
+
+    private boolean hasLegacyActivePublisher(Element stream) {
+        NodeList publishNodes = stream.getElementsByTagName("publish");
+        for (int i = 0; i < publishNodes.getLength(); i++) {
+            Element publish = (Element) publishNodes.item(i);
+            if ("true".equalsIgnoreCase(publish.getAttribute("active"))) return true;
+        }
+        return false;
     }
 
     private StreamStatusVO online(String streamId, String uptime) {

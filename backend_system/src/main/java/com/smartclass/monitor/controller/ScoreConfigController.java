@@ -31,8 +31,9 @@ public class ScoreConfigController {
     @RequireRole("admin")
     public ApiResponse<ScoreConfigVO> update(@PathVariable Long id,
                                              @RequestParam(required = false) String label,
+                                             @RequestParam(required = false) String level,
                                              @RequestParam(required = false) Integer score,
                                              @RequestParam(required = false) String note) {
-        return ApiResponse.success(scoreConfigService.updateConfig(id, label, score, note));
+        return ApiResponse.success(scoreConfigService.updateConfig(id, label, level, score, note));
     }
 }

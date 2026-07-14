@@ -120,7 +120,7 @@ class BehaviorService:
         phone_rule = rules.get("phone_usage", {})
         if phone_rule and phones and phone_forbidden_zones:
             phone_threshold = float(phone_rule.get("confidence_threshold", 0.6))
-            phone_level = phone_rule.get("level", "info")
+            phone_level = "info"
             for idx, person in enumerate(persons):
                 for phone in phones:
                     if phone.get("confidence", 0) < phone_threshold:
@@ -154,7 +154,7 @@ class BehaviorService:
 
         head_rule = rules.get("head_down", {})
         if head_rule:
-            head_level = head_rule.get("level", "info")
+            head_level = "info"
             for idx, person in enumerate(persons):
                 ratio = person.get("head_down_ratio")
                 if ratio is not None and float(ratio) >= float(head_rule.get("confidence_threshold", 0.6)):
@@ -172,7 +172,7 @@ class BehaviorService:
 
         crowd_rule = rules.get("crowd_gathering", {})
         if crowd_rule:
-            crowd_level = crowd_rule.get("level", "warning")
+            crowd_level = "high"
             min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
             max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
             if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
@@ -191,7 +191,7 @@ class BehaviorService:
         fall_rule = rules.get("fall_detected", {})
         if not fall_rule:
             return detections
-        fall_level = fall_rule.get("level", "high")
+        fall_level = "high"
         fall_config = parse_json_field(fall_rule.get("config_json"), {})
         min_aspect_ratio = float(fall_config.get("min_width_height_ratio", 1.2))
         for idx, person in enumerate(persons):

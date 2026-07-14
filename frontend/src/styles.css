@@ -2135,6 +2135,17 @@ textarea {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.score-config-controls {
+  display: grid;
+  gap: 6px;
+  width: 112px;
+}
+
+.score-config-controls .el-input-number,
+.score-config-controls .el-select {
+  width: 100%;
+}
+
 .score-config-list article:last-child {
   border-bottom: 1px solid var(--line);
 }

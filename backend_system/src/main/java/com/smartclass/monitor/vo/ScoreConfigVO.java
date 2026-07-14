@@ -14,6 +14,9 @@ public class ScoreConfigVO {
     @Schema(description = "显示名称", example = "明火")
     private String label;
 
+    @Schema(description = "告警等级：info / warning / high", example = "high")
+    private String level;
+
     @Schema(description = "评分权重 0-100", example = "92")
     private Integer score;
 
@@ -22,10 +25,11 @@ public class ScoreConfigVO {
 
     public ScoreConfigVO() {}
 
-    public ScoreConfigVO(Long id, String alertType, String label, Integer score, String note) {
+    public ScoreConfigVO(Long id, String alertType, String label, String level, Integer score, String note) {
         this.id = id;
         this.alertType = alertType;
         this.label = label;
+        this.level = level;
         this.score = score;
         this.note = note;
     }
@@ -36,6 +40,8 @@ public class ScoreConfigVO {
     public void setAlertType(String alertType) { this.alertType = alertType; }
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
+    public String getLevel() { return level; }
+    public void setLevel(String level) { this.level = level; }
     public Integer getScore() { return score; }
     public void setScore(Integer score) { this.score = score; }
     public String getNote() { return note; }

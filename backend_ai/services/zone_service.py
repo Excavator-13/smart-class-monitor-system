@@ -23,9 +23,9 @@ class ZoneService:
         detections: list[dict[str, Any]] = []
         config = parse_json_field((rule or {}).get("config_json"), {})
         safe_distance = float(config.get("safe_distance", 0.05))
-        intrusion_level = rule.get("level", "high")
-        stay_level = config.get("stay_level", "high")
-        approach_level = config.get("approach_level", "warning")
+        intrusion_level = "high"
+        stay_level = "high"
+        approach_level = "warning"
         for person in persons:
             bbox = person.get("bbox")
             if bbox is None or len(bbox) == 0:

@@ -19,7 +19,7 @@ public class AlertIngestRequest {
     @Schema(description = "告警中文名称", example = "明火检测")
     private String alertName;
 
-    @NotBlank @Schema(description = "告警等级", example = "high")
+    @Schema(description = "告警等级（兼容字段，入库时由事件配置校正）", example = "high")
     private String level;
 
     @Schema(description = "置信度 0-1", example = "0.91")

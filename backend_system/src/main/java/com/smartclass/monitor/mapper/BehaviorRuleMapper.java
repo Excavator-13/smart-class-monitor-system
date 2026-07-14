@@ -19,15 +19,15 @@ public interface BehaviorRuleMapper {
     BehaviorRule findById(@Param("id") Long id);
 
     @Insert("INSERT INTO behavior_rule (rule_type, rule_name, enabled, threshold_seconds, " +
-            "confidence_threshold, cooldown_seconds, level, config_json) " +
+            "confidence_threshold, cooldown_seconds, config_json) " +
             "VALUES (#{ruleType}, #{ruleName}, #{enabled}, #{thresholdSeconds}, " +
-            "#{confidenceThreshold}, #{cooldownSeconds}, #{level}, #{configJson})")
+            "#{confidenceThreshold}, #{cooldownSeconds}, #{configJson})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(BehaviorRule rule);
 
     @Update("UPDATE behavior_rule SET rule_name=#{ruleName}, enabled=#{enabled}, " +
             "threshold_seconds=#{thresholdSeconds}, confidence_threshold=#{confidenceThreshold}, " +
-            "cooldown_seconds=#{cooldownSeconds}, level=#{level}, config_json=#{configJson} " +
+            "cooldown_seconds=#{cooldownSeconds}, config_json=#{configJson} " +
             "WHERE id=#{id}")
     int update(BehaviorRule rule);
 

@@ -30,6 +30,7 @@ import {
   fetchModelStatus,
   fetchRules,
   fetchStreams,
+  fetchStreamStatus,
   fetchStudents,
   fetchSystemHealth,
   fetchUsers,
@@ -923,7 +924,7 @@ function statusType(status) {
 }
 
 function isOnlineStatus(status) {
-  return ["online", "enabled", "running", "active", "connected", true].includes(
+  return ["online", "running", "active", "connected", true].includes(
     status,
   );
 }
@@ -1216,8 +1217,12 @@ function riskTypeText(type) {
   );
 }
 
-function riskBaseScore(type) {
-  const matched = riskScoreSettings.value.find((item) => item.type === type);
+function eventConfigType(item = {}) {
+  return item.alert_type || item.event_type || item.rule_type || "general";
+}
+
+function riskBaseScore(eventType) {
+  const matched = riskScoreSettings.value.find((item) => item.type === eventType);
   return Number(
     matched?.score ??
       riskScoreSettings.value.find((item) => item.type === "general")?.score ??
@@ -1228,7 +1233,7 @@ function riskBaseScore(type) {
 async function handleScoreConfigChange(item) {
   if (!item.id) return;
   try {
-    await updateScoreConfig(item.id, { score: item.score });
+    await updateScoreConfig(item.id, { score: item.score, level: item.level });
   } catch (e) {
     ElMessage.error(userFacingError(e, "评分配置保存失败，请稍后重试。"));
   }
@@ -1255,7 +1260,7 @@ function calculateEventRiskScore(item = {}) {
     ? Math.round((confidence - 0.75) * 24)
     : 0;
   const rawScore =
-    riskBaseScore(type) + levelRiskBonus(item.level) + confidenceBonus;
+    riskBaseScore(eventConfigType(item)) + levelRiskBonus(item.level) + confidenceBonus;
   return Math.min(100, Math.max(1, rawScore));
 }
 
@@ -1663,7 +1668,6 @@ async function handleUpdateRule(rule) {
   try {
     await updateRule(id, {
       threshold_seconds: rule.threshold_seconds,
-      level: rule.level,
     });
   } catch (error) {
     ElMessage.error(userFacingError(error, "规则更新失败，请稍后重试。"));
@@ -1951,6 +1955,7 @@ async function loadDashboard() {
   streams.value = results.streams.ok
     ? normalizeList(results.streams.value)
     : [];
+  await refreshStreamStatuses();
   alerts.value = results.alerts.ok ? normalizeList(results.alerts.value) : [];
   stats.value = results.stats.ok ? results.stats.value || {} : {};
   rules.value = results.rules.ok ? normalizeList(results.rules.value) : [];
@@ -1961,6 +1966,7 @@ async function loadDashboard() {
       type: item.alert_type,
       label: item.label,
       score: item.score,
+      level: item.level || "warning",
       note: item.note || "",
     }));
   }
@@ -2000,6 +2006,22 @@ async function loadDashboard() {
   }
 
   loadLatestReport();
+}
+
+async function refreshStreamStatuses() {
+  const snapshots = [...streams.value];
+  const resolved = await Promise.all(
+    snapshots.map(async (stream) => {
+      if (stream.status === "disabled") return stream;
+      try {
+        const status = await fetchStreamStatus(stream.stream_id);
+        return { ...stream, status: status?.status || "unknown" };
+      } catch {
+        return { ...stream, status: "unknown" };
+      }
+    }),
+  );
+  streams.value = resolved;
 }
 
 async function switchStream(streamId) {
@@ -3634,15 +3656,29 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ item.label }}</b>
                   <span>{{ item.note }}</span>
                 </div>
-                <el-input-number
-                  v-model="item.score"
-                  :min="0"
-                  :max="100"
-                  :step="1"
-                  size="small"
-                  :disabled="!isAdmin"
-                  @change="handleScoreConfigChange(item)"
-                />
+                <div class="score-config-controls">
+                  <el-select
+                    v-model="item.level"
+                    size="small"
+                    :disabled="!isAdmin"
+                    aria-label="告警等级"
+                    @change="handleScoreConfigChange(item)"
+                  >
+                    <el-option label="高危" value="high" />
+                    <el-option label="警告" value="warning" />
+                    <el-option label="提示" value="info" />
+                  </el-select>
+                  <el-input-number
+                    v-model="item.score"
+                    :min="0"
+                    :max="100"
+                    :step="1"
+                    size="small"
+                    :disabled="!isAdmin"
+                    aria-label="告警评分"
+                    @change="handleScoreConfigChange(item)"
+                  />
+                </div>
               </article>
               <el-empty
                 v-if="!riskScoreSettings.length"
@@ -3693,19 +3729,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     :disabled="!isAdmin"
                     @change="handleUpdateRule(rule)"
                   />
-                </div>
-                <div class="rule-threshold-control">
-                  <span>告警等级</span>
-                  <el-select
-                    v-model="rule.level"
-                    size="small"
-                    :disabled="!isAdmin"
-                    @change="handleUpdateRule(rule)"
-                  >
-                    <el-option label="高危" value="high" />
-                    <el-option label="警告" value="warning" />
-                    <el-option label="提示" value="info" />
-                  </el-select>
                 </div>
                 <el-switch
                   :model-value="rule.enabled"
@@ -3997,6 +4020,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 <div>
                   <b>{{ stream.stream_name }}</b>
                   <span>{{ stream.location || stream.remark || stream.stream_id }}</span>
+                  <span v-if="isAdmin && stream.rtmp_url">{{ stream.rtmp_url }}</span>
                 </div>
                 <el-tag :type="statusType(stream.status)">{{
                   statusText(stream.status)
