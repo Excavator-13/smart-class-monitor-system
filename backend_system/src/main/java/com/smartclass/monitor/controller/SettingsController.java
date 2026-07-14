@@ -22,6 +22,7 @@ public class SettingsController {
             "contacts", List.of(
                     Map.of("name", "项重善", "mobile", "18601033435"),
                     Map.of("name", "章志超", "mobile", "15270985055")),
+            "responsible", "项重善",
             "reportTime", "18:00"
     );
 
@@ -31,6 +32,9 @@ public class SettingsController {
 
     @Value("${settings.file:data/settings.json}")
     private String settingsFilePath;
+
+    @Value("${ai.base-url:http://localhost:5000}")
+    private String aiBaseUrl;
 
     public SettingsController(ReportService reportService) {
         this.reportService = reportService;
@@ -53,7 +57,7 @@ public class SettingsController {
         writeToFile();
 
         try {
-            new RestTemplate().postForObject("http://127.0.0.1:5001/api/contacts/sync", body, String.class);
+            new RestTemplate().postForObject(aiBaseUrl + "/api/contacts/sync", body, String.class);
         } catch (Exception ignored) {}
 
         return Map.of("ok", true, "stored", store.keySet());
