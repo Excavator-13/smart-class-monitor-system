@@ -18,11 +18,14 @@ class AntiSpoofService:
         texture_variance_threshold: float = 8.0,
         deepfake_threshold: float = 0.35,
         deepfake_detector: Any | None = None,
+        landmark_skip: int = 3,
     ):
         self.blink_threshold_seconds = blink_threshold_seconds
         self.texture_variance_threshold = texture_variance_threshold
         self.deepfake_threshold = deepfake_threshold
         self.deepfake_detector = deepfake_detector  # DeepfakeDetector 实例
+        self.landmark_skip = landmark_skip
+        self._frame_count = 0
 
         # {track_id: {"last_blink": timestamp, "texture_history": [...], "start_time": timestamp}}
         self._states: dict[str, dict[str, Any]] = defaultdict(
@@ -52,8 +55,12 @@ class AntiSpoofService:
         Returns:
             list[dict]: 检测到的欺骗事件
         """
+        self._frame_count += 1
         detections: list[dict[str, Any]] = []
         now = time.time()
+
+        # 关键点提取降频：每 landmark_skip 帧才提取一次
+        extract_landmarks = self._frame_count % self.landmark_skip == 0
 
         for face in faces:
             track_id = face.get("track_id", f"face_{len(detections)}")
@@ -61,10 +68,12 @@ class AntiSpoofService:
 
             state = self._states[track_id]
 
-            # --- 眨眼检测（face_service 传入的 landmarks，或 dlib 提取） ---
-            landmarks = face.get("landmarks")
-            if landmarks is None and frame is not None and bbox is not None and len(bbox) > 0:
-                landmarks = self._get_landmarks(frame, bbox)
+            # --- 眨眼检测（每 N 帧提取一次关键点，其余帧复用已有值） ---
+            landmarks = face.get("landmarks") if not extract_landmarks else None
+            if extract_landmarks:
+                landmarks = face.get("landmarks")
+                if landmarks is None and frame is not None and bbox is not None and len(bbox) > 0:
+                    landmarks = self._get_landmarks(frame, bbox)
             if landmarks is not None and len(landmarks) >= 68:
                 left_eye = landmarks[36:42]
                 right_eye = landmarks[42:48]

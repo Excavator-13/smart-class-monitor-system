@@ -220,6 +220,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         config_client=config_client,
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
+        frame_skip=int(stream_cfg.get("frame_skip", 3)),
     )
     snapshot_remote = app_config.get("snapshot_remote", {})
     remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")

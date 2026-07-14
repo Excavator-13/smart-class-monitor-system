@@ -12,6 +12,7 @@ stream:
   offline_after_seconds: 10
   default_width: 640
   default_height: 360
+  frame_skip: 3
 
 cache:
   streams_poll_seconds: 60
