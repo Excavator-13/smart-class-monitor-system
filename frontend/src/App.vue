@@ -3309,154 +3309,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </section>
         </div>
 
-        <!-- 最新日报卡片 -->
-        <div
-          v-if="latestReport"
-          class="module-board"
-          style="margin-bottom: 6px"
-        >
-          <section
-            class="panel span-12"
-            style="
-              padding: 12px 20px;
-              background: #f0f9ff;
-              border-left: 3px solid #409eff;
-            "
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
-              <b>最新日报 — {{ latestReport.date }}</b>
-              <div style="display: flex; align-items: center; gap: 8px">
-                <span style="font-size: 12px; color: #909399">{{
-                  latestReport.time
-                }}</span>
-                <el-button size="small" text @click="latestReport = null"
-                  >关闭</el-button
-                >
-              </div>
-            </div>
-            <div
-              v-html="renderMd(latestReport.summary)"
-              style="
-                margin: 6px 0 0;
-                font-size: 14px;
-                line-height: 1.7;
-                white-space: pre-wrap;
-              "
-            ></div>
-
-            <!-- 统计条形图 -->
-            <div
-              v-if="reportChart.length > 0"
-              style="
-                margin: 12px 0;
-                padding: 12px;
-                background: #fff;
-                border-radius: 8px;
-              "
-            >
-              <div
-                style="
-                  font-size: 14px;
-                  font-weight: 600;
-                  margin-bottom: 10px;
-                  color: #1d2129;
-                "
-              >
-                告警统计
-              </div>
-              <div
-                v-for="c in reportChart"
-                :key="c.type"
-                style="
-                  display: flex;
-                  align-items: center;
-                  gap: 10px;
-                  margin: 6px 0;
-                "
-              >
-                <span
-                  style="
-                    width: 100px;
-                    font-size: 13px;
-                    text-align: right;
-                    color: #4e5969;
-                    flex-shrink: 0;
-                  "
-                  >{{ c.type }}</span
-                >
-                <div
-                  style="
-                    flex: 1;
-                    height: 24px;
-                    background: #f2f3f5;
-                    border-radius: 6px;
-                    overflow: hidden;
-                  "
-                >
-                  <div
-                    :style="
-                      'width:' +
-                      c.pct +
-                      '%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'
-                    "
-                  >
-                    <span
-                      style="color: #fff; font-size: 12px; font-weight: 500"
-                      >{{ c.count }}</span
-                    >
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 告警详情（带截图 + VL 分析） -->
-            <div
-              v-for="(a, i) in latestReport.alerts || []"
-              :key="i"
-              style="
-                margin-top: 12px;
-                padding: 10px;
-                background: #fff;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-              "
-            >
-              <div style="font-weight: bold; font-size: 13px">
-                {{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}
-              </div>
-              <div
-                v-if="a.snapshot_url || a.snapshotUrl"
-                style="margin-top: 6px"
-              >
-                <img
-                  :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)"
-                  style="max-width: 100%; max-height: 200px; border-radius: 4px"
-                  @error="$event.target.style.display = 'none'"
-                />
-              </div>
-              <div
-                v-if="a.vl_analysis || a.vlAnalysis"
-                style="
-                  margin-top: 4px;
-                  font-size: 12px;
-                  color: #555;
-                  background: #f5f7fa;
-                  padding: 6px;
-                  border-radius: 4px;
-                "
-              >
-                AI分析：{{ a.vl_analysis || a.vlAnalysis }}
-              </div>
-            </div>
-          </section>
-        </div>
-
         <!-- 联系人弹窗 -->
         <div
           v-if="showContactModal"
@@ -3567,7 +3419,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </div>
         </div>
 
-        <!-- 往期日报弹窗 -->
+        <!-- 日报弹窗 -->
         <div
           v-if="showReportModal"
           style="
@@ -3589,8 +3441,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               background: #fff;
               padding: 28px;
               border-radius: 10px;
-              width: 650px;
-              max-height: 80vh;
+              width: 700px;
+              max-height: 85vh;
               overflow-y: auto;
               box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
             "
@@ -3611,15 +3463,30 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
                 {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
               </div>
+            </div>
+            
+            <!-- 历史日报列表 -->
+            <div v-if="reportHistory.length > 0">
+              <h3 style="font-size: 16px; margin-bottom: 12px; color: #1d2129">历史日报（{{ reportHistory.length }} 条）</h3>
               <div
-                style="font-size: 14px; line-height: 1.7; white-space: pre-wrap"
+                v-for="(r, i) in reportHistory"
+                :key="i"
+                style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
               >
-                {{ r.summary }}
+                <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
+                  {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
+                </div>
+                <div v-html="renderMd(r.summary)" style="font-size: 14px; line-height: 1.7"></div>
               </div>
             </div>
+            
+            <div v-else style="color: #909399; text-align: center; padding: 40px">
+              暂无历史日报
+            </div>
+            
             <div style="text-align: right; margin-top: 20px">
-              <el-button type="primary" size="small" @click="exportReportPdf"
-                >导出 PDF</el-button
+              <el-button type="primary" size="small" @click="exportReportPdf" :disabled="!latestReport"
+                >导出 HTML</el-button
               >
               <el-button @click="showReportModal = false">关闭</el-button>
             </div>
@@ -3853,16 +3720,21 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <span>{{ ruleSummaryText(rule) }}</span>
                 </div>
                 <div class="rule-threshold-control">
-                  <span>持续阈值（秒）</span>
-                  <el-input-number
-                    v-model="rule.threshold_seconds"
-                    :min="0"
-                    :max="300"
-                    size="small"
-                    :disabled="!isAdmin || isRuleNotImplemented(rule)"
-                    @change="handleUpdateRule(rule)"
-                  />
-                </div>
+                    <template v-if="rule.threshold_seconds > 0">
+                      <span>持续阈值（秒）</span>
+                      <el-input-number
+                        v-model="rule.threshold_seconds"
+                        :min="1"
+                        :max="300"
+                        size="small"
+                        :disabled="!isAdmin || isRuleNotImplemented(rule)"
+                        @change="handleUpdateRule(rule)"
+                      />
+                    </template>
+                    <template v-else>
+                      <span style="color: #909399; font-size: 13px">立即触发</span>
+                    </template>
+                  </div>
                 <el-switch
                   :model-value="rule.enabled"
                   :disabled="
