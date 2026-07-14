@@ -26,14 +26,14 @@ public class RuleVO {
     @Schema(description = "冷却时间（秒）", example = "60")
     private Integer cooldownSeconds;
 
-    @Schema(description = "默认告警等级", example = "warning")
-    private String level;
-
     @Schema(description = "扩展配置 JSON")
     private String configJson;
 
     @Schema(description = "创建时间", example = "2026-07-08 10:00:00")
     private String createdAt;
+
+    @Schema(description = "告警等级", example = "high")
+    private String level;
 
     public Long getId() { return id; }
     public void setId(Long v) { this.id = v; }
@@ -49,10 +49,10 @@ public class RuleVO {
     public void setConfidenceThreshold(Double v) { this.confidenceThreshold = v; }
     public Integer getCooldownSeconds() { return cooldownSeconds; }
     public void setCooldownSeconds(Integer v) { this.cooldownSeconds = v; }
-    public String getLevel() { return level; }
-    public void setLevel(String v) { this.level = v; }
     public String getConfigJson() { return configJson; }
     public void setConfigJson(String v) { this.configJson = v; }
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String v) { this.createdAt = v; }
+    public String getLevel() { return level; }
+    public void setLevel(String v) { this.level = v; }
 }

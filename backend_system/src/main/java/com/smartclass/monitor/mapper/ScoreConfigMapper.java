@@ -17,12 +17,12 @@ public interface ScoreConfigMapper {
     @Select("SELECT * FROM score_config WHERE id = #{id}")
     ScoreConfig findById(@Param("id") Long id);
 
-    @Insert("INSERT INTO score_config (alert_type, label, score, note) " +
-            "VALUES (#{alertType}, #{label}, #{score}, #{note})")
+    @Insert("INSERT INTO score_config (alert_type, label, level, score, note) " +
+            "VALUES (#{alertType}, #{label}, #{level}, #{score}, #{note})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(ScoreConfig config);
 
-    @Update("UPDATE score_config SET label=#{label}, score=#{score}, note=#{note} WHERE id=#{id}")
+    @Update("UPDATE score_config SET label=#{label}, level=#{level}, score=#{score}, note=#{note} WHERE id=#{id}")
     int update(ScoreConfig config);
 
     @Delete("TRUNCATE TABLE score_config")

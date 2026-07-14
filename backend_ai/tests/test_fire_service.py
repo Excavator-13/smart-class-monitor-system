@@ -38,11 +38,40 @@ class FakeBox:
         self.cls = [0]
 
 
+class NamedFireModel(FakeFireModel):
+    def __init__(self, fake_boxes, names):
+        super().__init__(fake_boxes)
+        self.names = names
+
+
+class CapturingPredictModel(FakeFireModel):
+    def __init__(self):
+        super().__init__([])
+        self.predict_kwargs = None
+
+    def predict(self, frame, **kwargs):
+        self.predict_kwargs = kwargs
+        return [self]
+
+
 def test_fire_service_loaded():
     """有模型时 loaded 属性为 True"""
     model = FakeFireModel()
     service = FireService(model=model)
     assert service.loaded is True
+
+
+def test_inference_confidence_threshold_is_passed_to_model():
+    model = CapturingPredictModel()
+    service = FireService(model=model, inference_confidence_threshold=0.03)
+
+    service.detect(
+        "test_stream",
+        np.zeros((32, 32, 3), dtype=np.uint8),
+        {"flame_detected": {"confidence_threshold": 0.6}},
+    )
+
+    assert model.predict_kwargs["conf"] == 0.03
 
 
 def test_fire_service_not_loaded():
@@ -55,7 +84,7 @@ def test_detect_returns_empty_when_no_model():
     """无模型时 detect 返回空列表"""
     service = FireService(model=None)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    detections = service.detect("test_stream", frame)
+    detections = service.detect("test_stream", frame, {"flame_detected": {"confidence_threshold": 0.5, "level": "warning"}})
     assert detections == []
 
 
@@ -66,7 +95,7 @@ def test_detect_finds_flame():
     ]
     service = FireService(model=FakeFireModel(fake_boxes), confidence_threshold=0.5)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    detections = service.detect("test_stream", frame)
+    detections = service.detect("test_stream", frame, {"flame_detected": {"confidence_threshold": 0.5, "level": "warning"}})
 
     assert len(detections) == 1
     assert detections[0]["event_type"] == "flame_detected"
@@ -81,7 +110,7 @@ def test_detect_filters_low_confidence():
     ]
     service = FireService(model=FakeFireModel(fake_boxes), confidence_threshold=0.5)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    detections = service.detect("test_stream", frame)
+    detections = service.detect("test_stream", frame, {"flame_detected": {"confidence_threshold": 0.5}})
 
     assert len(detections) == 0
 
@@ -93,7 +122,7 @@ def test_detect_filters_small_area():
     ]
     service = FireService(model=FakeFireModel(fake_boxes), confidence_threshold=0.5, min_bbox_area=500)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    detections = service.detect("test_stream", frame)
+    detections = service.detect("test_stream", frame, {"flame_detected": {"confidence_threshold": 0.5}})
 
     assert len(detections) == 0
 
@@ -113,7 +142,7 @@ def test_detect_sorted_by_confidence():
     ]
     service = FireService(model=FakeFireModel(fake_boxes), confidence_threshold=0.4)
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    detections = service.detect("test_stream", frame)
+    detections = service.detect("test_stream", frame, {"flame_detected": {"confidence_threshold": 0.4}})
 
     assert len(detections) == 2
     assert detections[0]["confidence"] == 0.9
@@ -126,3 +155,46 @@ def test_status():
     status = service.status()
     assert status["loaded"] is False
     assert status["confidence_threshold"] == 0.3
+
+
+def test_backend_fire_rule_alias_uses_stricter_threshold():
+    service = FireService(model=FakeFireModel([FakeBox([100, 100, 300, 400], 0.7)]), confidence_threshold=0.25)
+
+    detections = service.detect("test_stream", np.zeros((480, 640, 3), dtype=np.uint8), {
+        "fire_detected": {"confidence_threshold": 0.8, "threshold_seconds": 3}
+    })
+
+    assert detections == []
+
+
+def test_disabled_fire_rule_skips_detection():
+    service = FireService(model=FakeFireModel([FakeBox([100, 100, 300, 400], 0.9)]))
+
+    assert service.detect("test_stream", np.zeros((480, 640, 3), dtype=np.uint8), {}) == []
+
+
+def test_non_fire_model_class_is_filtered():
+    service = FireService(
+        model=NamedFireModel([FakeBox([100, 100, 300, 400], 0.95)], {0: "smoke"}),
+        confidence_threshold=0.5,
+    )
+
+    detections = service.detect("test_stream", np.zeros((480, 640, 3), dtype=np.uint8), {
+        "fire_detected": {"confidence_threshold": 0.8}
+    })
+
+    assert detections == []
+
+
+def test_allowed_fire_class_propagates_rule_duration():
+    service = FireService(
+        model=NamedFireModel([FakeBox([100, 100, 300, 400], 0.9)], {0: "fire"}),
+        confidence_threshold=0.5,
+    )
+
+    detections = service.detect("test_stream", np.zeros((480, 640, 3), dtype=np.uint8), {
+        "fire_detected": {"confidence_threshold": 0.8, "threshold_seconds": 3}
+    })
+
+    assert len(detections) == 1
+    assert detections[0]["threshold_seconds"] == 3

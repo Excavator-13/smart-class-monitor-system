@@ -93,6 +93,8 @@ public class AlertService {
         vo.setLevel((String) row.get("level"));
         vo.setStatus((String) row.get("status"));
         vo.setConfidence(toDouble(row.get("confidence")));
+        vo.setTargetInfo(row.get("target_info"));
+        vo.setZoneId(toLong(row.get("zone_id")));
         vo.setSnapshotUrl((String) row.get("snapshot_path"));
 
         String recordPath = (String) row.get("record_path");

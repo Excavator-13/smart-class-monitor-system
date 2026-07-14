@@ -14,7 +14,7 @@ public class StreamVO {
     @Schema(description = "展示名称", example = "一号教室")
     private String streamName;
 
-    @Schema(description = "RTMP 地址", example = "rtmp://localhost:9090/live/classroom_01")
+    @Schema(description = "RTMP 地址，仅管理员和内部服务返回", example = "rtmp://localhost:9090/live/classroom_01", nullable = true)
     private String rtmpUrl;
 
     @Schema(description = "配置状态", example = "enabled")

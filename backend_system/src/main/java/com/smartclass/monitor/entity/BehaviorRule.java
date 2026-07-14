@@ -12,7 +12,6 @@ public class BehaviorRule {
     private Integer thresholdSeconds;
     private Double confidenceThreshold;
     private Integer cooldownSeconds;
-    private String level;
     private String configJson;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

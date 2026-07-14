@@ -54,6 +54,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
 
         String internalHeader = request.getHeader("X-Internal-Token");
         if (internalHeader != null && internalHeader.equals(internalToken)) {
+            request.setAttribute("internalRequest", true);
             return true;
         }
 

@@ -37,8 +37,19 @@ class AnalysisService:
         "spoof_detected",
         "deepfake_detected",
         "flame_detected",
+        "danger_zone_intrusion",
+        "danger_zone_stay",
+        "danger_zone_approach",
     }
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
+    RULE_GOVERNED_TYPES = frozenset({
+        "stranger_detected",
+        "leave_seat",
+        "stream_offline",
+        "spoof_detected",
+        "deepfake_detected",
+        "abnormal_sound",
+    })
 
     def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, alert_cooldown_seconds: float = 10.0, alert_overlay_seconds: float = 2.0):
         self.face_service = face_service
@@ -61,6 +72,7 @@ class AnalysisService:
     def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None, audio_chunk: np.ndarray | None = None) -> list[dict[str, Any]]:
         enabled = modules or {"face", "zone", "behavior"}
         detected: list[dict[str, Any]] = []
+        height, width = frame.shape[:2]
 
         if "face" in enabled:
             started = time.perf_counter()
@@ -95,7 +107,7 @@ class AnalysisService:
 
         if "behavior" in enabled:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
-            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules, phone_forbidden_zones=phone_forbidden_zones)
+            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules, phone_forbidden_zones=phone_forbidden_zones, frame_size=(width, height))
             detected.extend(behavior_detections)
             self._draw_detections(frame, behavior_detections, color=(0, 255, 255))
 
@@ -110,6 +122,7 @@ class AnalysisService:
                 persons,
                 danger_zones,
                 self.config_client.get_rule("danger_zone"),
+                frame_size=(width, height),
             )
             detected.extend(zone_detections)
             self._draw_detections(frame, zone_detections, color=(0, 0, 255))
@@ -129,6 +142,11 @@ class AnalysisService:
 
         events = []
         for item in detected:
+            if item["event_type"] in self.RULE_GOVERNED_TYPES and not self.config_client.get_rule(item["event_type"]):
+                continue
+            configured_level = self._event_level(
+                item["event_type"], item.get("level", "warning")
+            )
             event, should_confirm = self.event_service.observe(
                 stream_id=stream_id,
                 event_type=item["event_type"],
@@ -136,9 +154,10 @@ class AnalysisService:
                 confidence=float(item.get("confidence", 0)),
                 threshold_seconds=float(item.get("threshold_seconds", 0)),
                 cooldown_seconds=self.alert_cooldown_seconds,
-                level=item.get("level", "warning"),
+                level=configured_level,
                 target=item.get("target"),
                 zone=item.get("zone"),
+                continuity_gap_seconds=item.get("continuity_gap_seconds"),
             )
             if should_confirm:
                 self._add_alert_overlay(stream_id, event)
@@ -155,6 +174,8 @@ class AnalysisService:
         return events
 
     def observe_stream_offline(self, stream_id: str) -> dict[str, Any]:
+        if "stream_offline" in self.RULE_GOVERNED_TYPES and not self.config_client.get_rule("stream_offline"):
+            return {"event_id": "", "event_type": "stream_offline", "event_status": "skipped", "level": "high", "confidence": 1.0}
         event, should_confirm = self.event_service.observe(
             stream_id=stream_id,
             event_type="stream_offline",
@@ -162,7 +183,7 @@ class AnalysisService:
             confidence=1.0,
             threshold_seconds=0,
             cooldown_seconds=self.alert_cooldown_seconds,
-            level="high",
+            level=self._event_level("stream_offline", "high"),
             target={"track_id": stream_id},
         )
         if should_confirm and self.alert_client is not None:
@@ -172,6 +193,10 @@ class AnalysisService:
             except Exception as exc:
                 self.logger.warning("Failed to push stream_offline alert stream_id=%s: %s", stream_id, exc)
         return event
+
+    def _event_level(self, event_type: str, default: str) -> str:
+        resolver = getattr(self.config_client, "get_event_level", None)
+        return resolver(event_type, default) if callable(resolver) else default
 
     def avg_latency_ms(self, module: str) -> float | None:
         values = self._latencies.get(module)
@@ -227,6 +252,9 @@ class AnalysisService:
                     "spoof_detected": "Spoof detected",
                     "deepfake_detected": "Deepfake detected",
                     "flame_detected": "Fire",
+                    "danger_zone_intrusion": "Danger zone intrusion",
+                    "danger_zone_stay": "Danger zone stay",
+                    "danger_zone_approach": "Danger zone approach",
                 }.get(event_type, event_type)
             label_parts = [str(label)]
             zone = item.get("zone") or {}
@@ -276,6 +304,8 @@ class AnalysisService:
         self._alert_overlays[stream_id].append({
             "event_id": event.get("event_id"),
             "text": labels.get(event_type, event_type),
+            "event_type": event_type,
+            "bbox": (event.get("target") or {}).get("bbox"),
             "expires_at": current + self.alert_overlay_seconds,
         })
 
@@ -286,6 +316,10 @@ class AnalysisService:
             queue.popleft()
         for index, item in enumerate(queue):
             text = str(item["text"])
+            bbox = item.get("bbox")
+            if bbox is not None and len(bbox) == 4:
+                color = (0, 255, 255) if item.get("event_type") == "phone_usage" else (0, 80, 255)
+                self._draw_bbox(frame, bbox, text, color=color)
             y = 28 + index * 28
             (text_width, text_height), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.58, 2)
             cv2.rectangle(frame, (8, y - text_height - 8), (text_width + 20, y + 6), (0, 0, 0), -1)

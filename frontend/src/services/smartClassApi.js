@@ -59,7 +59,6 @@ function parseMaybeJson(value) {
 
 export function normalizeStream(item = {}) {
   const rawStatus = item.status ?? item.stream_status;
-  const status = rawStatus === "enabled" ? "online" : rawStatus;
   return {
     id: optional(item.id, item.stream_id ?? item.streamId),
     stream_id: optional(item.stream_id, item.streamId || ""),
@@ -72,7 +71,7 @@ export function normalizeStream(item = {}) {
         "未命名视频源",
     ),
     location: optional(item.location, item.remark || ""),
-    status: optional(status, "unknown"),
+    status: optional(rawStatus, "unknown"),
     rtmp_url: optional(item.rtmp_url, item.rtmpUrl || ""),
     hls_url: optional(item.hls_url, item.hlsUrl || ""),
     mjpeg_url: optional(item.mjpeg_url, item.mjpegUrl || ""),
@@ -121,6 +120,8 @@ export function normalizeAlert(item = {}) {
       item.alert_status || item.alertStatus || item.event_status || "unhandled",
     ),
     confidence: item.confidence ?? target?.confidence ?? null,
+    target_info: target,
+    zone_id: item.zone_id ?? item.zoneId ?? null,
     snapshot_url: optional(
       item.snapshot_url,
       item.snapshotUrl || item.snapshot_path || item.snapshotPath,
@@ -141,7 +142,12 @@ export function normalizeAlert(item = {}) {
     handled_at: optional(item.handled_at, item.handledAt),
     remark: optional(item.remark, item.description || item.summary || ""),
     target,
-    zone: parseMaybeJson(item.zone || null),
+    zone: parseMaybeJson(
+      item.zone ||
+        (item.zone_id || item.zoneId
+          ? { zone_id: item.zone_id ?? item.zoneId }
+          : null),
+    ),
   };
 }
 
@@ -171,6 +177,7 @@ export function normalizeRule(item = {}) {
     cooldown_seconds: item.cooldown_seconds ?? item.cooldownSeconds ?? null,
     zone_type: optional(item.zone_type, item.zoneType || ""),
     summary: optional(item.summary, item.description || ""),
+    level: optional(item.level, "info"),
   };
 }
 
@@ -472,6 +479,14 @@ export async function toggleRule(id, enabled) {
   });
 }
 
+export async function updateRule(id, data) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/rules/${id}`,
+    data,
+  });
+}
+
 export async function fetchScoreConfig() {
   return requestData(apiClient, { method: "get", url: "/score-config" });
 }
@@ -598,6 +613,13 @@ export async function updateUserRole(id, role) {
     method: "put",
     url: `/users/${id}/role`,
     data: { role },
+  });
+}
+
+export async function deleteUser(id) {
+  return requestData(apiClient, {
+    method: "delete",
+    url: `/users/${id}`,
   });
 }
 

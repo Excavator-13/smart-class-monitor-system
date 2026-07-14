@@ -1,0 +1,5 @@
+ssh root@39.106.209.208 "rm -f /data/snapshots/20260714/*.jpg"
+ssh root@39.106.209.208 "rm -f /usr/local/rtmp_video/*.mp4"
+ssh root@39.106.209.208 "rm -f /usr/local/rtmp_video/*.flv"
+ssh root@39.106.209.208 "rm -f /usr/local/rtmp_video/segments/20260714/*.mp4"
+ssh root@39.106.209.208 "rm -f /usr/local/rtmp_video/segments/20260714/*.flv"

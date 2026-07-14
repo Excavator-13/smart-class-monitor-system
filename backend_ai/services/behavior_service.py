@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend_ai.services.config_client import parse_json_field
-from backend_ai.utils.geometry import parse_polygon_coordinates, point_in_polygon
+from backend_ai.utils.geometry import bbox_center_normalized, parse_polygon_coordinates, point_in_polygon
 
 
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
@@ -112,21 +112,23 @@ class BehaviorService:
                 )
         return detections
 
-    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]], phone_forbidden_zones: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]], phone_forbidden_zones: list[dict[str, Any]] | None = None, frame_size: tuple[int, int] = (1, 1)) -> list[dict[str, Any]]:
         persons = [obj for obj in objects if obj.get("class_name") in {"person", "student"}]
         phones = [obj for obj in objects if obj.get("class_name") in {"phone", "cell phone", "mobile_phone"}]
         detections: list[dict[str, Any]] = []
 
         phone_rule = rules.get("phone_usage", {})
-        if phones and phone_forbidden_zones:
+        if phone_rule and phones and phone_forbidden_zones:
             phone_threshold = float(phone_rule.get("confidence_threshold", 0.6))
+            phone_level = "info"
             for idx, person in enumerate(persons):
                 for phone in phones:
                     if phone.get("confidence", 0) < phone_threshold:
                         continue
                     if not _iou_like_relation(person["bbox"], phone["bbox"]):
                         continue
-                    phone_center = _bbox_center(phone["bbox"])
+                    width, height = frame_size
+                    phone_center = bbox_center_normalized(phone["bbox"], width=width, height=height)
                     matched_zone = _find_matching_zone(phone_center, phone_forbidden_zones)
                     if matched_zone is None:
                         continue
@@ -134,7 +136,7 @@ class BehaviorService:
                         {
                             "event_type": "phone_usage",
                             "confidence": min(1.0, float(phone.get("confidence", 0))),
-                            "level": "warning",
+                            "level": phone_level,
                             "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": person["bbox"]},
                             "zone": {
                                 "zone_id": matched_zone.get("zone_id"),
@@ -144,11 +146,15 @@ class BehaviorService:
                             "track_key": f"{person.get('track_id', f'person_{idx + 1}')}:{matched_zone.get('zone_id')}:phone",
                             "threshold_seconds": float(phone_rule.get("threshold_seconds", 3)),
                             "cooldown_seconds": float(phone_rule.get("cooldown_seconds", 45)),
+                            "continuity_gap_seconds": float(
+                                parse_json_field(phone_rule.get("config_json"), {}).get("continuity_gap_seconds", 6)
+                            ),
                         }
                     )
 
         head_rule = rules.get("head_down", {})
         if head_rule:
+            head_level = "info"
             for idx, person in enumerate(persons):
                 ratio = person.get("head_down_ratio")
                 if ratio is not None and float(ratio) >= float(head_rule.get("confidence_threshold", 0.6)):
@@ -156,7 +162,7 @@ class BehaviorService:
                         {
                             "event_type": "head_down",
                             "confidence": float(ratio),
-                            "level": "warning",
+                            "level": head_level,
                             "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": person["bbox"]},
                             "track_key": person.get("track_id", f"person_{idx + 1}"),
                             "threshold_seconds": float(head_rule.get("threshold_seconds", 3)),
@@ -166,6 +172,7 @@ class BehaviorService:
 
         crowd_rule = rules.get("crowd_gathering", {})
         if crowd_rule:
+            crowd_level = "high"
             min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
             max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
             if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
@@ -173,7 +180,7 @@ class BehaviorService:
                     {
                         "event_type": "crowd_gathering",
                         "confidence": 1.0,
-                        "level": "warning",
+                        "level": crowd_level,
                         "target": {"track_id": "crowd", "bbox": None},
                         "track_key": "crowd",
                         "threshold_seconds": float(crowd_rule.get("threshold_seconds", 3)),
@@ -184,7 +191,8 @@ class BehaviorService:
         fall_rule = rules.get("fall_detected", {})
         if not fall_rule:
             return detections
-        fall_config = fall_rule.get("config_json") or {}
+        fall_level = "high"
+        fall_config = parse_json_field(fall_rule.get("config_json"), {})
         min_aspect_ratio = float(fall_config.get("min_width_height_ratio", 1.2))
         for idx, person in enumerate(persons):
             bbox = person.get("bbox")
@@ -197,7 +205,7 @@ class BehaviorService:
                     {
                         "event_type": "fall_detected",
                         "confidence": float(person.get("confidence", 0.75)),
-                        "level": "high",
+                        "level": fall_level,
                         "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": bbox},
                         "track_key": person.get("track_id", f"person_{idx + 1}"),
                         "threshold_seconds": float(fall_rule.get("threshold_seconds", 1)),

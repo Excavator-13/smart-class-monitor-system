@@ -3447,29 +3447,21 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
             "
           >
-            <h2 style="margin: 0 0 20px; font-size: 18px">AI 安防日报</h2>
-            
-            <!-- 最新日报 -->
-            <div v-if="latestReport" style="margin-bottom: 24px">
-              <div style="background: #f0f9ff; border-left: 3px solid #409eff; padding: 16px; border-radius: 6px; margin-bottom: 16px">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
-                  <b style="font-size: 15px">最新日报 — {{ latestReport.date }}</b>
-                  <span style="font-size: 12px; color: #909399">{{ latestReport.time }}</span>
-                </div>
-                <div v-html="renderMd(latestReport.summary)" style="font-size: 14px; line-height: 1.7"></div>
-                
-                <!-- 统计条形图 -->
-                <div v-if="reportChart.length > 0" style="margin-top: 16px; padding: 12px; background: #fff; border-radius: 6px">
-                  <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #1d2129">告警统计</div>
-                  <div v-for="c in reportChart" :key="c.type" style="display: flex; align-items: center; gap: 10px; margin: 6px 0">
-                    <span style="width: 100px; font-size: 13px; text-align: right; color: #4e5969; flex-shrink: 0">{{ c.type }}</span>
-                    <div style="flex: 1; height: 24px; background: #f2f3f5; border-radius: 6px; overflow: hidden">
-                      <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
-                        <span style="color: #fff; font-size: 12px; font-weight: 500">{{ c.count }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <h2 style="margin: 0 0 20px; font-size: 18px">
+              往期日报（{{ reportHistory.length }} 条）
+            </h2>
+            <div
+              v-if="reportHistory.length === 0"
+              style="color: #909399; text-align: center; padding: 40px"
+            >
+              暂无日报
+            </div>
+            <div
+              v-for="(r, i) in reportHistory"
+              style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
+            >
+              <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
+                {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
               </div>
             </div>
             

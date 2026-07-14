@@ -65,6 +65,15 @@ class FakeStreamManager:
     def get_frame(self, stream_id):
         return np.zeros((20, 20, 3), dtype=np.uint8)
 
+    def get_frame_with_sequence(self, stream_id):
+        return self.get_frame(stream_id), 1
+
+    def claim_frame_for_analysis(self, stream_id, frame_sequence):
+        return True
+
+    def should_emit_offline_alert(self, stream_id):
+        return False
+
 
 class FakeBehaviorService:
     model = None
@@ -73,12 +82,12 @@ class FakeBehaviorService:
     def detect_objects(self, frame):
         return []
 
-    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None):
+    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None, frame_size=(1, 1)):
         return []
 
 
 class FakeZoneService:
-    def detect(self, stream_id, persons, zones, rule=None):
+    def detect(self, stream_id, persons, zones, rule=None, frame_size=(1, 1)):
         return []
 
 
@@ -124,6 +133,15 @@ def test_model_status_route():
     assert response.status_code == 200
     assert payload["code"] == 0
     assert payload["data"]["service_status"] == "running"
+
+
+def test_legacy_events_route_matches_analysis_events():
+    client = app_client()
+    legacy = client.get("/events?event_type=phone_usage&limit=5")
+    canonical = client.get("/analysis/events?event_type=phone_usage&limit=5")
+
+    assert legacy.status_code == 200
+    assert legacy.get_json()["data"] == canonical.get_json()["data"]
 
 
 def test_analysis_events_route_empty():

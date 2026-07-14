@@ -6,6 +6,8 @@ import com.smartclass.monitor.common.exception.BusinessException;
 import com.smartclass.monitor.dto.AlertIngestRequest;
 import com.smartclass.monitor.entity.AlertEvent;
 import com.smartclass.monitor.mapper.AlertEventMapper;
+import com.smartclass.monitor.mapper.ScoreConfigMapper;
+import com.smartclass.monitor.entity.ScoreConfig;
 import com.smartclass.monitor.vo.AlertIngestResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Set;
 
 @Service
 public class AlertEventService {
@@ -21,9 +24,12 @@ public class AlertEventService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final AlertEventMapper mapper;
+    private final ScoreConfigMapper scoreConfigMapper;
+    private static final Set<String> VALID_LEVELS = Set.of("info", "warning", "high");
 
-    public AlertEventService(AlertEventMapper mapper) {
+    public AlertEventService(AlertEventMapper mapper, ScoreConfigMapper scoreConfigMapper) {
         this.mapper = mapper;
+        this.scoreConfigMapper = scoreConfigMapper;
     }
 
     public AlertIngestResponse ingestAlert(AlertIngestRequest req) {
@@ -46,7 +52,7 @@ public class AlertEventService {
         event.setStreamId(req.getStreamId());
         event.setAlertType(req.getAlertType());
         event.setAlertName(req.getAlertName());
-        event.setLevel(req.getLevel());
+        event.setLevel(resolveLevel(req.getAlertType(), req.getLevel()));
         event.setConfidence(req.getConfidence());
         event.setDurationSeconds(req.getDurationSeconds());
         event.setZoneId(req.getZoneId());
@@ -88,6 +94,12 @@ public class AlertEventService {
         resp.setAlertId(event.getId());
         resp.setStatus("unhandled");
         return resp;
+    }
+
+    private String resolveLevel(String alertType, String requestedLevel) {
+        ScoreConfig config = scoreConfigMapper.findByType(alertType);
+        if (config != null && VALID_LEVELS.contains(config.getLevel())) return config.getLevel();
+        return VALID_LEVELS.contains(requestedLevel) ? requestedLevel : "warning";
     }
 
     private void validatePath(String path, String fieldName) {

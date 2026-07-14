@@ -38,12 +38,13 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
-def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None):
+def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None) -> bool | None:
+    dingtalk_enabled = None
     try:
         headers = {"X-Internal-Token": internal_token} if internal_token else None
         resp = requests.get(f"{spring_base_url}/api/settings", headers=headers, timeout=5)
         if not resp.ok:
-            return
+            return dingtalk_enabled
         data = resp.json()
         from backend_ai.services import dingtalk_service as ds
         contacts = data.get("contacts", [])
@@ -62,9 +63,12 @@ def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None)
         interval = data.get("alertInterval")
         if interval:
             ds.STEP_TIMEOUT = int(interval)
-        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}")
+        if "dingtalkEnabled" in data:
+            dingtalk_enabled = bool(data["dingtalkEnabled"])
+        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}, 钉钉开关={dingtalk_enabled}")
     except Exception:
         print("[DingTalk] 从 Spring Boot 恢复设置失败，使用默认值")
+    return dingtalk_enabled
 
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
@@ -153,8 +157,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             fire_service = FireService(
                 model=fire_model,
                 confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
+                inference_confidence_threshold=float(
+                    fire_settings.get("inference_confidence_threshold", 0.01)
+                ),
                 max_detections=int(fire_settings.get("max_detections", 20)),
                 min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+                allowed_classes=fire_settings.get("allowed_classes"),
                 device=device_config,
             )
             print(f"[Fire] 明火检测模型加载成功: {weights}, device={device_config}")
@@ -221,8 +229,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
-    _restore_dingtalk_settings(spring_base_url, internal_token)
+    restored_dingtalk_enabled = _restore_dingtalk_settings(spring_base_url, internal_token)
+    alert_client_kwargs = dict(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
+    if restored_dingtalk_enabled is not None:
+        alert_client_kwargs["dingtalk_enabled"] = restored_dingtalk_enabled
+    alert_client = alert_client or AlertClient(**alert_client_kwargs)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
@@ -230,6 +241,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
         frame_skip=int(stream_cfg.get("frame_skip", 3)),
+        recovery_after_seconds=float(stream_cfg.get("recovery_after_seconds", 3)),
     )
 
     analysis_service = AnalysisService(
@@ -290,13 +302,14 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire"), "diagnostics": fire_service.status()},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
     @app.get("/analysis/events")
+    @app.get("/events")
     def analysis_events():
         limit = request.args.get("limit", default=events_cfg.get("default_limit", 20), type=int)
         items = event_service.query(
@@ -376,7 +389,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     def video_feed(stream_id: str):
         if not config_client.get_stream(stream_id):
             try:
-                config_client.reload(stream_id=stream_id, reload_items=["streams", "zones", "rules"])
+                config_client.reload(stream_id=stream_id, reload_items=["streams", "zones", "rules", "event_configs"])
             except Exception:
                 pass
         if not config_client.get_stream(stream_id):
@@ -387,12 +400,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
         def generate():
             while True:
-                frame = stream_manager.get_frame(stream_id)
+                frame, frame_sequence = stream_manager.get_frame_with_sequence(stream_id)
                 if frame is None:
                     if stream_manager.should_emit_offline_alert(stream_id):
                         analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
-                elif annotate:
+                elif annotate and stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
                 try:
                     payload = encode_jpeg(frame)
@@ -417,6 +430,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         if r: ds.PRIMARY = r
         i = body.get("alertInterval")
         if i: ds.STEP_TIMEOUT = int(i)
+        dingtalk_enabled = body.get("dingtalkEnabled")
+        if dingtalk_enabled is not None:
+            ai_svcs = app.extensions.get("ai_services", {})
+            ac = ai_svcs.get("alert_client")
+            if ac:
+                ac.dingtalk_enabled = bool(dingtalk_enabled)
         return json_response({"ok": True, "count": len(new_persons)})
 
     return app

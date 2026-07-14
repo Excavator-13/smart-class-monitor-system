@@ -112,15 +112,13 @@ CREATE TABLE IF NOT EXISTS `behavior_rule` (
     `threshold_seconds`    INT             DEFAULT NULL COMMENT '持续时间阈值（秒）',
     `confidence_threshold` DECIMAL(5,4)    DEFAULT NULL COMMENT '置信度阈值 0-1',
     `cooldown_seconds`     INT             DEFAULT NULL COMMENT '同类告警冷却时间（秒）',
-    `level`                VARCHAR(32)     DEFAULT 'warning' COMMENT '默认告警等级',
     `config_json`          JSON            DEFAULT NULL COMMENT '扩展规则配置',
     `created_at`           DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`           DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted_at`           DATETIME        DEFAULT NULL COMMENT '软删除时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_behavior_rule_type` (`rule_type`),
-    KEY `idx_behavior_rule_enabled` (`enabled`),
-    KEY `idx_behavior_rule_level` (`level`)
+    KEY `idx_behavior_rule_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='行为检测规则表';
 
 -- alert_event 告警事件表
@@ -204,10 +202,12 @@ CREATE TABLE IF NOT EXISTS `score_config` (
     `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
     `alert_type` VARCHAR(64)     NOT NULL COMMENT '告警类型',
     `label`      VARCHAR(64)     NOT NULL COMMENT '显示名称',
+    `level`      VARCHAR(32)     NOT NULL DEFAULT 'warning' COMMENT '默认告警等级：info / warning / high',
     `score`      INT             NOT NULL DEFAULT 50 COMMENT '评分权重 0-100',
     `note`       VARCHAR(255)    DEFAULT NULL COMMENT '说明',
     `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_score_config_type` (`alert_type`)
+    UNIQUE KEY `uk_score_config_type` (`alert_type`),
+    KEY `idx_score_config_level` (`level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='告警评分配置表';
