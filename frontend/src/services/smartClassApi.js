@@ -142,7 +142,12 @@ export function normalizeAlert(item = {}) {
     handled_at: optional(item.handled_at, item.handledAt),
     remark: optional(item.remark, item.description || item.summary || ""),
     target,
-    zone: parseMaybeJson(item.zone || (item.zone_id || item.zoneId ? { zone_id: item.zone_id ?? item.zoneId } : null)),
+    zone: parseMaybeJson(
+      item.zone ||
+        (item.zone_id || item.zoneId
+          ? { zone_id: item.zone_id ?? item.zoneId }
+          : null),
+    ),
   };
 }
 
@@ -172,6 +177,7 @@ export function normalizeRule(item = {}) {
     cooldown_seconds: item.cooldown_seconds ?? item.cooldownSeconds ?? null,
     zone_type: optional(item.zone_type, item.zoneType || ""),
     summary: optional(item.summary, item.description || ""),
+    level: optional(item.level, "info"),
   };
 }
 

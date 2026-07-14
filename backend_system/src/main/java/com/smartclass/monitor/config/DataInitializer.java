@@ -175,7 +175,13 @@ public class DataInitializer implements CommandLineRunner {
                 createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20),
                 createRule("head_down", "长时间低头", true, 6, 0.70, 60),
                 createRule("crowd_gathering", "异常人流聚集", true, 3, 0.70, 30),
-                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30)
+                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30),
+                createRule("stranger_detected", "陌生人员检测", true, 0, 0.45, 10),
+                createRule("leave_seat", "离座检测", false, 10, 0.60, 30),
+                createRule("stream_offline", "视频流中断", true, 10, 1.0, 30),
+                createRule("spoof_detected", "活体检测异常", true, 0, 0.70, 30),
+                createRule("deepfake_detected", "换脸检测", true, 3, 0.70, 60),
+                createRule("abnormal_sound", "异常声学事件", true, 0, 0.50, 15)
         );
         for (BehaviorRule r : rules) {
             if (behaviorRuleMapper.findAll(r.getRuleType()).isEmpty()) {

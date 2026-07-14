@@ -124,17 +124,23 @@ const activeAlertStatus = ref("全部");
 
 // ── 开发者模式（点击登录页 AI logo 进入）───────────────
 const isDevMode = ref(false);
-try { isDevMode.value = localStorage.getItem('dev_mode') === 'true'; } catch {}
+try {
+  isDevMode.value = localStorage.getItem("dev_mode") === "true";
+} catch {}
 
 const enterDevMode = () => {
-  try { localStorage.setItem('dev_mode', 'true'); } catch {}
+  try {
+    localStorage.setItem("dev_mode", "true");
+  } catch {}
   window.__DEV_MODE__ = true;
   isDevMode.value = true;
   window.location.reload();
 };
 
 const exitDevMode = () => {
-  try { localStorage.removeItem('dev_mode'); } catch {}
+  try {
+    localStorage.removeItem("dev_mode");
+  } catch {}
   window.__DEV_MODE__ = false;
   isDevMode.value = false;
   window.location.reload();
@@ -263,7 +269,8 @@ const generateAiReport = async () => {
 const getSnapshotUrl = (path) => {
   if (!path) return "";
   if (path.startsWith("http")) return path;
-  const base = window.__SMART_CLASS_CONFIG__?.NGINX_BASE || "http://39.106.209.208:9092";
+  const base =
+    window.__SMART_CLASS_CONFIG__?.NGINX_BASE || "http://39.106.209.208:9092";
   return base + path;
 };
 
@@ -282,7 +289,11 @@ const reportChart = computed(() => {
   if (!r || !r.raw || !r.raw.type_counts) return [];
   const counts = r.raw.type_counts;
   const max = Math.max(...Object.values(counts), 1);
-  return Object.entries(counts).map(([type, count]) => ({ type, count, pct: (count / max * 100).toFixed(0) }));
+  return Object.entries(counts).map(([type, count]) => ({
+    type,
+    count,
+    pct: ((count / max) * 100).toFixed(0),
+  }));
 });
 
 const exportReportPdf = () => {
@@ -474,6 +485,11 @@ function isPhoneRelated(item = {}) {
     .filter(Boolean)
     .join(" ");
   return /手机|phone/i.test(text);
+}
+
+const NOT_IMPLEMENTED_RULE_TYPES = new Set(["leave_seat", "deepfake_detected"]);
+function isRuleNotImplemented(rule) {
+  return NOT_IMPLEMENTED_RULE_TYPES.has(rule?.rule_type);
 }
 
 // SpringBoot 中的 phone_usage 已经由 AI 完成禁用区判定并确认入库。
@@ -866,8 +882,7 @@ function zoneTypeText(type) {
     {
       danger: "危险区",
       phone_forbidden: "手机禁用区",
-    }[type] ||
-    (type ? "其他区域" : "未分类")
+    }[type] || (type ? "其他区域" : "未分类")
   );
 }
 
@@ -924,9 +939,7 @@ function statusType(status) {
 }
 
 function isOnlineStatus(status) {
-  return ["online", "running", "active", "connected", true].includes(
-    status,
-  );
+  return ["online", "running", "active", "connected", true].includes(status);
 }
 
 function statusText(status) {
@@ -954,8 +967,7 @@ function statusText(status) {
       enabled: "已启用",
       disabled: "已停用",
       unknown: "未知",
-    }[status] ||
-    (status ? "未知" : "--")
+    }[status] || (status ? "未知" : "--")
   );
 }
 
@@ -1053,6 +1065,7 @@ function ruleNameText(rule) {
 }
 
 function ruleSummaryText(rule) {
+  if (isRuleNotImplemented(rule)) return "功能开发中，暂不可操作";
   const summary = ruleSummary(rule);
   const mappedSummary = {
     "Enabled only after forbidden zone confirmation": "仅在确认禁用区后生效",
@@ -1062,7 +1075,8 @@ function ruleSummaryText(rule) {
   }[summary];
 
   if (mappedSummary) return mappedSummary;
-  if (typeof summary === "string" && /[\u4e00-\u9fff]/.test(summary)) return summary;
+  if (typeof summary === "string" && /[\u4e00-\u9fff]/.test(summary))
+    return summary;
   return `${alertTypeText(rule?.rule_type)}将在满足识别条件后提醒`;
 }
 
@@ -1222,7 +1236,9 @@ function eventConfigType(item = {}) {
 }
 
 function riskBaseScore(eventType) {
-  const matched = riskScoreSettings.value.find((item) => item.type === eventType);
+  const matched = riskScoreSettings.value.find(
+    (item) => item.type === eventType,
+  );
   return Number(
     matched?.score ??
       riskScoreSettings.value.find((item) => item.type === "general")?.score ??
@@ -1260,7 +1276,9 @@ function calculateEventRiskScore(item = {}) {
     ? Math.round((confidence - 0.75) * 24)
     : 0;
   const rawScore =
-    riskBaseScore(eventConfigType(item)) + levelRiskBonus(item.level) + confidenceBonus;
+    riskBaseScore(eventConfigType(item)) +
+    levelRiskBonus(item.level) +
+    confidenceBonus;
   return Math.min(100, Math.max(1, rawScore));
 }
 
@@ -1949,7 +1967,10 @@ async function loadDashboard() {
   loadErrors.value = Object.fromEntries(
     Object.entries(results)
       .filter(([, result]) => !result.ok)
-      .map(([key, result]) => [key, userFacingError(result.error, "数据加载失败。")]),
+      .map(([key, result]) => [
+        key,
+        userFacingError(result.error, "数据加载失败。"),
+      ]),
   );
 
   streams.value = results.streams.ok
@@ -2001,7 +2022,10 @@ async function loadDashboard() {
       analysisEvents.value = normalizeList(nextEvents);
       zones.value = normalizeList(nextZones);
     } catch (error) {
-      loadErrors.value.summary = userFacingError(error, "智能分析结果加载失败。");
+      loadErrors.value.summary = userFacingError(
+        error,
+        "智能分析结果加载失败。",
+      );
     }
   }
 
@@ -2498,7 +2522,12 @@ async function saveAlertProcess() {
 onMounted(async () => {
   // 开发者模式：自动以管理员身份进入
   if (isDevMode.value) {
-    const mockUser = { id: 0, username: "dev", nickname: "开发者", role: "admin" };
+    const mockUser = {
+      id: 0,
+      username: "dev",
+      nickname: "开发者",
+      role: "admin",
+    };
     storeAuthSession("mock-dev-token", mockUser, true);
     currentUser.value = mockUser;
     isAuthenticated.value = true;
@@ -2563,7 +2592,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
     <div class="auth-visual">
       <div class="auth-brand">
-        <div class="brand-mark" @click="enterDevMode" style="cursor:pointer">AI</div>
+        <div class="brand-mark" @click="enterDevMode" style="cursor: pointer">
+          AI
+        </div>
         <span>智慧教室安全监测</span>
       </div>
       <h1>智慧教室实时行为分析与安全监测系统</h1>
@@ -2694,7 +2725,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
       <div class="auth-contract">
         <b>使用提示</b>
-        <span>教师可查看和处理课堂告警，管理员还可维护规则、人员与用户权限。</span>
+        <span
+          >教师可查看和处理课堂告警，管理员还可维护规则、人员与用户权限。</span
+        >
       </div>
     </div>
   </section>
@@ -2757,7 +2790,14 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
-          <el-tag v-if="isDevMode" type="warning" size="small" style="cursor:pointer" @click="exitDevMode">开发者模式</el-tag>
+          <el-tag
+            v-if="isDevMode"
+            type="warning"
+            size="small"
+            style="cursor: pointer"
+            @click="exitDevMode"
+            >开发者模式</el-tag
+          >
           <div class="user-chip" :title="userRoleName">
             <el-icon><User /></el-icon>
             <span>{{ userRoleName }}</span>
@@ -2805,7 +2845,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               <div class="video-toolbar" aria-label="实时监控工具">
                 <button
                   class="tool-button"
-                  :class="{ active: isVideoLive && !videoError, busy: videoReloading }"
+                  :class="{
+                    active: isVideoLive && !videoError,
+                    busy: videoReloading,
+                  }"
                   title="重新连接实时画面"
                   type="button"
                   :aria-busy="videoReloading"
@@ -2888,10 +2931,10 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                     videoReloading
                       ? "重新连接中..."
                       : videoError
-                      ? "视频不可用"
-                      : streamSwitching
-                        ? "切换中..."
-                        : "实时画面"
+                        ? "视频不可用"
+                        : streamSwitching
+                          ? "切换中..."
+                          : "实时画面"
                   }}
                 </span>
               </div>
@@ -3087,9 +3130,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 :class="alert.level"
               >
                 <div>
-                  <b>{{
-                    alertDisplayName(alert)
-                  }}</b>
+                  <b>{{ alertDisplayName(alert) }}</b>
                   <el-tag :type="statusType(alert.status)" size="small">{{
                     statusText(alert.status)
                   }}</el-tag>
@@ -3135,12 +3176,21 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <span
                     >{{ ruleSummaryText(rule) }}，阈值
                     {{ rule.threshold_seconds }} 秒，等级
-                    {{ rule.level === 'high' ? '高危' : rule.level === 'warning' ? '警告' : '提示' }}</span
+                    {{
+                      rule.level === "high"
+                        ? "高危"
+                        : rule.level === "warning"
+                          ? "警告"
+                          : "提示"
+                    }}</span
                   >
                 </div>
                 <el-switch
                   :model-value="rule.enabled"
-                  :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  :disabled="
+                    isRuleNotImplemented(rule) ||
+                    (!hasConfirmedForbiddenZone && isPhoneRelated(rule))
+                  "
                   @change="handleToggleRule(rule)"
                 />
               </article>
@@ -3281,11 +3331,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               "
             >
               <b>最新日报 — {{ latestReport.date }}</b>
-              <div style="display:flex;align-items:center;gap:8px">
+              <div style="display: flex; align-items: center; gap: 8px">
                 <span style="font-size: 12px; color: #909399">{{
                   latestReport.time
                 }}</span>
-                <el-button size="small" text @click="latestReport = null">关闭</el-button>
+                <el-button size="small" text @click="latestReport = null"
+                  >关闭</el-button
+                >
               </div>
             </div>
             <div
@@ -3299,25 +3351,106 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             ></div>
 
             <!-- 统计条形图 -->
-            <div v-if="reportChart.length > 0" style="margin:12px 0;padding:12px;background:#fff;border-radius:8px">
-              <div style="font-size:14px;font-weight:600;margin-bottom:10px;color:#1d2129">告警统计</div>
-              <div v-for="c in reportChart" :key="c.type" style="display:flex;align-items:center;gap:10px;margin:6px 0">
-                <span style="width:100px;font-size:13px;text-align:right;color:#4e5969;flex-shrink:0">{{ c.type }}</span>
-                <div style="flex:1;height:24px;background:#f2f3f5;border-radius:6px;overflow:hidden">
-                  <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
-                    <span style="color:#fff;font-size:12px;font-weight:500">{{ c.count }}</span>
+            <div
+              v-if="reportChart.length > 0"
+              style="
+                margin: 12px 0;
+                padding: 12px;
+                background: #fff;
+                border-radius: 8px;
+              "
+            >
+              <div
+                style="
+                  font-size: 14px;
+                  font-weight: 600;
+                  margin-bottom: 10px;
+                  color: #1d2129;
+                "
+              >
+                告警统计
+              </div>
+              <div
+                v-for="c in reportChart"
+                :key="c.type"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+                  margin: 6px 0;
+                "
+              >
+                <span
+                  style="
+                    width: 100px;
+                    font-size: 13px;
+                    text-align: right;
+                    color: #4e5969;
+                    flex-shrink: 0;
+                  "
+                  >{{ c.type }}</span
+                >
+                <div
+                  style="
+                    flex: 1;
+                    height: 24px;
+                    background: #f2f3f5;
+                    border-radius: 6px;
+                    overflow: hidden;
+                  "
+                >
+                  <div
+                    :style="
+                      'width:' +
+                      c.pct +
+                      '%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'
+                    "
+                  >
+                    <span
+                      style="color: #fff; font-size: 12px; font-weight: 500"
+                      >{{ c.count }}</span
+                    >
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- 告警详情（带截图 + VL 分析） -->
-            <div v-for="(a, i) in (latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
-              <div style="font-weight:bold;font-size:13px">{{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}</div>
-              <div v-if="a.snapshot_url || a.snapshotUrl" style="margin-top:6px">
-                <img :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)" style="max-width:100%;max-height:200px;border-radius:4px" @error="$event.target.style.display='none'" />
+            <div
+              v-for="(a, i) in latestReport.alerts || []"
+              :key="i"
+              style="
+                margin-top: 12px;
+                padding: 10px;
+                background: #fff;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+              "
+            >
+              <div style="font-weight: bold; font-size: 13px">
+                {{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}
               </div>
-              <div v-if="a.vl_analysis || a.vlAnalysis" style="margin-top:4px;font-size:12px;color:#555;background:#f5f7fa;padding:6px;border-radius:4px">
+              <div
+                v-if="a.snapshot_url || a.snapshotUrl"
+                style="margin-top: 6px"
+              >
+                <img
+                  :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)"
+                  style="max-width: 100%; max-height: 200px; border-radius: 4px"
+                  @error="$event.target.style.display = 'none'"
+                />
+              </div>
+              <div
+                v-if="a.vl_analysis || a.vlAnalysis"
+                style="
+                  margin-top: 4px;
+                  font-size: 12px;
+                  color: #555;
+                  background: #f5f7fa;
+                  padding: 6px;
+                  border-radius: 4px;
+                "
+              >
                 AI分析：{{ a.vl_analysis || a.vlAnalysis }}
               </div>
             </div>
@@ -3723,16 +3856,19 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <span>持续阈值（秒）</span>
                   <el-input-number
                     v-model="rule.threshold_seconds"
-                    :min="1"
+                    :min="0"
                     :max="300"
                     size="small"
-                    :disabled="!isAdmin"
+                    :disabled="!isAdmin || isRuleNotImplemented(rule)"
                     @change="handleUpdateRule(rule)"
                   />
                 </div>
                 <el-switch
                   :model-value="rule.enabled"
-                  :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
+                  :disabled="
+                    isRuleNotImplemented(rule) ||
+                    (!hasConfirmedForbiddenZone && isPhoneRelated(rule))
+                  "
                   @change="handleToggleRule(rule)"
                 />
               </article>
@@ -3910,7 +4046,9 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             <div class="panel-head">
               <div>
                 <h2>用户管理</h2>
-                <span>查看账号基本信息并调整用户角色；当前账号不能修改自身角色。</span>
+                <span
+                  >查看账号基本信息并调整用户角色；当前账号不能修改自身角色。</span
+                >
               </div>
               <el-button
                 :icon="Refresh"
@@ -4019,8 +4157,12 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
               >
                 <div>
                   <b>{{ stream.stream_name }}</b>
-                  <span>{{ stream.location || stream.remark || stream.stream_id }}</span>
-                  <span v-if="isAdmin && stream.rtmp_url">{{ stream.rtmp_url }}</span>
+                  <span>{{
+                    stream.location || stream.remark || stream.stream_id
+                  }}</span>
+                  <span v-if="isAdmin && stream.rtmp_url">{{
+                    stream.rtmp_url
+                  }}</span>
                 </div>
                 <el-tag :type="statusType(stream.status)">{{
                   statusText(stream.status)
