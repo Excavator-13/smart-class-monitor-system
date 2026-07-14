@@ -1924,8 +1924,10 @@ function onReplayReady() {
 function closeReplayDialog() {
   if (replayVideoRef.value) {
     replayVideoRef.value.pause();
-    replayVideoRef.value.src = "";
   }
+  replayUrl.value = "";
+  replayOffset.value = 0;
+  replayVideoRef.value?.load();
   replayVisible.value = false;
 }
 
