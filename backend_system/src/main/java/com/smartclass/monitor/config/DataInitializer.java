@@ -141,7 +141,7 @@ public class DataInitializer implements CommandLineRunner {
                 createRule("leave_seat", "离座检测", false, 10, 0.60, 30),
                 createRule("stream_offline", "视频流中断", true, 10, 1.0, 30),
                 createRule("spoof_detected", "活体检测异常", true, 0, 0.70, 30),
-                createRule("deepfake_detected", "换脸检测", true, 3, 0.70, 60),
+                createRule("deepfake_detected", "换脸检测", false, 3, 0.70, 60),
                 createRule("abnormal_sound", "异常声学事件", true, 0, 0.50, 15)
         );
         for (BehaviorRule r : rules) {
