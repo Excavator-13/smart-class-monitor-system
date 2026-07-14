@@ -38,6 +38,7 @@ def _find_chinese_font() -> str | None:
 
 
 _cached_font_path: str | None | bool = False
+_cached_pil_fonts: dict[int, Any] = {}  # font_size -> PIL Font 对象缓存
 
 
 def _get_chinese_font_path() -> str | None:
@@ -61,7 +62,10 @@ def draw_text(frame: np.ndarray, text: str, org: tuple[int, int], font_scale: fl
         from PIL import Image, ImageDraw, ImageFont
 
         font_size = max(12, int(font_scale * 28))
-        font = ImageFont.truetype(font_path, font_size)
+        font = _cached_pil_fonts.get(font_size)
+        if font is None:
+            font = ImageFont.truetype(font_path, font_size)
+            _cached_pil_fonts[font_size] = font
         dummy = Image.new("RGBA", (1, 1))
         bbox = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -106,15 +110,6 @@ def encode_jpeg(frame: np.ndarray) -> bytes:
     if not ok:
         raise ValueError("failed to encode jpeg")
     return buffer.tobytes()
-
-
-def save_snapshot(frame: np.ndarray, snapshot_dir: str | Path, filename: str) -> str:
-    path = Path(snapshot_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    target = path / filename
-    if not cv2.imwrite(str(target), frame):
-        raise OSError("failed to save snapshot")
-    return str(target.as_posix())
 
 
 def draw_label(frame: np.ndarray, bbox: list[int] | tuple[int, int, int, int], label: str, color: tuple[int, int, int]) -> None:

@@ -143,6 +143,12 @@ Nginx 在推流期间**自动持续录像**，无需额外接口调用：
 > - 录像文件超过 7 天会被自动清理，数据库中如有录像记录需考虑过期处理。
 > - 推流未断开时，录像文件不会生成完整回看文件。
 
+#### 3.3.1 异常事件录像解析
+
+- 异常事件回放只关联 `recording_file.source_type = 'segment'` 且 `file_ext = 'mp4'` 的切片，完整 `nginx_record` 仅作为完整录像备份，不参与 `/alerts` 的 `record_url` 动态填充。
+- `recording_file.duration_seconds` 使用 `ffprobe` 读取的 MP4 实际媒体时长；`ended_at` 按实际时长计算并向上覆盖到秒，不能固定按 30 秒登记，因为 `-c copy` 的实际切片边界会受关键帧影响。
+- `alert_event.record_path` 为空时，`GET /alerts` 和 `GET /alerts/{id}` 根据 `stream_id + occurred_at` 查询包含事件时刻的切片，并临时返回 `/records/{date}/{filename}.mp4` 和 `event_time_offset`。
+
 ### 3.4 截图文件
 
 | 项目 | 说明 |

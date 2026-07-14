@@ -168,7 +168,7 @@ public class DataInitializer implements CommandLineRunner {
         List<BehaviorRule> rules = Arrays.asList(
                 createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "warning"),
                 createRule("fire_detected", "明火检测", true, 3, 0.80, 20, "high"),
-                createRule("fall_detected", "摔倒检测", true, 4, 0.78, 20, "high"),
+                createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20, "high"),
                 createRule("head_down", "长时间低头", true, 6, 0.70, 60, "warning"),
                 createRule("stranger_detected", "陌生人检测", true, 3, 0.72, 30, "warning"),
                 createRule("zone_intrusion", "区域入侵检测", true, 5, 0.75, 30, "warning")

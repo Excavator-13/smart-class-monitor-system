@@ -73,7 +73,7 @@ class FakeBehaviorService:
     def detect_objects(self, frame):
         return []
 
-    def detect_from_objects(self, stream_id, objects, rules):
+    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None):
         return []
 
 

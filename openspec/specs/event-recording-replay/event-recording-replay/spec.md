@@ -41,14 +41,24 @@ When the video player has loaded the recording segment's metadata, it SHALL auto
 
 ### Requirement: Video player dialog cleanup
 
-When the video player dialog is closed, the video SHALL be paused and the source released to free network and decode resources.
+When the video player dialog is closed, the video SHALL be paused and both the reactive replay state and media resource SHALL be released so the same URL can be bound again.
 
 #### Scenario: Dialog close pauses and releases video
 
 - **GIVEN** the video player dialog is open and the video is playing
 - **WHEN** the user closes the dialog
 - **THEN** `video.pause()` SHALL be called
-- **AND** `video.src` SHALL be set to `""` to release the resource
+- **AND** reactive `replayUrl` SHALL be set to `""`
+- **AND** `replayOffset` SHALL be reset to `0`
+- **AND** the video element SHALL release the current media resource
+
+#### Scenario: Two alerts share and reopen one segment
+
+- **GIVEN** two alerts have the same `record_url` and different `event_time_offset` values
+- **AND** the user has played and closed the first alert
+- **WHEN** the user opens the second alert
+- **THEN** the video SHALL reload the shared segment URL
+- **AND** the player SHALL seek to the second alert's offset
 
 ### Requirement: normalizeAlert maps event_time_offset
 

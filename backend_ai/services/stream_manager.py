@@ -18,16 +18,20 @@ class StreamState:
     last_frame_at: float | None = None
     last_error: str | None = None
     frame: np.ndarray | None = None
+    failure_started_at: float | None = None
+    offline_alerted: bool = False
 
 
 class StreamManager:
-    def __init__(self, config_client: Any, offline_after_seconds: float = 10.0, reconnect_interval_seconds: float = 3.0):
+    def __init__(self, config_client: Any, offline_after_seconds: float = 10.0, reconnect_interval_seconds: float = 3.0, frame_skip: int = 3):
         self.config_client = config_client
         self.offline_after_seconds = offline_after_seconds
         self.reconnect_interval_seconds = reconnect_interval_seconds
+        self.frame_skip = frame_skip
         self._states: dict[str, StreamState] = {}
         self._captures: dict[str, Any] = {}
         self._threads: dict[str, threading.Thread] = {}
+        self._frame_counters: dict[str, int] = {}
         self._stop = threading.Event()
         self._lock = threading.RLock()
 
@@ -50,11 +54,11 @@ class StreamManager:
     def _read_loop(self, stream_id: str) -> None:
         frame_count = 0
         fps_window_start = time.time()
+        skip_counter = 0
         while not self._stop.is_set():
             state = self._states[stream_id]
             if not state.rtmp_url:
-                state.online = False
-                state.last_error = "missing rtmp_url"
+                self._mark_unavailable(state, "missing rtmp_url")
                 time.sleep(self.reconnect_interval_seconds)
                 continue
 
@@ -63,18 +67,21 @@ class StreamManager:
                 cap = cv2.VideoCapture(state.rtmp_url)
                 self._captures[stream_id] = cap
                 if not cap.isOpened():
-                    state.online = False
-                    state.last_error = "video stream read failed"
+                    self._mark_unavailable(state, "video stream open failed")
                     time.sleep(self.reconnect_interval_seconds)
                     continue
 
             ok, frame = cap.read()
             now = time.time()
             if not ok or frame is None:
-                state.online = False
-                state.last_error = "video stream read failed"
+                self._mark_unavailable(state, "video stream read failed", now=now)
                 cap.release()
                 time.sleep(self.reconnect_interval_seconds)
+                continue
+
+            # 帧跳过：每 frame_skip 帧才更新一次可消费帧
+            skip_counter += 1
+            if skip_counter % self.frame_skip != 0:
                 continue
 
             with self._lock:
@@ -82,6 +89,8 @@ class StreamManager:
                 state.online = True
                 state.last_frame_at = now
                 state.last_error = None
+                state.failure_started_at = None
+                state.offline_alerted = False
 
             frame_count += 1
             elapsed = now - fps_window_start
@@ -105,11 +114,44 @@ class StreamManager:
         state = self.ensure_stream(stream_id) or self._states.get(stream_id)
         if not state:
             return None
-        if state.last_frame_at and time.time() - state.last_frame_at > self.offline_after_seconds:
+        now = time.time()
+        with self._lock:
+            if state.online and state.last_frame_at and now - state.last_frame_at > self.offline_after_seconds:
+                self._mark_unavailable(
+                    state,
+                    "video stream frame timeout",
+                    now=state.last_frame_at,
+                )
+            if not state.online:
+                return None
+            return None if state.frame is None else state.frame.copy()
+
+    def should_emit_offline_alert(self, stream_id: str, now: float | None = None) -> bool:
+        """Return true once when one continuous unavailable period reaches the timeout."""
+        current = time.time() if now is None else now
+        with self._lock:
+            state = self._states.get(stream_id)
+            if state is None or state.failure_started_at is None:
+                return False
+            if current - state.failure_started_at < self.offline_after_seconds:
+                return False
+            if state.offline_alerted:
+                return False
+            state.offline_alerted = True
+            return True
+
+    def _mark_unavailable(
+        self,
+        state: StreamState,
+        error: str,
+        now: float | None = None,
+    ) -> None:
+        current = time.time() if now is None else now
+        with self._lock:
             state.online = False
-        if not state.online:
-            return None
-        return None if state.frame is None else state.frame.copy()
+            state.last_error = error
+            if state.failure_started_at is None:
+                state.failure_started_at = current
 
     def status(self) -> list[dict[str, Any]]:
         stream_ids = set(self.config_client.cache.streams.keys()) | set(self._states.keys())

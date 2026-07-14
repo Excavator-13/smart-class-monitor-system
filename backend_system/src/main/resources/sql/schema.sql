@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `danger_zone` (
     `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '区域主键',
     `stream_id`         VARCHAR(128)    NOT NULL COMMENT '关联 video_stream.stream_id',
     `zone_name`         VARCHAR(128)    NOT NULL COMMENT '区域名称',
-    `zone_type`         VARCHAR(64)     NOT NULL COMMENT 'danger / seat / phone_forbidden / roi',
+    `zone_type`         VARCHAR(64)     NOT NULL COMMENT 'danger / phone_forbidden',
     `shape_type`        VARCHAR(32)     NOT NULL DEFAULT 'polygon' COMMENT '形状类型',
     `coordinates`       JSON            NOT NULL COMMENT '归一化坐标（0-1 比例）',
     `threshold_seconds` INT             DEFAULT NULL COMMENT '区域停留阈值（秒）',

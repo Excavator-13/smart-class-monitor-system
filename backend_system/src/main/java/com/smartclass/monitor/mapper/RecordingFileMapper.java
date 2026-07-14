@@ -39,6 +39,8 @@ public interface RecordingFileMapper {
 
     @Select("SELECT * FROM recording_file WHERE deleted_at IS NULL " +
             "AND stream_id = #{streamId} " +
+            "AND source_type = 'segment' " +
+            "AND file_ext = 'mp4' " +
             "AND started_at <= #{timestamp} " +
             "AND (ended_at IS NULL OR ended_at >= #{timestamp}) " +
             "ORDER BY started_at DESC LIMIT 1")

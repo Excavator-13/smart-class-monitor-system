@@ -4,9 +4,14 @@ import os
 from pathlib import Path
 from typing import Any
 
+import requests
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, Response, request, send_from_directory
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
+from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.dingtalk_service import start_stream, trigger_alert
@@ -26,16 +31,40 @@ from backend_ai.utils.image_utils import blank_frame, encode_jpeg
 from backend_ai.utils.response import error_response, json_response
 
 
-BASE_DIR = Path(__file__).resolve().parent
-
-load_dotenv(BASE_DIR / ".env")
-
-
 def load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as fh:
         return yaml.safe_load(fh) or {}
+
+
+def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None):
+    try:
+        headers = {"X-Internal-Token": internal_token} if internal_token else None
+        resp = requests.get(f"{spring_base_url}/api/settings", headers=headers, timeout=5)
+        if not resp.ok:
+            return
+        data = resp.json()
+        from backend_ai.services import dingtalk_service as ds
+        contacts = data.get("contacts", [])
+        new_persons = {}
+        for c in contacts:
+            name = c.get("name", "")
+            mobile = c.get("mobile", "")
+            if name and mobile:
+                new_persons[name] = {"name": name, "mobile": mobile}
+        if new_persons:
+            ds.PERSONS.clear()
+            ds.PERSONS.update(new_persons)
+        responsible = data.get("responsible", "")
+        if responsible:
+            ds.PRIMARY = responsible
+        interval = data.get("alertInterval")
+        if interval:
+            ds.STEP_TIMEOUT = int(interval)
+        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}")
+    except Exception:
+        print("[DingTalk] 从 Spring Boot 恢复设置失败，使用默认值")
 
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
@@ -181,20 +210,27 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     snapshot_root = BASE_DIR / "static" / "snapshots"
 
+    snapshot_remote = app_config.get("snapshot_remote", {})
+    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
+    nginx_base_url = ""
+    if remote_host:
+        nginx_port = os.environ.get("SNAPSHOT_NGINX_PORT", "9092")
+        nginx_base_url = f"http://{remote_host}:{nginx_port}"
+    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
+    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
+    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
+    _restore_dingtalk_settings(spring_base_url, internal_token)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
         config_client=config_client,
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
+        frame_skip=int(stream_cfg.get("frame_skip", 3)),
     )
-    snapshot_remote = app_config.get("snapshot_remote", {})
-    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
-    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
-    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
-    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
     analysis_service = AnalysisService(
         face_service=face_service,
@@ -353,7 +389,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             while True:
                 frame = stream_manager.get_frame(stream_id)
                 if frame is None:
-                    analysis_service.observe_stream_offline(stream_id)
+                    if stream_manager.should_emit_offline_alert(stream_id):
+                        analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
                 elif annotate:
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
@@ -365,11 +402,6 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
-    @app.get("/snapshots/<path:filename>")
-    def serve_snapshot(filename: str):
-        snapshot_dir = BASE_DIR / "static" / "snapshots"
-        return send_from_directory(snapshot_dir, filename)
-
     @app.post("/api/contacts/sync")
     def contacts_sync():
         body = request.get_json(silent=True) or {}
@@ -379,7 +411,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             if c.get("name") and c.get("mobile"):
                 new_persons[c["name"]] = {"name": c["name"], "mobile": c["mobile"]}
         from backend_ai.services import dingtalk_service as ds
-        ds.PERSONS = new_persons
+        ds.PERSONS.clear()
+        ds.PERSONS.update(new_persons)
         r = body.get("responsible", "")
         if r: ds.PRIMARY = r
         i = body.get("alertInterval")

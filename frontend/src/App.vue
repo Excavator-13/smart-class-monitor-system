@@ -116,6 +116,24 @@ const riskScoreSettings = ref([]);
 const activeStreamId = ref("");
 const activeAlertStatus = ref("全部");
 
+// ── 开发者模式（点击登录页 AI logo 进入）───────────────
+const isDevMode = ref(false);
+try { isDevMode.value = localStorage.getItem('dev_mode') === 'true'; } catch {}
+
+const enterDevMode = () => {
+  try { localStorage.setItem('dev_mode', 'true'); } catch {}
+  window.__DEV_MODE__ = true;
+  isDevMode.value = true;
+  window.location.reload();
+};
+
+const exitDevMode = () => {
+  try { localStorage.removeItem('dev_mode'); } catch {}
+  window.__DEV_MODE__ = false;
+  isDevMode.value = false;
+  window.location.reload();
+};
+
 // ── 钉钉 & AI 日报设置（存 localStorage）─────────────────
 const SETTINGS_KEY = "smart_class_alert_settings";
 const loadSettings = () => {
@@ -231,6 +249,31 @@ const generateAiReport = async () => {
   }
 };
 
+const getSnapshotUrl = (path) => {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  const base = window.__SMART_CLASS_CONFIG__?.NGINX_BASE || "http://39.106.209.208:9092";
+  return base + path;
+};
+
+const renderMd = (text) => {
+  if (!text) return "";
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/## (.+)/g, "<h3>$1</h3>")
+    .replace(/### (.+)/g, "<h4>$1</h4>")
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/\n/g, "<br>");
+};
+
+const reportChart = computed(() => {
+  const r = alertSettings.value.latestReport;
+  if (!r || !r.raw || !r.raw.type_counts) return [];
+  const counts = r.raw.type_counts;
+  const max = Math.max(...Object.values(counts), 1);
+  return Object.entries(counts).map(([type, count]) => ({ type, count, pct: (count / max * 100).toFixed(0) }));
+});
+
 const exportReportPdf = () => {
   const report = alertSettings.value.latestReport;
   if (!report) return;
@@ -240,7 +283,7 @@ const exportReportPdf = () => {
       const analysis = a.vl_analysis || a.vlAnalysis || "";
       return `<div style="page-break-inside:avoid;margin-bottom:20px;border:1px solid #ddd;padding:12px;border-radius:6px">
       <h4>${a.alertType || a.type || ""} — ${a.stream_id || a.streamId || ""}</h4>
-      ${snap ? `<img src="${snap}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" onerror="this.style.display='none'"/>` : ""}
+      ${snap ? `<img src="${getSnapshotUrl(snap)}" style="max-width:100%;max-height:300px;display:block;margin:8px 0" />` : ""}
       ${analysis ? `<p style="color:#555;font-size:13px">AI分析：${analysis}</p>` : ""}
     </div>`;
     })
@@ -253,7 +296,7 @@ const exportReportPdf = () => {
     @media print{body{padding:0}}
   </style></head><body>
     <h1>智慧教室安防日报 — ${report.date}</h1>
-    <h2>AI 总结</h2><div class="summary">${report.summary || ""}</div>
+    <h2>AI 总结</h2><div class="summary">${renderMd(report.summary || "")}</div>
     <h2>告警详情（${report.alertsCount || items.length} 条）</h2>${items}
     <p style="text-align:center;color:#999;margin-top:30px">智慧教室实时行为分析与安全监测系统</p>
   </body></html>`;
@@ -338,9 +381,7 @@ const statusOptions = [
 
 const zoneTypeOptions = [
   { label: "危险区", value: "danger" },
-  { label: "座位区", value: "seat" },
   { label: "手机禁用区", value: "phone_forbidden" },
-  { label: "识别区域", value: "roi" },
 ];
 
 const currentStream = computed(() => {
@@ -815,9 +856,7 @@ function zoneTypeText(type) {
   return (
     {
       danger: "危险区",
-      seat: "座位区",
       phone_forbidden: "手机禁用区",
-      roi: "识别区域",
     }[type] ||
     (type ? "其他区域" : "未分类")
   );
@@ -1985,8 +2024,10 @@ function onReplayReady() {
 function closeReplayDialog() {
   if (replayVideoRef.value) {
     replayVideoRef.value.pause();
-    replayVideoRef.value.src = "";
   }
+  replayUrl.value = "";
+  replayOffset.value = 0;
+  replayVideoRef.value?.load();
   replayVisible.value = false;
 }
 
@@ -2395,6 +2436,18 @@ async function saveAlertProcess() {
 }
 
 onMounted(async () => {
+  // 开发者模式：自动以管理员身份进入
+  if (isDevMode.value) {
+    const mockUser = { id: 0, username: "dev", nickname: "开发者", role: "admin" };
+    storeAuthSession("mock-dev-token", mockUser, true);
+    currentUser.value = mockUser;
+    isAuthenticated.value = true;
+    activePage.value = "monitor";
+    await loadDashboard();
+    startAlertRefresh();
+    return;
+  }
+
   if (!isAuthenticated.value) return;
   try {
     currentUser.value = await fetchCurrentUser();
@@ -2445,7 +2498,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
     <div class="auth-visual">
       <div class="auth-brand">
-        <div class="brand-mark">AI</div>
+        <div class="brand-mark" @click="enterDevMode" style="cursor:pointer">AI</div>
         <span>智慧教室安全监测</span>
       </div>
       <h1>智慧教室实时行为分析与安全监测系统</h1>
@@ -2639,6 +2692,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
+          <el-tag v-if="isDevMode" type="warning" size="small" style="cursor:pointer" @click="exitDevMode">开发者模式</el-tag>
           <div class="user-chip" :title="userRoleName">
             <el-icon><User /></el-icon>
             <span>{{ userRoleName }}</span>
@@ -3173,8 +3227,32 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 white-space: pre-wrap;
               "
             >
-              {{ alertSettings.latestReport.summary }}
+              <p v-html="renderMd(alertSettings.latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
             </p>
+
+            <!-- 统计条形图 -->
+            <div v-if="reportChart.length > 0" style="margin:12px 0;padding:12px;background:#fff;border-radius:8px">
+              <div style="font-size:14px;font-weight:600;margin-bottom:10px;color:#1d2129">告警统计</div>
+              <div v-for="c in reportChart" :key="c.type" style="display:flex;align-items:center;gap:10px;margin:6px 0">
+                <span style="width:100px;font-size:13px;text-align:right;color:#4e5969;flex-shrink:0">{{ c.type }}</span>
+                <div style="flex:1;height:24px;background:#f2f3f5;border-radius:6px;overflow:hidden">
+                  <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
+                    <span style="color:#fff;font-size:12px;font-weight:500">{{ c.count }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 告警详情（带截图 + VL 分析） -->
+            <div v-for="(a, i) in (alertSettings.latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
+              <div style="font-weight:bold;font-size:13px">{{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}</div>
+              <div v-if="a.snapshot_url || a.snapshotUrl" style="margin-top:6px">
+                <img :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)" style="max-width:100%;max-height:200px;border-radius:4px" @error="$event.target.style.display='none'" />
+              </div>
+              <div v-if="a.vl_analysis || a.vlAnalysis" style="margin-top:4px;font-size:12px;color:#555;background:#f5f7fa;padding:6px;border-radius:4px">
+                AI分析：{{ a.vl_analysis || a.vlAnalysis }}
+              </div>
+            </div>
           </section>
         </div>
 
@@ -4157,9 +4235,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           <el-form-item label="区域类型">
             <el-select v-model="zoneForm.zone_type" style="width: 100%">
               <el-option label="危险区" value="danger" />
-              <el-option label="座位区" value="seat" />
               <el-option label="手机禁用区" value="phone_forbidden" />
-              <el-option label="识别区域" value="roi" />
             </el-select>
           </el-form-item>
           <el-form-item label="停留阈值（秒）">

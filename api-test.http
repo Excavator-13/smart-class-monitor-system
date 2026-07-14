@@ -108,8 +108,8 @@ Authorization: Bearer {{jwt}}
 Content-Type: application/json
 
 {
-  "zone_name": "测试座位区",
-  "zone_type": "seat",
+  "zone_name": "测试手机禁用",
+  "zone_type": "phone_forbidden",
   "threshold_seconds": 5,
   "safe_distance": 0,
   "enabled": true
@@ -221,7 +221,7 @@ Content-Type: application/json
 
 ### 30. 告警详情（验证 eventTimeOffset 字段存在、recordUrl 动态填充）
 # 替换 alertId 为上面创建的告警 ID
-GET {{baseUrl}}/alerts/8
+GET {{baseUrl}}/alerts/7
 Authorization: Bearer {{jwt}}
 
 ### 31. 录像列表（确认 recording_file 中有匹配记录，供动态填充查库）

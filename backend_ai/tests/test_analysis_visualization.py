@@ -19,7 +19,7 @@ class FakeBehaviorService:
         self.detect_called = True
         return [{"class_name": "person", "track_id": "p1", "bbox": [10, 10, 30, 40], "confidence": 0.9}]
 
-    def detect_from_objects(self, stream_id, objects, rules):
+    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None):
         return []
 
 
@@ -261,10 +261,10 @@ def _analyze_confirmed_event(tmp_path, event_type):
     return alert_client.events[0]
 
 
-def test_only_danger_zone_intrusion_saves_snapshot(tmp_path):
+def test_snapshot_event_types_save_snapshots(tmp_path):
     intrusion = _analyze_confirmed_event(tmp_path, "danger_zone_intrusion")
     phone = _analyze_confirmed_event(tmp_path, "phone_usage")
 
     assert intrusion["snapshot_path"].startswith("/snapshots/")
-    assert phone["snapshot_path"] is None
-    assert len(list(tmp_path.rglob("*.jpg"))) == 1
+    assert phone["snapshot_path"].startswith("/snapshots/")
+    assert len(list(tmp_path.rglob("*.jpg"))) == 2

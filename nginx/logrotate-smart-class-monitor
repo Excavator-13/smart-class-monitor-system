@@ -1,0 +1,10 @@
+/var/log/flv2mp4_error.log /var/log/flv2mp4.log /var/log/clean_records.log {
+    su root root
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
