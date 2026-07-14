@@ -237,7 +237,7 @@ const generateAiReport = async () => {
     }));
     let report;
     try {
-      const resp = await fetch("http://127.0.0.1:8080/report/generate", {
+      const resp = await fetch("/api/report/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(alertsData),
@@ -1674,11 +1674,15 @@ async function handleUpdateRule(rule) {
 
 async function loadLatestReport() {
   try {
-    const resp = await fetch("http://127.0.0.1:8080/report/latest");
+    const resp = await fetch("/api/report/latest");
     if (resp.ok) {
       const data = await resp.json();
       if (data && data.date) {
-        latestReport.value = data;
+        // 只显示今天的日报，过滤历史缓存
+        const today = new Date().toISOString().slice(0, 10);
+        if (data.date === today) {
+          latestReport.value = data;
+        }
       }
     }
   } catch {}
