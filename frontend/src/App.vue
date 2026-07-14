@@ -1783,6 +1783,21 @@ function navigateToPage(page) {
   if (page === "users" && !isAdmin.value) return;
   activePage.value = page;
   if (page === "users") loadUsers();
+  if (page === "system") refreshSystemPage();
+}
+
+async function refreshSystemPage() {
+  try {
+    const [, healthResult, modelResult] = await Promise.all([
+      refreshStreamStatuses(),
+      fetchSystemHealth().catch(() => null),
+      fetchModelStatus().catch(() => null),
+    ]);
+    if (healthResult) health.value = normalizeHealth(healthResult);
+    if (modelResult) modelStatus.value = modelResult;
+  } catch {
+    /* best-effort */
+  }
 }
 
 function toggleRuleOverlay() {
