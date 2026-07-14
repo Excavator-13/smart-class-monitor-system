@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from backend_ai.services.config_client import parse_json_field
-from backend_ai.utils.geometry import parse_polygon_coordinates, point_in_polygon
+from backend_ai.utils.geometry import bbox_center_normalized, parse_polygon_coordinates, point_in_polygon
 
 
 def _iou_like_relation(person_bbox: list[float], object_bbox: list[float]) -> bool:
@@ -112,7 +112,7 @@ class BehaviorService:
                 )
         return detections
 
-    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]], phone_forbidden_zones: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    def detect_from_objects(self, stream_id: str, objects: list[dict[str, Any]], rules: dict[str, dict[str, Any]], phone_forbidden_zones: list[dict[str, Any]] | None = None, frame_size: tuple[int, int] = (1, 1)) -> list[dict[str, Any]]:
         persons = [obj for obj in objects if obj.get("class_name") in {"person", "student"}]
         phones = [obj for obj in objects if obj.get("class_name") in {"phone", "cell phone", "mobile_phone"}]
         detections: list[dict[str, Any]] = []
@@ -126,7 +126,8 @@ class BehaviorService:
                         continue
                     if not _iou_like_relation(person["bbox"], phone["bbox"]):
                         continue
-                    phone_center = _bbox_center(phone["bbox"])
+                    width, height = frame_size
+                    phone_center = bbox_center_normalized(phone["bbox"], width=width, height=height)
                     matched_zone = _find_matching_zone(phone_center, phone_forbidden_zones)
                     if matched_zone is None:
                         continue

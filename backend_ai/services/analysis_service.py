@@ -37,6 +37,9 @@ class AnalysisService:
         "spoof_detected",
         "deepfake_detected",
         "flame_detected",
+        "danger_zone_intrusion",
+        "danger_zone_stay",
+        "danger_zone_approach",
     }
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
 
@@ -61,6 +64,7 @@ class AnalysisService:
     def analyze_frame(self, stream_id: str, frame: np.ndarray, modules: set[str] | None = None, objects: list[dict[str, Any]] | None = None, audio_chunk: np.ndarray | None = None) -> list[dict[str, Any]]:
         enabled = modules or {"face", "zone", "behavior"}
         detected: list[dict[str, Any]] = []
+        height, width = frame.shape[:2]
 
         if "face" in enabled:
             started = time.perf_counter()
@@ -95,7 +99,7 @@ class AnalysisService:
 
         if "behavior" in enabled:
             rules = {k: v for k, v in self.config_client.cache.rules.items()}
-            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules, phone_forbidden_zones=phone_forbidden_zones)
+            behavior_detections = self.behavior_service.detect_from_objects(stream_id, object_list, rules, phone_forbidden_zones=phone_forbidden_zones, frame_size=(width, height))
             detected.extend(behavior_detections)
             self._draw_detections(frame, behavior_detections, color=(0, 255, 255))
 
@@ -110,6 +114,7 @@ class AnalysisService:
                 persons,
                 danger_zones,
                 self.config_client.get_rule("danger_zone"),
+                frame_size=(width, height),
             )
             detected.extend(zone_detections)
             self._draw_detections(frame, zone_detections, color=(0, 0, 255))
@@ -227,6 +232,9 @@ class AnalysisService:
                     "spoof_detected": "Spoof detected",
                     "deepfake_detected": "Deepfake detected",
                     "flame_detected": "Fire",
+                    "danger_zone_intrusion": "Danger zone intrusion",
+                    "danger_zone_stay": "Danger zone stay",
+                    "danger_zone_approach": "Danger zone approach",
                 }.get(event_type, event_type)
             label_parts = [str(label)]
             zone = item.get("zone") or {}

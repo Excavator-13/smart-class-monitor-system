@@ -1,7 +1,7 @@
 device: auto
 models:
   face:
-    enabled: false
+    enabled: true
     provider: insightface
     name: buffalo_l
     providers:
@@ -21,12 +21,13 @@ models:
     provider: rule
     safe_distance: 0.05
   fire:
-    enabled: false
+    enabled: true
     provider: ultralytics
     weights: models/yolo/yolo_fire.pt
     confidence_threshold: 0.25
     max_detections: 20
     min_bbox_area: 1000
+    allowed_classes: [fire, flame, 火, 火焰]
     cooldown_seconds: 10
   anti_spoof:
     enabled: false

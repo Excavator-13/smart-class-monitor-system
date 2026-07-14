@@ -2396,3 +2396,24 @@ to {
     transform: rotate(360deg);
 }
 }</style><!----></template></yd-image-ocr><div><iframe id="print-1783410687377" name="printIframe" style="position: absolute; width: 1200px; height: 840px; top: 64px; left: -1300px; z-index: 3; background: rgb(255, 255, 255); display: none;" src="./AI服务详细设计文档_files/saved_resource(10).html"></iframe></div><div></div><div class="global-overlay-container disabled-contextmenu"></div><div class="global-modal-container"></div><div style="height: 0px; overflow: hidden;">rangeDom</div><div class="gl-security-container"><div class="scs-bhvr"><div class="light-security-container"></div><div class="dark-security-container"></div></div></div><div style="position: absolute; top: 0px; left: 0px; width: 100%;"><div></div></div></body></html>
+# 2026-07-14 检测链路稳定性补充
+
+## 帧新鲜度与断流恢复
+
+- `StreamManager` 为每个可消费帧分配单调递增的 `frame_sequence`。
+- 同一个 `(stream_id, frame_sequence)` 在一个 AI 进程内只允许一次消费者推进事件分析，避免 MJPEG 重复轮询或多浏览器导致同一帧被反复计时、截图和入库。
+- 首次读取失败会立即清除可分析缓存帧。随后读到的帧先进入恢复候选，只有连续成功达到 `stream.recovery_after_seconds` 才恢复分析；候选期间不会清除当前离线周期或生成其他异常。
+
+## 区域坐标约定
+
+- 前端区域坐标继续使用 0–1 归一化值。
+- YOLO 返回的目标框保持像素坐标，供视频画框和事件 `target.bbox` 返回。
+- 手机框中心、人员框脚点在几何匹配前根据当前视频宽高归一化，再与区域多边形比较。
+- `phone_usage` 和危险区入侵事件命中后均返回目标像素框和区域信息；危险区事件参与实时画框，确认后显示左上角告警提示。
+
+## 明火误报控制
+
+- AI 事件名仍为 `flame_detected`，同时兼容 SpringBoot 当前规则名 `fire_detected`。
+- 有效置信度为模型配置 `confidence_threshold` 与启用规则阈值的较大值；规则禁用时不生成明火业务事件。
+- 当权重提供类别名称时，仅接受 `model.yaml` 中 `allowed_classes` 配置的火焰类别，其他高置信度类别也会被丢弃。
+- 达到置信度的检测仍需持续满足规则的 `threshold_seconds` 后才确认告警。
