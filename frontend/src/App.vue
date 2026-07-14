@@ -115,6 +115,24 @@ const riskScoreSettings = ref([]);
 const activeStreamId = ref("");
 const activeAlertStatus = ref("全部");
 
+// ── 开发者模式（点击登录页 AI logo 进入）───────────────
+const isDevMode = ref(false);
+try { isDevMode.value = localStorage.getItem('dev_mode') === 'true'; } catch {}
+
+const enterDevMode = () => {
+  try { localStorage.setItem('dev_mode', 'true'); } catch {}
+  window.__DEV_MODE__ = true;
+  isDevMode.value = true;
+  window.location.reload();
+};
+
+const exitDevMode = () => {
+  try { localStorage.removeItem('dev_mode'); } catch {}
+  window.__DEV_MODE__ = false;
+  isDevMode.value = false;
+  window.location.reload();
+};
+
 // ── 钉钉 & AI 日报设置（存 localStorage）─────────────────
 const SETTINGS_KEY = "smart_class_alert_settings";
 const loadSettings = () => {
@@ -2332,6 +2350,18 @@ async function saveAlertProcess() {
 }
 
 onMounted(async () => {
+  // 开发者模式：自动以管理员身份进入
+  if (isDevMode.value) {
+    const mockUser = { id: 0, username: "dev", nickname: "开发者", role: "admin" };
+    storeAuthSession("mock-dev-token", mockUser, true);
+    currentUser.value = mockUser;
+    isAuthenticated.value = true;
+    activePage.value = "monitor";
+    await loadDashboard();
+    startAlertRefresh();
+    return;
+  }
+
   if (!isAuthenticated.value) return;
   try {
     currentUser.value = await fetchCurrentUser();
@@ -2382,7 +2412,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
     <div class="auth-visual">
       <div class="auth-brand">
-        <div class="brand-mark">AI</div>
+        <div class="brand-mark" @click="enterDevMode" style="cursor:pointer">AI</div>
         <span>智慧教室安全监测</span>
       </div>
       <h1>智慧教室实时行为分析与安全监测系统</h1>
@@ -2576,6 +2606,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
           </button>
           <el-button :icon="Refresh" @click="loadDashboard">刷新</el-button>
+          <el-tag v-if="isDevMode" type="warning" size="small" style="cursor:pointer" @click="exitDevMode">开发者模式</el-tag>
           <div class="user-chip" :title="userRoleName">
             <el-icon><User /></el-icon>
             <span>{{ userDisplayName }}</span>
