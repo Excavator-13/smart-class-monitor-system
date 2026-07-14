@@ -13,8 +13,8 @@ public class ZoneCreateRequest {
     @NotBlank @Schema(description = "区域名称", example = "讲台危险区")
     private String zoneName;
 
-    @NotBlank @Schema(description = "区域类型: danger/seat/phone_forbidden/roi", example = "danger")
-    @Pattern(regexp = "^(danger|seat|phone_forbidden|roi)$", message = "区域类型必须为 danger、seat、phone_forbidden 或 roi")
+    @NotBlank @Schema(description = "区域类型: danger/phone_forbidden", example = "danger")
+    @Pattern(regexp = "^(danger|phone_forbidden)$", message = "区域类型必须为 danger 或 phone_forbidden")
     private String zoneType;
 
     @Schema(description = "归一化坐标 JSON (0-1 比例)", example = "[{\"x\":0.1,\"y\":0.2},{\"x\":0.5,\"y\":0.2},{\"x\":0.5,\"y\":0.5},{\"x\":0.1,\"y\":0.5}]")

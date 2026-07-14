@@ -50,6 +50,16 @@ nginx:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
 
+# AI 日报配置
+report:
+  qwen:
+    url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+    key: ${QWEN_API_KEY:}
+    model: ${QWEN_MODEL:qwen3.7-plus}
+  ai-enabled: ${REPORT_AI_ENABLED:true}
+  snapshot-base-url: ${SNAPSHOT_BASE_URL:http://39.106.209.208:9092}
+  data-dir: ${REPORT_DATA_DIR:data/reports}
+
 # springdoc-openapi (Swagger) 配置 —— 分组由 SwaggerConfig.java 的 GroupedOpenApi Bean 定义
 springdoc:
   api-docs:

@@ -21,7 +21,7 @@ class FakeSession:
         if url.endswith("/streams"):
             return FakeResponse({"data": {"items": [{"stream_id": "classroom_01", "rtmp_url": "rtmp://x", "status": "enabled"}]}})
         if url.endswith("/zones"):
-            return FakeResponse({"data": [{"zone_id": 1, "stream_id": params["stream_id"], "enabled": True}]})
+            return FakeResponse({"data": [{"zone_id": 1, "stream_id": params.get("streamId", params.get("stream_id")), "enabled": True}]})
         if url.endswith("/rules"):
             return FakeResponse({"data": [{"rule_type": "phone_usage", "enabled": True, "threshold_seconds": 3}]})
         if url.endswith("/students/face-features"):
@@ -57,4 +57,3 @@ def test_internal_token_header_is_sent():
     client.load_streams()
 
     assert session.calls[0][3] == {"X-Internal-Token": "secret"}
-

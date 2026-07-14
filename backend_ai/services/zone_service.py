@@ -13,6 +13,7 @@ from backend_ai.utils.geometry import (
 
 class ZoneService:
     def detect(self, stream_id: str, persons: list[dict[str, Any]], zones: list[dict[str, Any]], rule: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        danger_zones = [z for z in zones if z.get("zone_type") == "danger"]
         detections: list[dict[str, Any]] = []
         config = parse_json_field((rule or {}).get("config_json"), {})
         safe_distance = float(config.get("safe_distance", 0.05))
@@ -22,7 +23,7 @@ class ZoneService:
                 continue
             foot = bbox_foot_point(bbox)
             track_id = person.get("track_id") or f"person_{len(detections) + 1}"
-            for zone in zones:
+            for zone in danger_zones:
                 polygon = parse_polygon_coordinates(zone.get("coordinates") or [])
                 if len(polygon) < 3:
                     continue

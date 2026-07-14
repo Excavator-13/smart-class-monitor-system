@@ -9,7 +9,7 @@ public class ZoneUpdateRequest {
     @Schema(description = "区域名称", example = "讲台危险区")
     private String zoneName;
 
-    @Pattern(regexp = "^(danger|seat|phone_forbidden|roi)$", message = "区域类型必须为 danger、seat、phone_forbidden 或 roi")
+    @Pattern(regexp = "^(danger|phone_forbidden)$", message = "区域类型必须为 danger 或 phone_forbidden")
     @Schema(description = "区域类型", example = "danger")
     private String zoneType;
 

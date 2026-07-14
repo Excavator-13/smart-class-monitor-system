@@ -359,9 +359,7 @@ const statusOptions = [
 
 const zoneTypeOptions = [
   { label: "危险区", value: "danger" },
-  { label: "座位区", value: "seat" },
   { label: "手机禁用区", value: "phone_forbidden" },
-  { label: "识别区域", value: "roi" },
 ];
 
 const currentStream = computed(() => {
@@ -831,9 +829,7 @@ function zoneTypeText(type) {
   return (
     {
       danger: "危险区",
-      seat: "座位区",
       phone_forbidden: "手机禁用区",
-      roi: "识别区域",
     }[type] ||
     (type ? "其他区域" : "未分类")
   );
@@ -4098,9 +4094,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           <el-form-item label="区域类型">
             <el-select v-model="zoneForm.zone_type" style="width: 100%">
               <el-option label="危险区" value="danger" />
-              <el-option label="座位区" value="seat" />
               <el-option label="手机禁用区" value="phone_forbidden" />
-              <el-option label="识别区域" value="roi" />
             </el-select>
           </el-form-item>
           <el-form-item label="停留阈值（秒）">

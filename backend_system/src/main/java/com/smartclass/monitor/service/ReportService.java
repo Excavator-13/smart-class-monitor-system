@@ -1,7 +1,7 @@
 package com.smartclass.monitor.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.smartclass.monitor.vo.AlertVO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.File;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -17,10 +18,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * AI 日报生成服务
- * 从数据库查询告警数据，调用千问 API 生成日报总结
- */
 @Service
 public class ReportService {
 
@@ -29,7 +26,7 @@ public class ReportService {
     @Value("${report.qwen.url:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}")
     private String qwenUrl;
 
-    @Value("${report.qwen.key:sk-ws-H.EMXXLXM.TIDu.MEUCIGRQZ3OvMC3v_ytNOc4xIGCz_OeoLA3UF-YDoJ-k4rzhAiEAlUk0V2EexJVsnxduEsMYkOqdFrUxVhHRYx7AaZamLyg}")
+    @Value("${report.qwen.key:}")
     private String qwenKey;
 
     @Value("${report.qwen.model:qwen3.7-plus}")
@@ -38,18 +35,22 @@ public class ReportService {
     @Value("${report.ai-enabled:true}")
     private boolean aiEnabled;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Value("${report.snapshot-base-url:http://39.106.209.208:9092}")
+    private String snapshotBaseUrl;
 
+    @Value("${report.data-dir:data/reports}")
+    private String reportDataDir;
+
+    private final RestTemplate restTemplate = new RestTemplate();
     private final AlertService alertService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ReportService(AlertService alertService) {
         this.alertService = alertService;
     }
 
-    /** 前端传来的设置 */
     private volatile Map<String, Object> settings = new LinkedHashMap<>();
 
-    /** 每隔 10 分钟检查是否到设置的日报时间 */
     @Scheduled(fixedRate = 600000)
     public void checkAndAutoGenerate() {
         if (!aiEnabled) return;
@@ -64,15 +65,8 @@ public class ReportService {
 
     public void updateSettings(Map<String, Object> s) { this.settings = s; }
 
-    /** 最新的日报缓存 */
     private volatile Map<String, Object> latestReport;
 
-    /** 日报历史 */
-    private final List<Map<String, Object>> history = new ArrayList<>();
-
-    /**
-     * 根据告警列表生成日报
-     */
     public Map<String, Object> generateReport(List<Map<String, Object>> alerts) {
         int total = alerts.size();
         if (total == 0) {
@@ -82,10 +76,10 @@ public class ReportService {
             empty.put("alertsCount", 0);
             empty.put("alerts", Collections.emptyList());
             latestReport = empty;
+            writeReportToFile(empty);
             return empty;
         }
 
-        // 统计
         long high = alerts.stream().filter(a -> "high".equals(a.get("level"))).count();
         long warning = alerts.stream().filter(a -> "warning".equals(a.get("level"))).count();
         Set<String> types = alerts.stream()
@@ -121,7 +115,6 @@ public class ReportService {
         report.put("alertsCount", total);
         report.put("raw", Map.of("high", high, "warning", warning, "types", types, "type_counts", typeCounts));
 
-        // VL 分析每张截图
         List<Map<String, Object>> details = new ArrayList<>();
         for (Map<String, Object> a : alerts.size() > 10 ? alerts.subList(0, 10) : alerts) {
             Map<String, Object> d = new LinkedHashMap<>(a);
@@ -136,21 +129,97 @@ public class ReportService {
         report.put("alerts", details);
 
         latestReport = report;
-        history.add(0, report);
+        writeReportToFile(report);
         return report;
     }
 
     public Map<String, Object> getLatestReport() {
+        if (latestReport != null) {
+            return latestReport;
+        }
+        latestReport = loadLatestReportFromFile();
         return latestReport;
     }
 
     public List<Map<String, Object>> getHistory() {
-        return history;
+        return scanReportFiles();
     }
 
-    /** 调用千问 API */
+    public Map<String, Object> getReportByDate(String date) {
+        File file = new File(reportDataDir, date + ".json");
+        if (!file.exists()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(file, new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("读取日报文件失败 {}: {}", file.getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    private void writeReportToFile(Map<String, Object> report) {
+        try {
+            File dir = new File(reportDataDir);
+            dir.mkdirs();
+            String date = String.valueOf(report.getOrDefault("date", today()));
+            File file = new File(dir, date + ".json");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, report);
+            log.debug("日报已写入 {}", file.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("写入日报文件失败: {}", e.getMessage());
+        }
+    }
+
+    private Map<String, Object> loadLatestReportFromFile() {
+        try {
+            File dir = new File(reportDataDir);
+            if (!dir.exists() || !dir.isDirectory()) {
+                return null;
+            }
+            File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
+            if (files == null || files.length == 0) {
+                return null;
+            }
+            Arrays.sort(files, Comparator.comparing(File::getName).reversed());
+            return objectMapper.readValue(files[0], new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("从文件加载最新日报失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> scanReportFiles() {
+        List<Map<String, Object>> result = new ArrayList<>();
+        try {
+            File dir = new File(reportDataDir);
+            if (!dir.exists() || !dir.isDirectory()) {
+                return result;
+            }
+            File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
+            if (files == null || files.length == 0) {
+                return result;
+            }
+            Arrays.sort(files, Comparator.comparing(File::getName).reversed());
+            for (File file : files) {
+                try {
+                    Map<String, Object> report = objectMapper.readValue(file, new TypeReference<LinkedHashMap<String, Object>>() {});
+                    result.add(report);
+                } catch (Exception e) {
+                    log.warn("读取日报文件失败 {}: {}", file.getName(), e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("扫描日报目录失败: {}", e.getMessage());
+        }
+        return result;
+    }
+
     private String callQwen(List<Map<String, Object>> alerts, String fallback) {
-        String apiUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions";
+        if (qwenKey == null || qwenKey.isBlank()) {
+            log.debug("千问 API Key 未配置，使用模板总结");
+            return fallback;
+        }
         try {
             StringBuilder data = new StringBuilder();
             for (Map<String, Object> a : alerts.subList(0, Math.min(alerts.size(), 30))) {
@@ -173,7 +242,7 @@ public class ReportService {
             headers.setBearerAuth(qwenKey);
 
             ResponseEntity<Map> resp = restTemplate.exchange(
-                    apiUrl, HttpMethod.POST,
+                    qwenUrl, HttpMethod.POST,
                     new HttpEntity<>(body, headers), Map.class
             );
 
@@ -211,21 +280,14 @@ public class ReportService {
         }
     }
 
-    @Value("${report.snapshot-base-url:http://39.106.209.208:9092}")
-    private String snapshotBaseUrl;
-
-    /** 调 VL 模型分析单张截图 */
     private String analyzeImage(String imageUrl, String alertType) {
         if (imageUrl == null || imageUrl.isBlank()) return null;
-        // 相对路径补全
         String fullUrl = imageUrl.startsWith("/") ? snapshotBaseUrl + imageUrl : imageUrl;
         try {
-            // 下载图片 → base64
             byte[] imgBytes = restTemplate.getForObject(fullUrl, byte[].class);
             String b64 = imgBytes != null ? Base64.getEncoder().encodeToString(imgBytes) : "";
             if (b64.isEmpty()) return null;
 
-            String vlUrl = qwenUrl;
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", "qwen-vl-plus");
             body.put("messages", List.of(
@@ -239,7 +301,7 @@ public class ReportService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(qwenKey);
             ResponseEntity<Map> resp = restTemplate.exchange(
-                vlUrl, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+                qwenUrl, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
             List<Map> choices = (List<Map>) resp.getBody().get("choices");
             if (choices != null && !choices.isEmpty()) {
                 Map msg = (Map) choices.get(0).get("message");
@@ -254,14 +316,5 @@ public class ReportService {
 
     private String today() {
         return LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-    }
-
-    private String toPercent(Object confidence) {
-        if (confidence == null) return "?%";
-        try {
-            return Math.round(Double.parseDouble(confidence.toString()) * 100) + "%";
-        } catch (NumberFormatException e) {
-            return "?%";
-        }
     }
 }
