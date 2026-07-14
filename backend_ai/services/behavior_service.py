@@ -148,38 +148,42 @@ class BehaviorService:
                     )
 
         head_rule = rules.get("head_down", {})
-        for idx, person in enumerate(persons):
-            ratio = person.get("head_down_ratio")
-            if ratio is not None and float(ratio) >= float(head_rule.get("confidence_threshold", 0.6)):
+        if head_rule:
+            for idx, person in enumerate(persons):
+                ratio = person.get("head_down_ratio")
+                if ratio is not None and float(ratio) >= float(head_rule.get("confidence_threshold", 0.6)):
+                    detections.append(
+                        {
+                            "event_type": "head_down",
+                            "confidence": float(ratio),
+                            "level": "warning",
+                            "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": person["bbox"]},
+                            "track_key": person.get("track_id", f"person_{idx + 1}"),
+                            "threshold_seconds": float(head_rule.get("threshold_seconds", 3)),
+                            "cooldown_seconds": float(head_rule.get("cooldown_seconds", 45)),
+                        }
+                    )
+
+        crowd_rule = rules.get("crowd_gathering", {})
+        if crowd_rule:
+            min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
+            max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
+            if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
                 detections.append(
                     {
-                        "event_type": "head_down",
-                        "confidence": float(ratio),
+                        "event_type": "crowd_gathering",
+                        "confidence": 1.0,
                         "level": "warning",
-                        "target": {"track_id": person.get("track_id", f"person_{idx + 1}"), "bbox": person["bbox"]},
-                        "track_key": person.get("track_id", f"person_{idx + 1}"),
-                        "threshold_seconds": float(head_rule.get("threshold_seconds", 3)),
-                        "cooldown_seconds": float(head_rule.get("cooldown_seconds", 45)),
+                        "target": {"track_id": "crowd", "bbox": None},
+                        "track_key": "crowd",
+                        "threshold_seconds": float(crowd_rule.get("threshold_seconds", 3)),
+                        "cooldown_seconds": float(crowd_rule.get("cooldown_seconds", 45)),
                     }
                 )
 
-        crowd_rule = rules.get("crowd_gathering", {})
-        min_count = int(parse_json_field(crowd_rule.get("config_json"), {}).get("min_count", 4))
-        max_distance = float(parse_json_field(crowd_rule.get("config_json"), {}).get("max_center_distance", 0.15))
-        if len(persons) >= min_count and self._has_crowd(persons, min_count=min_count, max_distance=max_distance):
-            detections.append(
-                {
-                    "event_type": "crowd_gathering",
-                    "confidence": 1.0,
-                    "level": "warning",
-                    "target": {"track_id": "crowd", "bbox": None},
-                    "track_key": "crowd",
-                    "threshold_seconds": float(crowd_rule.get("threshold_seconds", 3)),
-                    "cooldown_seconds": float(crowd_rule.get("cooldown_seconds", 45)),
-                }
-            )
-
         fall_rule = rules.get("fall_detected", {})
+        if not fall_rule:
+            return detections
         fall_config = fall_rule.get("config_json") or {}
         min_aspect_ratio = float(fall_config.get("min_width_height_ratio", 1.2))
         for idx, person in enumerate(persons):
