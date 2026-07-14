@@ -76,6 +76,31 @@ def test_phone_usage_from_mock_objects():
     assert ":1:phone" in detections[0]["track_key"]
 
 
+def test_phone_usage_matches_pixel_bbox_to_normalized_zone():
+    service = BehaviorService()
+    objects = [
+        {"class_name": "person", "track_id": "person_1", "bbox": [64, 48, 320, 432], "confidence": 0.9},
+        {"class_name": "cell phone", "bbox": [128, 144, 160, 168], "confidence": 0.88},
+    ]
+    zones = [{
+        "zone_id": 1,
+        "zone_name": "手机禁用区",
+        "zone_type": "phone_forbidden",
+        "coordinates": [{"x": 0.1, "y": 0.1}, {"x": 0.5, "y": 0.1}, {"x": 0.5, "y": 0.5}, {"x": 0.1, "y": 0.5}],
+    }]
+
+    detections = service.detect_from_objects(
+        "classroom_01",
+        objects,
+        {"phone_usage": {"confidence_threshold": 0.6}},
+        phone_forbidden_zones=zones,
+        frame_size=(640, 480),
+    )
+
+    assert len(detections) == 1
+    assert detections[0]["target"]["bbox"] == [64, 48, 320, 432]
+
+
 def test_phone_usage_outside_forbidden_zone_not_detected():
     service = BehaviorService()
     objects = [

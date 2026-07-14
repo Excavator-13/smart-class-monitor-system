@@ -10,6 +10,7 @@ spring:
 stream:
   reconnect_interval_seconds: 3
   offline_after_seconds: 10
+  recovery_after_seconds: 3
   default_width: 640
   default_height: 360
   frame_skip: 3

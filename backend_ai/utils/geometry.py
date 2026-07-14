@@ -32,6 +32,30 @@ def bbox_foot_point(bbox: BBox, normalized: bool = False, width: int | None = No
     return foot
 
 
+def bbox_uses_normalized_coordinates(bbox: BBox) -> bool:
+    """Return whether a bbox is already expressed in the 0-1 coordinate space."""
+    if len(bbox) != 4:
+        raise ValueError("bbox must contain [x1, y1, x2, y2]")
+    values = [float(value) for value in bbox]
+    return all(0.0 <= value <= 1.0 for value in values)
+
+
+def bbox_center_normalized(bbox: BBox, width: int, height: int) -> Point:
+    if len(bbox) != 4:
+        raise ValueError("bbox must contain [x1, y1, x2, y2]")
+    x1, y1, x2, y2 = [float(value) for value in bbox]
+    center = ((x1 + x2) / 2.0, (y1 + y2) / 2.0)
+    if bbox_uses_normalized_coordinates(bbox):
+        return center
+    return normalize_point(center, width, height)
+
+
+def bbox_foot_point_normalized(bbox: BBox, width: int, height: int) -> Point:
+    if bbox_uses_normalized_coordinates(bbox):
+        return bbox_foot_point(bbox)
+    return bbox_foot_point(bbox, normalized=True, width=width, height=height)
+
+
 def point_in_polygon(point: Point, polygon: Iterable[Point]) -> bool:
     pts = list(polygon)
     if len(pts) < 3:
