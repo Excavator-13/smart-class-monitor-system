@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
 import threading
 import time
 from typing import Any
@@ -57,18 +58,34 @@ def _get_token() -> str:
 WEBHOOK = os.environ.get("DINGTALK_WEBHOOK", "")
 
 
-def _upload_image(file_path: str) -> str:
-    """上传图片到钉钉，返回 media_id"""
+def _upload_image(file_path_or_url: str) -> str:
+    """上传图片到钉钉，返回 media_id。支持本地路径和 HTTP URL。"""
     try:
         token = _get_token()
-        with open(file_path, "rb") as f:
-            resp = requests.post(
-                f"https://oapi.dingtalk.com/media/upload?access_token={token}&type=image",
-                files={"media": f},
-                timeout=15,
-            )
-        data = resp.json()
-        return data.get("media_id", "")
+        if file_path_or_url.startswith("http://") or file_path_or_url.startswith("https://"):
+            resp = requests.get(file_path_or_url, timeout=15)
+            resp.raise_for_status()
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp.write(resp.content)
+                tmp_path = tmp.name
+            try:
+                with open(tmp_path, "rb") as f:
+                    upload_resp = requests.post(
+                        f"https://oapi.dingtalk.com/media/upload?access_token={token}&type=image",
+                        files={"media": f},
+                        timeout=15,
+                    )
+                return upload_resp.json().get("media_id", "")
+            finally:
+                os.unlink(tmp_path)
+        else:
+            with open(file_path_or_url, "rb") as f:
+                resp = requests.post(
+                    f"https://oapi.dingtalk.com/media/upload?access_token={token}&type=image",
+                    files={"media": f},
+                    timeout=15,
+                )
+            return resp.json().get("media_id", "")
     except Exception:
         logger.exception("上传图片失败")
         return ""

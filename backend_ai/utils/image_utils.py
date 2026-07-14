@@ -112,15 +112,6 @@ def encode_jpeg(frame: np.ndarray) -> bytes:
     return buffer.tobytes()
 
 
-def save_snapshot(frame: np.ndarray, snapshot_dir: str | Path, filename: str) -> str:
-    path = Path(snapshot_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    target = path / filename
-    if not cv2.imwrite(str(target), frame):
-        raise OSError("failed to save snapshot")
-    return str(target.as_posix())
-
-
 def draw_label(frame: np.ndarray, bbox: list[int] | tuple[int, int, int, int], label: str, color: tuple[int, int, int]) -> None:
     x1, y1, x2, y2 = [int(v) for v in bbox]
     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
