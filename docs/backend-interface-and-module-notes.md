@@ -960,3 +960,8 @@ com.smartclass.monitor
 | 2026-07-07 | v1.0 | 初始版本 | 项目规划阶段 |
 
 > 📝 后续每次接口变更请在此记录，并同步更新对应接口的状态标记。
+# 2026-07-14 手机告警可见性补充
+
+- `GET /alerts` 与 `GET /alerts/{id}` 的记录新增返回 `target_info` 和 `zone_id`。
+- `target_info` 沿用入库 JSON，典型结构为 `{ "track_id": "person_1", "bbox": [x1, y1, x2, y2] }`。
+- AI 事件正式查询路径为 `GET /analysis/events`，并兼容旧路径 `GET /events`。

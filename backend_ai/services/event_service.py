@@ -106,6 +106,7 @@ class EventService:
         target: dict[str, Any] | None = None,
         zone: dict[str, Any] | None = None,
         snapshot_path: str | None = None,
+        continuity_gap_seconds: float | None = None,
         now: float | None = None,
     ) -> tuple[dict[str, Any], bool]:
         del track_key  # 同类事件的连续周期与冷却统一按视频流聚合。
@@ -114,7 +115,8 @@ class EventService:
             self.expire_states(current)
             key = (stream_id, event_type)
             state = self._states.get(key)
-            if state is None or current - state.last_seen > self.continuity_gap_seconds:
+            continuity_gap = self.continuity_gap_seconds if continuity_gap_seconds is None else max(0.0, float(continuity_gap_seconds))
+            if state is None or current - state.last_seen > continuity_gap:
                 state = EventState(first_seen=current, last_seen=current)
                 self._states[key] = state
             else:

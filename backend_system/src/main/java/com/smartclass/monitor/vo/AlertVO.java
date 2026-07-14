@@ -35,6 +35,12 @@ public class AlertVO {
     @Schema(description = "置信度", example = "0.91")
     private Double confidence;
 
+    @Schema(description = "目标信息，包含 track_id 和 bbox")
+    private Object targetInfo;
+
+    @Schema(description = "命中的区域 ID", example = "1")
+    private Long zoneId;
+
     @Schema(description = "截图URL（相对路径）", example = "/snapshots/20260707/phone_0001.jpg")
     private String snapshotUrl;
 
@@ -74,6 +80,10 @@ public class AlertVO {
     public void setStatus(String v) { this.status = v; }
     public Double getConfidence() { return confidence; }
     public void setConfidence(Double v) { this.confidence = v; }
+    public Object getTargetInfo() { return targetInfo; }
+    public void setTargetInfo(Object v) { this.targetInfo = v; }
+    public Long getZoneId() { return zoneId; }
+    public void setZoneId(Long v) { this.zoneId = v; }
     public String getSnapshotUrl() { return snapshotUrl; }
     public void setSnapshotUrl(String v) { this.snapshotUrl = v; }
     public String getRecordUrl() { return recordUrl; }

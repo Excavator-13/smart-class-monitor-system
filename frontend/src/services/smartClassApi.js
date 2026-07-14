@@ -121,6 +121,8 @@ export function normalizeAlert(item = {}) {
       item.alert_status || item.alertStatus || item.event_status || "unhandled",
     ),
     confidence: item.confidence ?? target?.confidence ?? null,
+    target_info: target,
+    zone_id: item.zone_id ?? item.zoneId ?? null,
     snapshot_url: optional(
       item.snapshot_url,
       item.snapshotUrl || item.snapshot_path || item.snapshotPath,
@@ -141,7 +143,7 @@ export function normalizeAlert(item = {}) {
     handled_at: optional(item.handled_at, item.handledAt),
     remark: optional(item.remark, item.description || item.summary || ""),
     target,
-    zone: parseMaybeJson(item.zone || null),
+    zone: parseMaybeJson(item.zone || (item.zone_id || item.zoneId ? { zone_id: item.zone_id ?? item.zoneId } : null)),
   };
 }
 

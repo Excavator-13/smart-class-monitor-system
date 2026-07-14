@@ -157,6 +157,9 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             fire_service = FireService(
                 model=fire_model,
                 confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
+                inference_confidence_threshold=float(
+                    fire_settings.get("inference_confidence_threshold", 0.01)
+                ),
                 max_detections=int(fire_settings.get("max_detections", 20)),
                 min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
                 allowed_classes=fire_settings.get("allowed_classes"),
@@ -299,13 +302,14 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             },
             {"module": "zone", "loaded": True, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
-            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire")},
+            {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire"), "diagnostics": fire_service.status()},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
             {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
     @app.get("/analysis/events")
+    @app.get("/events")
     def analysis_events():
         limit = request.args.get("limit", default=events_cfg.get("default_limit", 20), type=int)
         items = event_service.query(
