@@ -19,12 +19,12 @@ class FakeBehaviorService:
         self.detect_called = True
         return [{"class_name": "person", "track_id": "p1", "bbox": [10, 10, 30, 40], "confidence": 0.9}]
 
-    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None):
+    def detect_from_objects(self, stream_id, objects, rules, phone_forbidden_zones=None, frame_size=(1, 1)):
         return []
 
 
 class FakeZoneService:
-    def detect(self, stream_id, persons, zones, rule=None):
+    def detect(self, stream_id, persons, zones, rule=None, frame_size=(1, 1)):
         return []
 
 
@@ -163,7 +163,7 @@ def test_alert_overlay_is_drawn_for_two_seconds_then_removed():
     assert len(service._alert_overlays["classroom_01"]) == 0
 
 
-def test_only_person_phone_usage_and_recognized_faces_are_visible():
+def test_person_phone_zone_and_recognized_faces_are_visible():
     service = AnalysisService(
         face_service=FakeFaceService(),
         zone_service=FakeZoneService(),
@@ -190,7 +190,7 @@ def test_only_person_phone_usage_and_recognized_faces_are_visible():
         color=(80, 180, 255),
     )
 
-    assert frame.sum() == 0
+    assert frame.sum() > 0
 
     service._draw_detections(
         frame,

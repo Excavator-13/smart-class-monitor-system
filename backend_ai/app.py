@@ -159,6 +159,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 confidence_threshold=float(fire_settings.get("confidence_threshold", 0.25)),
                 max_detections=int(fire_settings.get("max_detections", 20)),
                 min_bbox_area=int(fire_settings.get("min_bbox_area", 1000)),
+                allowed_classes=fire_settings.get("allowed_classes"),
                 device=device_config,
             )
             print(f"[Fire] 明火检测模型加载成功: {weights}, device={device_config}")
@@ -237,6 +238,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
         frame_skip=int(stream_cfg.get("frame_skip", 3)),
+        recovery_after_seconds=float(stream_cfg.get("recovery_after_seconds", 3)),
     )
 
     analysis_service = AnalysisService(
@@ -394,12 +396,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
         def generate():
             while True:
-                frame = stream_manager.get_frame(stream_id)
+                frame, frame_sequence = stream_manager.get_frame_with_sequence(stream_id)
                 if frame is None:
                     if stream_manager.should_emit_offline_alert(stream_id):
                         analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
-                elif annotate:
+                elif annotate and stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
                 try:
                     payload = encode_jpeg(frame)

@@ -15,12 +15,18 @@ class FireService:
         max_detections: int = 20,
         min_bbox_area: int = 1000,
         device: str | None = None,
+        allowed_classes: list[str] | None = None,
     ):
         self.model = model
         self.confidence_threshold = confidence_threshold
         self.max_detections = max_detections
         self.min_bbox_area = min_bbox_area
         self.device = device
+        self.allowed_classes = {
+            str(name).strip().casefold()
+            for name in (allowed_classes or ["fire", "flame", "火", "火焰"])
+            if str(name).strip()
+        }
         self._total_detections = 0
 
     @property
@@ -61,10 +67,16 @@ class FireService:
         detections: list[dict[str, Any]] = []
 
         for r in results:
+            names = getattr(r, "names", None)
             boxes = getattr(r, "boxes", None)
             if boxes is None:
                 continue
             for box in boxes:
+                if names:
+                    class_id = int(box.cls[0])
+                    class_name = str(names.get(class_id, class_id)).strip().casefold()
+                    if class_name not in self.allowed_classes:
+                        continue
                 conf = float(box.conf[0])
                 if conf < threshold:
                     continue
@@ -107,4 +119,5 @@ class FireService:
             "min_bbox_area": self.min_bbox_area,
             "device": self.device,
             "total_detections": self._total_detections,
+            "allowed_classes": sorted(self.allowed_classes),
         }

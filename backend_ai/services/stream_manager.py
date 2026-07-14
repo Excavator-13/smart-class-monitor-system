@@ -20,14 +20,18 @@ class StreamState:
     frame: np.ndarray | None = None
     failure_started_at: float | None = None
     offline_alerted: bool = False
+    recovery_started_at: float | None = None
+    frame_sequence: int = 0
+    last_analyzed_sequence: int = 0
 
 
 class StreamManager:
-    def __init__(self, config_client: Any, offline_after_seconds: float = 10.0, reconnect_interval_seconds: float = 3.0, frame_skip: int = 3):
+    def __init__(self, config_client: Any, offline_after_seconds: float = 10.0, reconnect_interval_seconds: float = 3.0, frame_skip: int = 3, recovery_after_seconds: float = 3.0):
         self.config_client = config_client
         self.offline_after_seconds = offline_after_seconds
         self.reconnect_interval_seconds = reconnect_interval_seconds
         self.frame_skip = frame_skip
+        self.recovery_after_seconds = max(0.0, recovery_after_seconds)
         self._states: dict[str, StreamState] = {}
         self._captures: dict[str, Any] = {}
         self._threads: dict[str, threading.Thread] = {}
@@ -65,6 +69,7 @@ class StreamManager:
             cap = self._captures.get(stream_id)
             if cap is None or not cap.isOpened():
                 cap = cv2.VideoCapture(state.rtmp_url)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 self._captures[stream_id] = cap
                 if not cap.isOpened():
                     self._mark_unavailable(state, "video stream open failed")
@@ -79,6 +84,14 @@ class StreamManager:
                 time.sleep(self.reconnect_interval_seconds)
                 continue
 
+            if state.failure_started_at is not None:
+                with self._lock:
+                    if state.recovery_started_at is None:
+                        state.recovery_started_at = now
+                    recovery_elapsed = now - state.recovery_started_at
+                if recovery_elapsed < self.recovery_after_seconds:
+                    continue
+
             # 帧跳过：每 frame_skip 帧才更新一次可消费帧
             skip_counter += 1
             if skip_counter % self.frame_skip != 0:
@@ -91,6 +104,8 @@ class StreamManager:
                 state.last_error = None
                 state.failure_started_at = None
                 state.offline_alerted = False
+                state.recovery_started_at = None
+                state.frame_sequence += 1
 
             frame_count += 1
             elapsed = now - fps_window_start
@@ -108,12 +123,17 @@ class StreamManager:
                 fps=1.0,
                 last_frame_at=time.time(),
                 frame=frame,
+                frame_sequence=1,
             )
 
     def get_frame(self, stream_id: str) -> np.ndarray | None:
+        frame, _sequence = self.get_frame_with_sequence(stream_id)
+        return frame
+
+    def get_frame_with_sequence(self, stream_id: str) -> tuple[np.ndarray | None, int | None]:
         state = self.ensure_stream(stream_id) or self._states.get(stream_id)
         if not state:
-            return None
+            return None, None
         now = time.time()
         with self._lock:
             if state.online and state.last_frame_at and now - state.last_frame_at > self.offline_after_seconds:
@@ -123,8 +143,20 @@ class StreamManager:
                     now=state.last_frame_at,
                 )
             if not state.online:
-                return None
-            return None if state.frame is None else state.frame.copy()
+                return None, None
+            return (None if state.frame is None else state.frame.copy(), state.frame_sequence)
+
+    def claim_frame_for_analysis(self, stream_id: str, frame_sequence: int | None) -> bool:
+        if frame_sequence is None:
+            return False
+        with self._lock:
+            state = self._states.get(stream_id)
+            if state is None or not state.online or state.frame_sequence != frame_sequence:
+                return False
+            if state.last_analyzed_sequence >= frame_sequence:
+                return False
+            state.last_analyzed_sequence = frame_sequence
+            return True
 
     def should_emit_offline_alert(self, stream_id: str, now: float | None = None) -> bool:
         """Return true once when one continuous unavailable period reaches the timeout."""
@@ -149,7 +181,9 @@ class StreamManager:
         current = time.time() if now is None else now
         with self._lock:
             state.online = False
+            state.frame = None
             state.last_error = error
+            state.recovery_started_at = None
             if state.failure_started_at is None:
                 state.failure_started_at = current
 

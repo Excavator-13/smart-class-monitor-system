@@ -109,6 +109,12 @@
   }
 }
 
+@keyframes toolSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -155,6 +161,7 @@ textarea {
   overflow: hidden;
   background:
     linear-gradient(115deg, rgba(1, 8, 16, 0.62), rgba(5, 18, 30, 0.78)),
+    var(--auth-background-poster) center / cover no-repeat,
     radial-gradient(
       circle at 18% 18%,
       rgba(255, 218, 128, 0.36),
@@ -1069,7 +1076,7 @@ textarea {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   padding: 12px 20px 0;
 }
@@ -1254,6 +1261,10 @@ textarea {
   box-shadow: 0 6px 14px rgba(15, 120, 154, 0.18);
 }
 
+.tool-button.busy .el-icon {
+  animation: toolSpin 0.8s linear infinite;
+}
+
 .video-stage {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -1355,6 +1366,10 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+.video-stage .feed-top .video-chip:first-child {
+  transform: translateY(38px);
 }
 
 .video-chip {
