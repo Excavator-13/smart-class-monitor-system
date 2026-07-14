@@ -7,6 +7,10 @@ from typing import Any
 import requests
 import yaml
 from dotenv import load_dotenv
+
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
+
 from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
@@ -25,11 +29,6 @@ from backend_ai.services.stream_manager import StreamManager
 from backend_ai.services.zone_service import ZoneService
 from backend_ai.utils.image_utils import blank_frame, encode_jpeg
 from backend_ai.utils.response import error_response, json_response
-
-
-BASE_DIR = Path(__file__).resolve().parent
-
-load_dotenv(BASE_DIR / ".env")
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -412,7 +411,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             if c.get("name") and c.get("mobile"):
                 new_persons[c["name"]] = {"name": c["name"], "mobile": c["mobile"]}
         from backend_ai.services import dingtalk_service as ds
-        ds.PERSONS = new_persons
+        ds.PERSONS.clear()
+        ds.PERSONS.update(new_persons)
         r = body.get("responsible", "")
         if r: ds.PRIMARY = r
         i = body.get("alertInterval")
