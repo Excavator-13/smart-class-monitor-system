@@ -3097,69 +3097,6 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </section>
         </div>
 
-        <!-- 最新日报卡片 -->
-        <div
-          v-if="alertSettings.latestReport"
-          class="module-board"
-          style="margin-bottom: 6px"
-        >
-          <section
-            class="panel span-12"
-            style="
-              padding: 12px 20px;
-              background: #f0f9ff;
-              border-left: 3px solid #409eff;
-            "
-          >
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-              "
-            >
-              <b>最新日报 — {{ alertSettings.latestReport.date }}</b>
-              <span style="font-size: 12px; color: #909399">{{
-                alertSettings.latestReport.time
-              }}</span>
-            </div>
-            <p
-              style="
-                margin: 6px 0 0;
-                font-size: 14px;
-                line-height: 1.7;
-                white-space: pre-wrap;
-              "
-            >
-              <p v-html="renderMd(alertSettings.latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
-            </p>
-
-            <!-- 统计条形图 -->
-            <div v-if="reportChart.length > 0" style="margin:12px 0;padding:12px;background:#fff;border-radius:8px">
-              <div style="font-size:14px;font-weight:600;margin-bottom:10px;color:#1d2129">告警统计</div>
-              <div v-for="c in reportChart" :key="c.type" style="display:flex;align-items:center;gap:10px;margin:6px 0">
-                <span style="width:100px;font-size:13px;text-align:right;color:#4e5969;flex-shrink:0">{{ c.type }}</span>
-                <div style="flex:1;height:24px;background:#f2f3f5;border-radius:6px;overflow:hidden">
-                  <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
-                    <span style="color:#fff;font-size:12px;font-weight:500">{{ c.count }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 告警详情（带截图 + VL 分析） -->
-            <div v-for="(a, i) in (alertSettings.latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
-              <div style="font-weight:bold;font-size:13px">{{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}</div>
-              <div v-if="a.snapshot_url || a.snapshotUrl" style="margin-top:6px">
-                <img :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)" style="max-width:100%;max-height:200px;border-radius:4px" @error="$event.target.style.display='none'" />
-              </div>
-              <div v-if="a.vl_analysis || a.vlAnalysis" style="margin-top:4px;font-size:12px;color:#555;background:#f5f7fa;padding:6px;border-radius:4px">
-                AI分析：{{ a.vl_analysis || a.vlAnalysis }}
-              </div>
-            </div>
-          </section>
-        </div>
-
         <!-- 联系人弹窗 -->
         <div
           v-if="showContactModal"
@@ -3270,64 +3207,87 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
           </div>
         </div>
 
-        <!-- 往期日报弹窗 -->
-        <div
-          v-if="showReportModal"
-          style="
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.45);
-            z-index: 9999;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-          "
-          @click.self="showReportModal = false"
-        >
+        <!-- 日报弹窗 -->
           <div
+            v-if="showReportModal"
             style="
-              background: #fff;
-              padding: 28px;
-              border-radius: 10px;
-              width: 650px;
-              max-height: 80vh;
-              overflow-y: auto;
-              box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              background: rgba(0, 0, 0, 0.45);
+              z-index: 9999;
+              display: flex;
+              justify-content: center;
+              align-items: center;
             "
+            @click.self="showReportModal = false"
           >
-            <h2 style="margin: 0 0 20px; font-size: 18px">
-              往期日报（{{ alertSettings.reportHistory.length }} 条）
-            </h2>
             <div
-              v-if="alertSettings.reportHistory.length === 0"
-              style="color: #909399; text-align: center; padding: 40px"
+              style="
+                background: #fff;
+                padding: 28px;
+                border-radius: 10px;
+                width: 700px;
+                max-height: 85vh;
+                overflow-y: auto;
+                box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+              "
             >
-              暂无日报
-            </div>
-            <div
-              v-for="(r, i) in alertSettings.reportHistory"
-              style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
-            >
-              <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
-                {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
+              <h2 style="margin: 0 0 20px; font-size: 18px">AI 安防日报</h2>
+              
+              <!-- 最新日报 -->
+              <div v-if="alertSettings.latestReport" style="margin-bottom: 24px">
+                <div style="background: #f0f9ff; border-left: 3px solid #409eff; padding: 16px; border-radius: 6px; margin-bottom: 16px">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+                    <b style="font-size: 15px">最新日报 — {{ alertSettings.latestReport.date }}</b>
+                    <span style="font-size: 12px; color: #909399">{{ alertSettings.latestReport.time }}</span>
+                  </div>
+                  <div v-html="renderMd(alertSettings.latestReport.summary)" style="font-size: 14px; line-height: 1.7"></div>
+                  
+                  <!-- 统计条形图 -->
+                  <div v-if="reportChart.length > 0" style="margin-top: 16px; padding: 12px; background: #fff; border-radius: 6px">
+                    <div style="font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #1d2129">告警统计</div>
+                    <div v-for="c in reportChart" :key="c.type" style="display: flex; align-items: center; gap: 10px; margin: 6px 0">
+                      <span style="width: 100px; font-size: 13px; text-align: right; color: #4e5969; flex-shrink: 0">{{ c.type }}</span>
+                      <div style="flex: 1; height: 24px; background: #f2f3f5; border-radius: 6px; overflow: hidden">
+                        <div :style="'width:'+c.pct+'%;height:100%;background:linear-gradient(90deg,#165dff,#4080ff);border-radius:6px;display:flex;align-items:center;padding:0 8px;min-width:28px'">
+                          <span style="color: #fff; font-size: 12px; font-weight: 500">{{ c.count }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div
-                style="font-size: 14px; line-height: 1.7; white-space: pre-wrap"
-              >
-                {{ r.summary }}
+              
+              <!-- 历史日报列表 -->
+              <div v-if="alertSettings.reportHistory.length > 0">
+                <h3 style="font-size: 16px; margin-bottom: 12px; color: #1d2129">历史日报（{{ alertSettings.reportHistory.length }} 条）</h3>
+                <div
+                  v-for="(r, i) in alertSettings.reportHistory"
+                  :key="i"
+                  style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
+                >
+                  <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
+                    {{ r.date }} {{ r.time?.slice(11, 16) || "" }}
+                  </div>
+                  <div v-html="renderMd(r.summary)" style="font-size: 14px; line-height: 1.7"></div>
+                </div>
               </div>
-            </div>
-            <div style="text-align: right; margin-top: 20px">
-              <el-button type="primary" size="small" @click="exportReportPdf"
-                >导出 PDF</el-button
-              >
-              <el-button @click="showReportModal = false">关闭</el-button>
+              
+              <div v-else style="color: #909399; text-align: center; padding: 40px">
+                暂无历史日报
+              </div>
+              
+              <div style="text-align: right; margin-top: 20px">
+                <el-button type="primary" size="small" @click="exportReportPdf" :disabled="!alertSettings.latestReport"
+                  >导出 HTML</el-button
+                >
+                <el-button @click="showReportModal = false">关闭</el-button>
+              </div>
             </div>
           </div>
-        </div>
 
         <div class="module-board">
           <section class="panel span-12">
@@ -3542,15 +3502,20 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <span>{{ ruleSummaryText(rule) }}</span>
                 </div>
                 <div class="rule-threshold-control">
-                  <span>持续阈值（秒）</span>
-                  <el-input-number
-                    v-model="rule.threshold_seconds"
-                    :min="1"
-                    :max="30"
-                    size="small"
-                    :disabled="!isAdmin"
-                  />
-                </div>
+                    <template v-if="rule.threshold_seconds > 0">
+                      <span>持续阈值（秒）</span>
+                      <el-input-number
+                        v-model="rule.threshold_seconds"
+                        :min="1"
+                        :max="30"
+                        size="small"
+                        :disabled="!isAdmin"
+                      />
+                    </template>
+                    <template v-else>
+                      <span style="color: #909399; font-size: 13px">立即触发</span>
+                    </template>
+                  </div>
                 <el-switch
                   :model-value="rule.enabled"
                   :disabled="!hasConfirmedForbiddenZone && isPhoneRelated(rule)"
