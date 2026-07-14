@@ -60,3 +60,22 @@ FFmpeg SHALL use `-c copy` (stream copy) mode for segment recording, meaning no 
 - **WHEN** FFmpeg records segments
 - **THEN** the output FLV segments SHALL contain the same H.264 and AAC codecs without re-encoding
 - **AND** CPU usage per FFmpeg process SHALL be minimal (no decode/encode cycle)
+
+### Requirement: Segment index uses actual media duration
+
+切片转码完成后，系统必须使用 MP4 的真实媒体时长写入 `recording_file.duration_seconds` 和 `ended_at`，不得把目标切片长度 30 秒无条件当成实际长度。
+
+#### Scenario: Keyframe makes a segment longer than 30 seconds
+
+- **GIVEN** 一个切片从 `16:33:15` 开始，ffprobe 返回实际时长 `31.2` 秒
+- **WHEN** 转码脚本写入该切片索引
+- **THEN** `duration_seconds` SHALL 保存实际媒体时长
+- **AND** 秒精度的 `ended_at` SHALL 向上覆盖到 `16:33:47`
+- **AND** 发生于 `16:33:46` 的事件 SHALL 落在该切片范围内
+
+#### Scenario: ffprobe cannot read duration
+
+- **GIVEN** MP4 转换成功但 ffprobe 未返回有效正数时长
+- **WHEN** 转码脚本写入切片索引
+- **THEN** 系统 SHALL 回退到目标切片时长
+- **AND** 系统 SHALL 写入可诊断的错误日志

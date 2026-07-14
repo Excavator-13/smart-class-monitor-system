@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -32,17 +33,26 @@ EVENT_NAMES = {
 class EventState:
     first_seen: float
     last_seen: float
-    last_alert_at: float = 0.0
     event_id: str = field(default_factory=lambda: f"evt_{uuid4().hex[:16]}")
     event_status: str = "candidate"
+    occurred_at: str = field(default_factory=now_iso)
 
 
 class EventService:
-    def __init__(self, max_items: int = 500, default_cooldown_seconds: float = 45.0, state_expire_seconds: float = 300.0):
+    def __init__(
+        self,
+        max_items: int = 500,
+        default_cooldown_seconds: float = 10.0,
+        state_expire_seconds: float = 300.0,
+        continuity_gap_seconds: float = 2.0,
+    ):
         self.events: deque[dict[str, Any]] = deque(maxlen=max_items)
-        self._states: dict[tuple[str, str, str], EventState] = {}
+        self._states: dict[tuple[str, str], EventState] = {}
+        self._last_alerts: dict[tuple[str, str], float] = {}
         self.default_cooldown_seconds = default_cooldown_seconds
         self.state_expire_seconds = state_expire_seconds
+        self.continuity_gap_seconds = max(0.0, continuity_gap_seconds)
+        self._lock = threading.RLock()
 
     def build_event(
         self,
@@ -56,6 +66,7 @@ class EventService:
         status: str = "candidate",
         snapshot_path: str | None = None,
         event_id: str | None = None,
+        occurred_at: str | None = None,
     ) -> dict[str, Any]:
         return {
             "event_id": event_id or f"evt_{uuid4().hex[:16]}",
@@ -65,7 +76,7 @@ class EventService:
             "level": level,
             "event_status": status,
             "confidence": round(float(confidence), 4),
-            "occurred_at": now_iso(),
+            "occurred_at": occurred_at or now_iso(),
             "duration_seconds": round(float(duration_seconds), 3),
             "target": target,
             "zone": zone,
@@ -73,8 +84,15 @@ class EventService:
         }
 
     def add_event(self, event: dict[str, Any]) -> dict[str, Any]:
-        self.events.appendleft(event)
-        return event
+        with self._lock:
+            event_id = event.get("event_id")
+            if event_id:
+                for index, existing in enumerate(self.events):
+                    if existing.get("event_id") == event_id:
+                        self.events[index] = event
+                        return event
+            self.events.appendleft(event)
+            return event
 
     def observe(
         self,
@@ -90,38 +108,50 @@ class EventService:
         snapshot_path: str | None = None,
         now: float | None = None,
     ) -> tuple[dict[str, Any], bool]:
+        del track_key  # 同类事件的连续周期与冷却统一按视频流聚合。
         current = time.time() if now is None else now
-        self.expire_states(current)
-        key = (stream_id, event_type, track_key)
-        state = self._states.get(key)
-        if state is None:
-            state = EventState(first_seen=current, last_seen=current)
-            self._states[key] = state
-        state.last_seen = current
+        with self._lock:
+            self.expire_states(current)
+            key = (stream_id, event_type)
+            state = self._states.get(key)
+            if state is None or current - state.last_seen > self.continuity_gap_seconds:
+                state = EventState(first_seen=current, last_seen=current)
+                self._states[key] = state
+            else:
+                state.last_seen = current
 
-        duration = current - state.first_seen
-        cooldown = self.default_cooldown_seconds if cooldown_seconds is None else cooldown_seconds
-        should_confirm = duration >= threshold_seconds and current - state.last_alert_at >= cooldown
-        if should_confirm:
-            if state.last_alert_at > 0:
-                state.event_id = f"evt_{uuid4().hex[:16]}"
-            state.event_status = "confirmed"
-            state.last_alert_at = current
+            duration = max(0.0, current - state.first_seen)
+            threshold = max(0.0, float(threshold_seconds))
+            cooldown = max(
+                0.0,
+                self.default_cooldown_seconds if cooldown_seconds is None else float(cooldown_seconds),
+            )
+            last_alert_at = self._last_alerts.get(key)
+            cooldown_ready = last_alert_at is None or current - last_alert_at >= cooldown
+            should_confirm = (
+                state.event_status != "confirmed"
+                and duration >= threshold
+                and cooldown_ready
+            )
+            if should_confirm:
+                state.event_status = "confirmed"
+                self._last_alerts[key] = current
 
-        event = self.build_event(
-            stream_id=stream_id,
-            event_type=event_type,
-            confidence=confidence,
-            level=level,
-            target=target,
-            zone=zone,
-            duration_seconds=duration,
-            status=state.event_status,
-            snapshot_path=snapshot_path,
-            event_id=state.event_id,
-        )
-        self.add_event(event)
-        return event, should_confirm
+            event = self.build_event(
+                stream_id=stream_id,
+                event_type=event_type,
+                confidence=confidence,
+                level=level,
+                target=target,
+                zone=zone,
+                duration_seconds=duration,
+                status=state.event_status,
+                snapshot_path=snapshot_path,
+                event_id=state.event_id,
+                occurred_at=state.occurred_at,
+            )
+            self.add_event(event)
+            return event, should_confirm
 
     def query(
         self,
@@ -131,42 +161,46 @@ class EventService:
         limit: int = 20,
         since: str | None = None,
     ) -> list[dict[str, Any]]:
-        result = []
-        for event in list(self.events):
-            if stream_id and event.get("stream_id") != stream_id:
-                continue
-            if event_type and event.get("event_type") != event_type:
-                continue
-            if level and event.get("level") != level:
-                continue
-            if since and str(event.get("occurred_at", "")) <= since:
-                continue
-            result.append(event)
-            if len(result) >= limit:
-                break
-        return result
+        with self._lock:
+            result = []
+            for event in list(self.events):
+                if stream_id and event.get("stream_id") != stream_id:
+                    continue
+                if event_type and event.get("event_type") != event_type:
+                    continue
+                if level and event.get("level") != level:
+                    continue
+                if since and str(event.get("occurred_at", "")) <= since:
+                    continue
+                result.append(event)
+                if len(result) >= limit:
+                    break
+            return result
 
     def mark_confirmed(self, event_id: str) -> None:
-        for event in self.events:
-            if event.get("event_id") == event_id:
-                event["event_status"] = "confirmed"
+        with self._lock:
+            for event in self.events:
+                if event.get("event_id") == event_id:
+                    event["event_status"] = "confirmed"
 
     def expire_states(self, now: float | None = None) -> int:
         current = time.time() if now is None else now
-        expired = [
-            key
-            for key, state in self._states.items()
-            if current - state.last_seen >= self.state_expire_seconds
-        ]
-        for key in expired:
-            del self._states[key]
-        return len(expired)
+        with self._lock:
+            expired = [
+                key
+                for key, state in self._states.items()
+                if current - state.last_seen >= self.state_expire_seconds
+            ]
+            for key in expired:
+                del self._states[key]
+            return len(expired)
 
     def counts(self, stream_id: str | None = None) -> dict[str, int]:
-        result: dict[str, int] = {}
-        for event in list(self.events):
-            if stream_id and event.get("stream_id") != stream_id:
-                continue
-            event_type = str(event.get("event_type") or "unknown")
-            result[event_type] = result.get(event_type, 0) + 1
-        return result
+        with self._lock:
+            result: dict[str, int] = {}
+            for event in list(self.events):
+                if stream_id and event.get("stream_id") != stream_id:
+                    continue
+                event_type = str(event.get("event_type") or "unknown")
+                result[event_type] = result.get(event_type, 0) + 1
+            return result

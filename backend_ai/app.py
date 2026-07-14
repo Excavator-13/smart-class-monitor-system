@@ -106,7 +106,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     event_service = (overrides or {}).get("event_service") if overrides else None
     event_service = event_service or EventService(
         max_items=int(events_cfg.get("max_items", 500)),
-        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 45)),
+        default_cooldown_seconds=float(events_cfg.get("default_cooldown_seconds", 10)),
+        continuity_gap_seconds=float(events_cfg.get("continuity_gap_seconds", 2)),
     )
     device_config = resolve_device(model_config.get("device"))
     face_settings = (model_config.get("models") or {}).get("face", {})
@@ -383,7 +384,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             while True:
                 frame = stream_manager.get_frame(stream_id)
                 if frame is None:
-                    analysis_service.observe_stream_offline(stream_id)
+                    if stream_manager.should_emit_offline_alert(stream_id):
+                        analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
                 elif annotate:
                     analysis_service.analyze_frame(stream_id, frame, modules=modules)
