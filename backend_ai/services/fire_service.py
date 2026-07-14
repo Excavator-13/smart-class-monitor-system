@@ -48,16 +48,14 @@ class FireService:
         if self.model is None:
             return []
 
-        rule = (rules or {}).get("flame_detected") or (rules or {}).get("fire_detected")
-        if rules is not None and not rule:
+        rule = (rules or {}).get("flame_detected", {})
+        if not rule:
             return []
-        rule = rule or {}
-        threshold = max(
-            self.confidence_threshold,
-            float(rule.get("confidence_threshold", self.confidence_threshold)),
-        )
+
+        threshold = float(rule.get("confidence_threshold", self.confidence_threshold))
         cooldown = float(rule.get("cooldown_seconds", 10))
         threshold_seconds = float(rule.get("threshold_seconds", 0))
+        level = rule.get("level", "high")
 
         if hasattr(self.model, "predict"):
             predict_args: dict[str, Any] = {"verbose": False}
@@ -87,7 +85,6 @@ class FireService:
                 if area < self.min_bbox_area:
                     continue
 
-                level = self._classify_level(conf)
                 idx = len(detections)
                 detections.append(
                     {

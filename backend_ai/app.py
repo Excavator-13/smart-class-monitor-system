@@ -38,12 +38,13 @@ def load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
-def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None):
+def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None) -> bool | None:
+    dingtalk_enabled = None
     try:
         headers = {"X-Internal-Token": internal_token} if internal_token else None
         resp = requests.get(f"{spring_base_url}/api/settings", headers=headers, timeout=5)
         if not resp.ok:
-            return
+            return dingtalk_enabled
         data = resp.json()
         from backend_ai.services import dingtalk_service as ds
         contacts = data.get("contacts", [])
@@ -62,9 +63,12 @@ def _restore_dingtalk_settings(spring_base_url: str, internal_token: str | None)
         interval = data.get("alertInterval")
         if interval:
             ds.STEP_TIMEOUT = int(interval)
-        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}")
+        if "dingtalkEnabled" in data:
+            dingtalk_enabled = bool(data["dingtalkEnabled"])
+        print(f"[DingTalk] 从 Spring Boot 恢复设置: {len(new_persons)} 联系人, 责任人={responsible}, 钉钉开关={dingtalk_enabled}")
     except Exception:
         print("[DingTalk] 从 Spring Boot 恢复设置失败，使用默认值")
+    return dingtalk_enabled
 
 
 def create_app(overrides: dict[str, Any] | None = None) -> Flask:
@@ -222,8 +226,11 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
-    _restore_dingtalk_settings(spring_base_url, internal_token)
+    restored_dingtalk_enabled = _restore_dingtalk_settings(spring_base_url, internal_token)
+    alert_client_kwargs = dict(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
+    if restored_dingtalk_enabled is not None:
+        alert_client_kwargs["dingtalk_enabled"] = restored_dingtalk_enabled
+    alert_client = alert_client or AlertClient(**alert_client_kwargs)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
     stream_manager = stream_manager or StreamManager(
@@ -419,6 +426,12 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         if r: ds.PRIMARY = r
         i = body.get("alertInterval")
         if i: ds.STEP_TIMEOUT = int(i)
+        dingtalk_enabled = body.get("dingtalkEnabled")
+        if dingtalk_enabled is not None:
+            ai_svcs = app.extensions.get("ai_services", {})
+            ac = ai_svcs.get("alert_client")
+            if ac:
+                ac.dingtalk_enabled = bool(dingtalk_enabled)
         return json_response({"ok": True, "count": len(new_persons)})
 
     return app

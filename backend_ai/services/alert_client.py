@@ -37,12 +37,13 @@ class AlertClient:
     def __init__(self, base_url: str = "http://localhost:8080", timeout: float = 5.0,
                  session: Any | None = None, internal_token: str | None = None,
                  dingtalk: Any | None = None, snapshot_root: Path | None = None,
-                 nginx_base_url: str | None = None):
+                 nginx_base_url: str | None = None, dingtalk_enabled: bool = True):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = session or requests.Session()
         self.internal_token = internal_token
         self.dingtalk = dingtalk
+        self.dingtalk_enabled = dingtalk_enabled
         self.snapshot_root = snapshot_root
         self.nginx_base_url = (nginx_base_url or "").rstrip("/")
 
@@ -98,7 +99,7 @@ class AlertClient:
         response.raise_for_status()
 
         # 钉钉通知 + 逐级上报
-        if self.dingtalk:
+        if self.dingtalk and self.dingtalk_enabled:
             try:
                 event_type = event.get("event_type", "")
                 if event_type not in DINGTALK_ALERT_TYPES:
