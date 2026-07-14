@@ -7,7 +7,7 @@ from typing import Any
 import requests
 import yaml
 from dotenv import load_dotenv
-from flask import Flask, Response, request, send_from_directory
+from flask import Flask, Response, request
 
 from backend_ai.services.alert_client import AlertClient
 from backend_ai.services.dingtalk_service import start_stream, trigger_alert
@@ -211,8 +211,18 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
 
     snapshot_root = BASE_DIR / "static" / "snapshots"
 
+    snapshot_remote = app_config.get("snapshot_remote", {})
+    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
+    nginx_base_url = ""
+    if remote_host:
+        nginx_port = os.environ.get("SNAPSHOT_NGINX_PORT", "9092")
+        nginx_base_url = f"http://{remote_host}:{nginx_port}"
+    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
+    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
+    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
+
     alert_client = (overrides or {}).get("alert_client") if overrides else None
-    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root)
+    alert_client = alert_client or AlertClient(base_url=spring_base_url, internal_token=internal_token, dingtalk=trigger_alert, snapshot_root=snapshot_root, nginx_base_url=nginx_base_url)
     _restore_dingtalk_settings(spring_base_url, internal_token)
     start_stream()  # 启动钉钉 Stream 监听
     stream_manager = (overrides or {}).get("stream_manager") if overrides else None
@@ -221,11 +231,6 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         offline_after_seconds=float(stream_cfg.get("offline_after_seconds", 10)),
         reconnect_interval_seconds=float(stream_cfg.get("reconnect_interval_seconds", 3)),
     )
-    snapshot_remote = app_config.get("snapshot_remote", {})
-    remote_host = os.environ.get("SNAPSHOT_REMOTE_HOST") or snapshot_remote.get("host", "")
-    remote_user = os.environ.get("SNAPSHOT_REMOTE_USER") or snapshot_remote.get("user", "root")
-    remote_path = os.environ.get("SNAPSHOT_REMOTE_PATH") or snapshot_remote.get("path", "/data/snapshots")
-    snapshot_pusher = SnapshotPusher(host=remote_host, user=remote_user, remote_path=remote_path)
 
     analysis_service = AnalysisService(
         face_service=face_service,
@@ -396,11 +401,6 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
-
-    @app.get("/snapshots/<path:filename>")
-    def serve_snapshot(filename: str):
-        snapshot_dir = BASE_DIR / "static" / "snapshots"
-        return send_from_directory(snapshot_dir, filename)
 
     @app.post("/api/contacts/sync")
     def contacts_sync():

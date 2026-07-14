@@ -50,5 +50,14 @@ class SnapshotPusher:
                 return
 
             self.logger.debug("Snapshot pushed: %s → %s:%s", relative_path, self.host, remote_file)
+
+            try:
+                local_path.unlink(missing_ok=True)
+                parent = local_path.parent
+                if parent.is_dir() and not any(parent.iterdir()):
+                    parent.rmdir()
+                self.logger.debug("Local snapshot cleaned: %s", local_path)
+            except OSError as exc:
+                self.logger.warning("Failed to clean local snapshot %s: %s", local_path, exc)
         except Exception as exc:
             self.logger.warning("Snapshot push error for %s: %s", relative_path, exc)
