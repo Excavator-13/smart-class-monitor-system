@@ -13,10 +13,19 @@ from backend_ai.utils.geometry import (
 
 class ZoneService:
     def detect(self, stream_id: str, persons: list[dict[str, Any]], zones: list[dict[str, Any]], rule: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        if not rule:
+            return []
+
         danger_zones = [z for z in zones if z.get("zone_type") == "danger"]
+        if not danger_zones:
+            return []
+
         detections: list[dict[str, Any]] = []
         config = parse_json_field((rule or {}).get("config_json"), {})
         safe_distance = float(config.get("safe_distance", 0.05))
+        intrusion_level = rule.get("level", "high")
+        stay_level = config.get("stay_level", "high")
+        approach_level = config.get("approach_level", "warning")
         for person in persons:
             bbox = person.get("bbox")
             if bbox is None or len(bbox) == 0:
@@ -38,7 +47,7 @@ class ZoneService:
                         {
                             "event_type": "danger_zone_intrusion",
                             "confidence": 1.0,
-                            "level": "warning",
+                            "level": intrusion_level,
                             "target": target,
                             "zone": zone_info,
                             "track_key": f"{track_id}:{zone.get('zone_id')}:intrusion",
@@ -49,7 +58,7 @@ class ZoneService:
                         {
                             "event_type": "danger_zone_stay",
                             "confidence": 1.0,
-                            "level": "high",
+                            "level": stay_level,
                             "target": target,
                             "zone": zone_info,
                             "track_key": f"{track_id}:{zone.get('zone_id')}:stay",
@@ -63,7 +72,7 @@ class ZoneService:
                             {
                                 "event_type": "danger_zone_approach",
                                 "confidence": max(0.0, 1.0 - distance / max(safe_distance, 1e-9)),
-                                "level": "warning",
+                                "level": approach_level,
                                 "target": target,
                                 "zone": zone_info,
                                 "track_key": f"{track_id}:{zone.get('zone_id')}:approach",

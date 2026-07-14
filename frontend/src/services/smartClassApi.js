@@ -171,6 +171,7 @@ export function normalizeRule(item = {}) {
     cooldown_seconds: item.cooldown_seconds ?? item.cooldownSeconds ?? null,
     zone_type: optional(item.zone_type, item.zoneType || ""),
     summary: optional(item.summary, item.description || ""),
+    level: optional(item.level, "warning"),
   };
 }
 
@@ -469,6 +470,14 @@ export async function toggleRule(id, enabled) {
     method: "put",
     url: `/rules/${id}/toggle`,
     params: { enabled },
+  });
+}
+
+export async function updateRule(id, data) {
+  return requestData(apiClient, {
+    method: "put",
+    url: `/rules/${id}`,
+    data,
   });
 }
 

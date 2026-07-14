@@ -54,6 +54,8 @@ public class ReportService {
     @Scheduled(fixedRate = 600000)
     public void checkAndAutoGenerate() {
         if (!aiEnabled) return;
+        Object aiReportEnabledObj = settings.get("aiReportEnabled");
+        if (aiReportEnabledObj != null && !Boolean.TRUE.equals(aiReportEnabledObj)) return;
         String setTime = String.valueOf(settings.getOrDefault("reportTime", "18:00"));
         String now = LocalTime.now().truncatedTo(ChronoUnit.MINUTES).toString();
         if (now.length() >= 5) now = now.substring(0, 5);
@@ -272,7 +274,9 @@ public class ReportService {
                 m.put("alertType", a.getAlertType());
                 m.put("level", a.getLevel());
                 m.put("streamId", a.getStreamId());
-                m.put("snapshotUrl", a.getSnapshotUrl());
+                if (a.getSnapshotUrl() != null && !a.getSnapshotUrl().isBlank()) {
+                    m.put("snapshotUrl", a.getSnapshotUrl());
+                }
                 m.put("occurredAt", String.valueOf(a.getOccurredAt()));
                 m.put("confidence", a.getConfidence());
                 return m;

@@ -41,6 +41,7 @@ import {
   toggleRule,
   toggleZone,
   updateAlertStatus,
+  updateRule,
   updateUserRole,
   updateScoreConfig,
   updateZone,
@@ -156,9 +157,10 @@ const alertSettings = ref({
   reportTime: saved.reportTime ?? "18:00",
   alertInterval: saved.alertInterval ?? 30,
   generating: false,
-  latestReport: saved.latestReport ?? null,
-  reportHistory: saved.reportHistory ?? [],
 });
+
+const latestReport = ref(null);
+const reportHistory = ref([]);
 
 watch(alertSettings, saveSettings, { deep: true });
 
@@ -172,11 +174,15 @@ const syncContactsToBackend = async () => {
         responsible: alertSettings.value.responsible,
         reportTime: alertSettings.value.reportTime,
         alertInterval: alertSettings.value.alertInterval,
+        dingtalkEnabled: alertSettings.value.dingtalkEnabled,
+        aiReportEnabled: alertSettings.value.aiReportEnabled,
       }),
     });
   } catch {}
 };
 watch(() => alertSettings.value.responsible, syncContactsToBackend);
+watch(() => alertSettings.value.dingtalkEnabled, syncContactsToBackend);
+watch(() => alertSettings.value.aiReportEnabled, syncContactsToBackend);
 
 // 联系人弹窗
 const showContactModal = ref(false);
@@ -241,8 +247,8 @@ const generateAiReport = async () => {
         alertsCount: 0,
       };
     }
-    alertSettings.value.latestReport = report;
-    alertSettings.value.reportHistory.unshift(report);
+    latestReport.value = report;
+    reportHistory.value.unshift(report);
   } finally {
     alertSettings.value.generating = false;
   }
@@ -266,7 +272,7 @@ const renderMd = (text) => {
 };
 
 const reportChart = computed(() => {
-  const r = alertSettings.value.latestReport;
+  const r = latestReport.value;
   if (!r || !r.raw || !r.raw.type_counts) return [];
   const counts = r.raw.type_counts;
   const max = Math.max(...Object.values(counts), 1);
@@ -274,7 +280,7 @@ const reportChart = computed(() => {
 });
 
 const exportReportPdf = () => {
-  const report = alertSettings.value.latestReport;
+  const report = latestReport.value;
   if (!report) return;
   const items = (report.alerts || [])
     .map((a) => {
@@ -1605,6 +1611,30 @@ async function handleToggleRule(rule) {
   }
 }
 
+async function handleUpdateRule(rule) {
+  const id = rule?.id;
+  try {
+    await updateRule(id, {
+      threshold_seconds: rule.threshold_seconds,
+      level: rule.level,
+    });
+  } catch (error) {
+    ElMessage.error(userFacingError(error, "规则更新失败，请稍后重试。"));
+  }
+}
+
+async function loadLatestReport() {
+  try {
+    const resp = await fetch("http://127.0.0.1:8080/report/latest");
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.date) {
+        latestReport.value = data;
+      }
+    }
+  } catch {}
+}
+
 async function loadUsers() {
   if (!isAdmin.value) {
     users.value = [];
@@ -1878,6 +1908,8 @@ async function loadDashboard() {
       loadErrors.value.summary = userFacingError(error, "智能分析结果加载失败。");
     }
   }
+
+  loadLatestReport();
 }
 
 async function switchStream(streamId) {
@@ -2973,7 +3005,8 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <b>{{ ruleNameText(rule) }}</b>
                   <span
                     >{{ ruleSummaryText(rule) }}，阈值
-                    {{ rule.threshold_seconds }} 秒</span
+                    {{ rule.threshold_seconds }} 秒，等级
+                    {{ rule.level === 'high' ? '高危' : rule.level === 'warning' ? '警告' : '提示' }}</span
                   >
                 </div>
                 <el-switch
@@ -3081,14 +3114,14 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 >生成日报</el-button
               >
               <el-button
-                v-if="alertSettings.latestReport"
+                v-if="latestReport"
                 size="small"
                 type="success"
                 @click="exportReportPdf"
                 >导出 PDF</el-button
               >
               <el-button
-                v-if="alertSettings.latestReport"
+                v-if="latestReport"
                 size="small"
                 @click="showReportModal = true"
                 >往期日报</el-button
@@ -3099,7 +3132,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
 
         <!-- 最新日报卡片 -->
         <div
-          v-if="alertSettings.latestReport"
+          v-if="latestReport"
           class="module-board"
           style="margin-bottom: 6px"
         >
@@ -3118,10 +3151,13 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 align-items: center;
               "
             >
-              <b>最新日报 — {{ alertSettings.latestReport.date }}</b>
-              <span style="font-size: 12px; color: #909399">{{
-                alertSettings.latestReport.time
-              }}</span>
+              <b>最新日报 — {{ latestReport.date }}</b>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size: 12px; color: #909399">{{
+                  latestReport.time
+                }}</span>
+                <el-button size="small" text @click="latestReport = null">关闭</el-button>
+              </div>
             </div>
             <p
               style="
@@ -3131,7 +3167,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                 white-space: pre-wrap;
               "
             >
-              <p v-html="renderMd(alertSettings.latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
+              <p v-html="renderMd(latestReport.summary)" style="margin:6px 0 0;font-size:14px;line-height:1.7"></p>
             </p>
 
             <!-- 统计条形图 -->
@@ -3148,7 +3184,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             </div>
 
             <!-- 告警详情（带截图 + VL 分析） -->
-            <div v-for="(a, i) in (alertSettings.latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
+            <div v-for="(a, i) in (latestReport.alerts || [])" :key="i" style="margin-top:12px;padding:10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
               <div style="font-weight:bold;font-size:13px">{{ a.alertType || a.type }} — {{ a.stream_id || a.streamId }}</div>
               <div v-if="a.snapshot_url || a.snapshotUrl" style="margin-top:6px">
                 <img :src="getSnapshotUrl(a.snapshot_url || a.snapshotUrl)" style="max-width:100%;max-height:200px;border-radius:4px" @error="$event.target.style.display='none'" />
@@ -3299,16 +3335,16 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
             "
           >
             <h2 style="margin: 0 0 20px; font-size: 18px">
-              往期日报（{{ alertSettings.reportHistory.length }} 条）
+              往期日报（{{ reportHistory.length }} 条）
             </h2>
             <div
-              v-if="alertSettings.reportHistory.length === 0"
+              v-if="reportHistory.length === 0"
               style="color: #909399; text-align: center; padding: 40px"
             >
               暂无日报
             </div>
             <div
-              v-for="(r, i) in alertSettings.reportHistory"
+              v-for="(r, i) in reportHistory"
               style="padding: 14px 0; border-bottom: 1px solid #f0f0f0"
             >
               <div style="font-size: 12px; color: #909399; margin-bottom: 4px">
@@ -3546,10 +3582,24 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   <el-input-number
                     v-model="rule.threshold_seconds"
                     :min="1"
-                    :max="30"
+                    :max="300"
                     size="small"
                     :disabled="!isAdmin"
+                    @change="handleUpdateRule(rule)"
                   />
+                </div>
+                <div class="rule-threshold-control">
+                  <span>告警等级</span>
+                  <el-select
+                    v-model="rule.level"
+                    size="small"
+                    :disabled="!isAdmin"
+                    @change="handleUpdateRule(rule)"
+                  >
+                    <el-option label="高危" value="high" />
+                    <el-option label="警告" value="warning" />
+                    <el-option label="提示" value="info" />
+                  </el-select>
                 </div>
                 <el-switch
                   :model-value="rule.enabled"

@@ -166,12 +166,12 @@ public class DataInitializer implements CommandLineRunner {
     private void seedRules() {
         log.info("插入测试规则...");
         List<BehaviorRule> rules = Arrays.asList(
-                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "warning"),
-                createRule("fire_detected", "明火检测", true, 3, 0.80, 20, "high"),
+                createRule("phone_usage", "手机违规检测", true, 5, 0.75, 30, "info"),
+                createRule("flame_detected", "明火检测", true, 3, 0.80, 20, "high"),
                 createRule("fall_detected", "摔倒检测", false, 4, 0.78, 20, "high"),
-                createRule("head_down", "长时间低头", true, 6, 0.70, 60, "warning"),
-                createRule("stranger_detected", "陌生人检测", true, 3, 0.72, 30, "warning"),
-                createRule("zone_intrusion", "区域入侵检测", true, 5, 0.75, 30, "warning")
+                createRule("head_down", "长时间低头", true, 6, 0.70, 60, "info"),
+                createRule("crowd_gathering", "异常人流聚集", true, 3, 0.70, 30, "high"),
+                createRule("danger_zone", "区域入侵检测", true, 5, 0.75, 30, "warning")
         );
         for (BehaviorRule r : rules) {
             behaviorRuleMapper.insert(r);
@@ -236,8 +236,8 @@ public class DataInitializer implements CommandLineRunner {
         AlertEvent alert2 = new AlertEvent();
         alert2.setEventId("evt-" + UUID.randomUUID().toString().substring(0, 8));
         alert2.setStreamId("classroom_01");
-        alert2.setAlertType("zone_intrusion");
-        alert2.setAlertName("区域入侵");
+        alert2.setAlertType("danger_zone");
+        alert2.setAlertName("区域入侵检测");
         alert2.setLevel("warning");
         alert2.setStatus("processing");
         alert2.setConfidence(0.76);
@@ -249,8 +249,8 @@ public class DataInitializer implements CommandLineRunner {
         AlertEvent alert3 = new AlertEvent();
         alert3.setEventId("evt-" + UUID.randomUUID().toString().substring(0, 8));
         alert3.setStreamId("classroom_01");
-        alert3.setAlertType("stranger_detected");
-        alert3.setAlertName("陌生人出现");
+        alert3.setAlertType("crowd_gathering");
+        alert3.setAlertName("异常人流聚集");
         alert3.setLevel("high");
         alert3.setStatus("unhandled");
         alert3.setConfidence(0.88);
