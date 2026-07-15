@@ -57,11 +57,11 @@ class AudioService:
         if audio_data.ndim > 1:
             audio_data = audio_data.mean(axis=1)
 
-        # 归一化
-        audio = audio_data.astype(np.float32)
-        max_val = np.abs(audio).max()
-        if max_val > 0:
-            audio = audio / max_val
+        # FFmpeg f32le 输出本身就是 [-1, 1] 范围。不能对每个音频块
+        # 单独做峰值归一化，否则会抹掉尖叫相对背景声的音量突增。
+        audio = np.nan_to_num(
+            audio_data.astype(np.float32), nan=0.0, posinf=1.0, neginf=-1.0
+        )
 
         # 计算当前窗口的能量（RMS）
         energy = float(np.sqrt(np.mean(audio[-self.window_samples:] ** 2)))
@@ -80,7 +80,9 @@ class AudioService:
 
         detections: list[dict[str, Any]] = []
 
-        if ratio >= 3.0:  # 能量突然增大3倍以上
+        # 相对基线增大且绝对音量达到最低门槛，避免完全静音时
+        # 极小数值噪声被除以近零基线后误报。
+        if energy >= 0.03 and ratio >= 3.0:
             freq_features = self._extract_frequency_features(audio, sr)
 
             for sound_type, config in self.SOUND_TYPES.items():
