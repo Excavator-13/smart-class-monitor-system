@@ -304,7 +304,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             {"module": "behavior", "loaded": behavior_service.model is not None, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": None},
             {"module": "fire", "loaded": fire_service.loaded, "model_name": "ultralytics", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("fire"), "diagnostics": fire_service.status()},
             {"module": "anti_spoof", "loaded": anti_spoof_service is not None, "model_name": "rule", "version": "v1", "avg_infer_ms": None},
-            {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": None},
+            {"module": "audio", "loaded": audio_service is not None, "model_name": "signal", "version": "v1", "avg_infer_ms": analysis_service.avg_latency_ms("audio")},
         ]
         return json_response({"service_status": "running", "models": models, "streams": stream_manager.status()})
 
@@ -414,27 +414,31 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         def generate():
             cached_sequence = None
             cached_frame = None
-            while True:
-                frame, frame_sequence = stream_manager.get_frame_with_sequence(stream_id)
-                if frame is None:
-                    if stream_manager.should_emit_offline_alert(stream_id):
-                        analysis_service.observe_stream_offline(stream_id)
-                    frame = blank_frame(text="stream offline")
-                    cached_sequence = None
-                    cached_frame = None
-                elif annotate:
-                    if frame_sequence == cached_sequence and cached_frame is not None:
-                        frame = cached_frame.copy()
-                    elif stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
-                        audio_chunk = audio_capture.read_chunk() if audio_capture else None
-                        analysis_service.analyze_frame(stream_id, frame, modules=modules, audio_chunk=audio_chunk)
-                        cached_sequence = frame_sequence
-                        cached_frame = frame.copy()
-                try:
-                    payload = encode_jpeg(frame)
-                except ValueError:
-                    payload = encode_jpeg(blank_frame(text="jpeg encode failed"))
-                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
+            try:
+                while True:
+                    frame, frame_sequence = stream_manager.get_frame_with_sequence(stream_id)
+                    if frame is None:
+                        if stream_manager.should_emit_offline_alert(stream_id):
+                            analysis_service.observe_stream_offline(stream_id)
+                        frame = blank_frame(text="stream offline")
+                        cached_sequence = None
+                        cached_frame = None
+                    elif annotate:
+                        if frame_sequence == cached_sequence and cached_frame is not None:
+                            frame = cached_frame.copy()
+                        elif stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
+                            audio_chunk = audio_capture.read_chunk() if audio_capture else None
+                            analysis_service.analyze_frame(stream_id, frame, modules=modules, audio_chunk=audio_chunk)
+                            cached_sequence = frame_sequence
+                            cached_frame = frame.copy()
+                    try:
+                        payload = encode_jpeg(frame)
+                    except ValueError:
+                        payload = encode_jpeg(blank_frame(text="jpeg encode failed"))
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
+            finally:
+                if audio_capture is not None:
+                    audio_capture.stop()
 
         return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
