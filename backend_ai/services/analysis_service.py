@@ -140,7 +140,9 @@ class AnalysisService:
             self._draw_detections(frame, fire_detections, color=(0, 80, 255))
 
         if "audio" in enabled and self.audio_service is not None:
+            started = time.perf_counter()
             detected.extend(self.audio_service.process_audio(stream_id, audio_chunk))
+            self._observe_latency("audio", started)
 
         # 音视频联动：同帧内音频事件增强视频事件置信度
         detected = self._fuse_audio_video(detected)
@@ -252,7 +254,7 @@ class AnalysisService:
 
         fusion_map = self.AUDIO_VIDEO_FUSION.get("abnormal_sound", {})
 
-        # 增强视频事件：有音频异常 → 对应视频事件置信度提升
+        # 增强视频事件：有音频历史异常 → 对应视频事件置信度提升
         for ve in video_events:
             et = ve.get("event_type", "")
             boost = fusion_map.get(et, 0.03)
@@ -262,13 +264,15 @@ class AnalysisService:
             if ve.get("level") == "warning" and ve["confidence"] >= 0.85:
                 ve["level"] = "high"
 
-        # 增强音频事件：有视频异常 → 音频置信度也提升
-        video_event_types = {ve.get("event_type") for ve in video_events}
-        if any(et in fusion_map for et in video_event_types):
-            for ae in audio_events:
-                old_conf = float(ae.get("confidence", 0))
-                ae["confidence"] = round(min(1.0, old_conf + 0.08), 4)
-                ae["fusion"] = True
+        # 增强音频事件：仅当视频事件已在历史中出现过（非当前帧新检测），才提升音频置信度
+        # 避免同一帧内互相增强导致置信度虚高
+        if audio_events and len(self._audio_history) > len(audio_events):
+            video_event_types = {ve.get("event_type") for ve in video_events}
+            if any(et in fusion_map for et in video_event_types):
+                for ae in audio_events:
+                    old_conf = float(ae.get("confidence", 0))
+                    ae["confidence"] = round(min(1.0, old_conf + 0.08), 4)
+                    ae["fusion"] = True
 
         return detected
 

@@ -38,7 +38,12 @@ class AudioCapture:
             self._proc = None
 
     def read_chunk(self, chunk_ms: int = 1000) -> np.ndarray | None:
-        """读取一段音频数据，返回 float32 numpy 数组"""
+        """读取一段音频数据，返回 float32 numpy 数组
+        
+        Args:
+            chunk_ms: 读取的音频时长（毫秒），默认 1000ms。
+                     与 AudioService 的 window_ms 配置保持一致。
+        """
         if self._proc is None or self._proc.stdout is None:
             return None
         n_samples = int(self.sample_rate * chunk_ms / 1000)
