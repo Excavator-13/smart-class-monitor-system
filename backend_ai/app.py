@@ -398,6 +398,19 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
         modules_param = request.args.get("modules", "all")
         modules = {"face", "zone", "behavior", "fire", "anti_spoof", "audio"} if modules_param == "all" else {m.strip() for m in modules_param.split(",") if m.strip()}
 
+        # 音频采集（如果启用了 audio 模块）
+        audio_capture = None
+        if "audio" in modules and audio_service is not None:
+            try:
+                from backend_ai.services.audio_capture import AudioCapture
+                stream_info = config_client.get_stream(stream_id) or {}
+                rtmp_url = stream_info.get("rtmp_url", "")
+                if rtmp_url:
+                    audio_capture = AudioCapture(rtmp_url)
+                    audio_capture.start()
+            except Exception:
+                audio_capture = None
+
         def generate():
             cached_sequence = None
             cached_frame = None
@@ -413,7 +426,8 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                     if frame_sequence == cached_sequence and cached_frame is not None:
                         frame = cached_frame.copy()
                     elif stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
-                        analysis_service.analyze_frame(stream_id, frame, modules=modules)
+                        audio_chunk = audio_capture.read_chunk() if audio_capture else None
+                        analysis_service.analyze_frame(stream_id, frame, modules=modules, audio_chunk=audio_chunk)
                         cached_sequence = frame_sequence
                         cached_frame = frame.copy()
                 try:
