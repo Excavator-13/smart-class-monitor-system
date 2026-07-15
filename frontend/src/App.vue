@@ -201,7 +201,7 @@ const newContact = ref({ name: "", mobile: "" });
 const doAddContact = () => {
   const { name, mobile } = newContact.value;
   if (!name.trim()) {
-    alert("请输入姓名");
+    alert("请输入花名");
     return;
   }
   if (!/^1\d{10}$/.test(mobile.trim())) {
