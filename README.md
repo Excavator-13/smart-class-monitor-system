@@ -104,6 +104,7 @@ Vue 前端展示
 | Node.js           | 18+   | frontend            |
 | MySQL             | 8.0+  | 数据库              |
 | Nginx + RTMP 模块 | -     | 视频流              |
+| FFmpeg CLI        | 6+    | AI 音频采集         |
 | CUDA（可选）      | 12.8+ | GPU 加速推理        |
 
 ### 5.2 Nginx RTMP 服务器
@@ -173,6 +174,18 @@ pip install -r requirements.txt
 #    Mac / CPU 环境：
 pip install -r requirements-mac.txt
 
+# 2.1 安装外部 FFmpeg（PyPI 的 ffmpeg 包不包含可执行文件）
+#     Windows Conda：
+conda install --override-channels -c defaults ffmpeg
+#     Ubuntu / Debian：
+sudo apt install ffmpeg
+#     macOS：
+brew install ffmpeg
+
+# 验证 AI 进程可以找到音频采集工具
+ffmpeg -version
+ffprobe -version
+
 # 3. 配置环境变量（首次）
 cp .env.example .env
 # 编辑 .env，填入 Spring Boot 地址和内部 Token
@@ -213,7 +226,7 @@ curl http://localhost:5001/model/status
 | `zone`       | 区域入侵检测         | ✅       |
 | `fire`       | 火灾烟雾检测         | ❌       |
 | `anti_spoof` | 防伪检测             | ❌       |
-| `audio`      | 音频信号检测         | ❌       |
+| `audio`      | 音频信号检测         | ✅       |
 
 **依赖区别：**
 
