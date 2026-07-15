@@ -81,7 +81,9 @@ class AnalysisService:
             detected.extend(face_detections)
             self._draw_detections(frame, face_detections, color=(80, 220, 80))
 
-            if "anti_spoof" in enabled and self.anti_spoof_service is not None:
+            anti_spoof_rule = self.config_client.get_rule("spoof_detected")
+            deepfake_rule = self.config_client.get_rule("deepfake_detected")
+            if "anti_spoof" in enabled and self.anti_spoof_service is not None and (anti_spoof_rule or deepfake_rule):
                 faces_with_bbox = [
                     {"track_id": r.get("target", {}).get("track_id", f"face_{i}"),
                      "bbox": r.get("target", {}).get("bbox"),
@@ -139,6 +141,17 @@ class AnalysisService:
 
         if "audio" in enabled and self.audio_service is not None:
             detected.extend(self.audio_service.process_audio(stream_id, audio_chunk))
+
+        # Filter out events whose rule is disabled in the backend
+        rule_controlled_types = {
+            "stranger_detected", "deepfake_detected", "spoof_detected",
+            "flame_detected", "fire_detected",
+        }
+        detected = [
+            item for item in detected
+            if item.get("event_type") not in rule_controlled_types
+            or self.config_client.get_rule(item["event_type"])
+        ]
 
         events = []
         for item in detected:

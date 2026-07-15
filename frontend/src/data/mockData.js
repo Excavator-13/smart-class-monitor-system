@@ -98,6 +98,28 @@ export const mockRules = [
     cooldown_seconds: 60,
     zone_type: "seat",
     summary: "Evaluated by seat area and duration"
+  },
+  {
+    id: 5,
+    rule_type: "deepfake_detected",
+    name: "Deepfake face detection",
+    enabled: true,
+    threshold_seconds: 0,
+    confidence_threshold: 0.35,
+    cooldown_seconds: 30,
+    level: "high",
+    summary: "AI-generated or manipulated face detection"
+  },
+  {
+    id: 6,
+    rule_type: "spoof_detected",
+    name: "Anti-spoof detection",
+    enabled: true,
+    threshold_seconds: 0,
+    confidence_threshold: 0.6,
+    cooldown_seconds: 30,
+    level: "high",
+    summary: "Photo or video replay attack detection"
   }
 ];
 

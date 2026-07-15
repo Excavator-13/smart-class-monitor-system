@@ -487,7 +487,7 @@ function isPhoneRelated(item = {}) {
   return /手机|phone/i.test(text);
 }
 
-const NOT_IMPLEMENTED_RULE_TYPES = new Set(["leave_seat", "deepfake_detected"]);
+const NOT_IMPLEMENTED_RULE_TYPES = new Set(["leave_seat"]);
 function isRuleNotImplemented(rule) {
   return NOT_IMPLEMENTED_RULE_TYPES.has(rule?.rule_type);
 }
