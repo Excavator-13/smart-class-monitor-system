@@ -44,6 +44,24 @@ class FakeConfigClient:
         return {}
 
 
+class EnabledDangerRuleConfigClient(FakeConfigClient):
+    def get_rule(self, rule_type):
+        if rule_type == "danger_zone":
+            return {"rule_type": "danger_zone", "enabled": True}
+        return {}
+
+
+class IntrusionZoneService:
+    def detect(self, stream_id, persons, zones, rule=None, frame_size=(1, 1)):
+        return [{
+            "event_type": "danger_zone_intrusion",
+            "confidence": 1.0,
+            "target": {"track_id": "p1", "bbox": [10, 10, 30, 40]},
+            "track_key": "p1:zone1:intrusion",
+            "threshold_seconds": 0,
+        }]
+
+
 def test_zone_only_analysis_detects_objects_and_draws_missing_zone_status():
     behavior_service = FakeBehaviorService()
     service = AnalysisService(
@@ -105,7 +123,7 @@ def test_recognized_face_label_uses_registered_student_number():
     assert labels == ["TEST-001"]
 
 
-def test_security_and_fire_detection_labels_are_visible():
+def test_security_and_fire_labels_are_visible_but_deepfake_is_hidden():
     service = AnalysisService(
         face_service=FakeFaceService(),
         zone_service=FakeZoneService(),
@@ -133,7 +151,6 @@ def test_security_and_fire_detection_labels_are_visible():
 
     assert labels == [
         ("Spoof detected", (0, 0, 255)),
-        ("Deepfake detected", (0, 0, 255)),
         ("Fire", (0, 80, 255)),
     ]
 
@@ -231,6 +248,45 @@ def test_person_phone_zone_and_recognized_faces_are_visible():
     assert frame.sum() > 0
 
 
+def test_danger_zone_subevent_uses_enabled_parent_rule():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=IntrusionZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=EnabledDangerRuleConfigClient(),
+    )
+
+    events = service.analyze_frame(
+        "classroom_01",
+        np.zeros((80, 120, 3), dtype=np.uint8),
+        modules={"zone"},
+        objects=[{"class_name": "person", "track_id": "p1", "bbox": [10, 10, 30, 40]}],
+    )
+
+    assert len(events) == 1
+    assert events[0]["event_type"] == "danger_zone_intrusion"
+
+
+def test_danger_zone_subevent_is_fail_closed_without_parent_rule():
+    service = AnalysisService(
+        face_service=FakeFaceService(),
+        zone_service=IntrusionZoneService(),
+        behavior_service=FakeBehaviorService(),
+        event_service=EventService(),
+        config_client=FakeConfigClient(),
+    )
+
+    events = service.analyze_frame(
+        "classroom_01",
+        np.zeros((80, 120, 3), dtype=np.uint8),
+        modules={"zone"},
+        objects=[{"class_name": "person", "track_id": "p1", "bbox": [10, 10, 30, 40]}],
+    )
+
+    assert events == []
+
+
 class ConfirmingEventService:
     def __init__(self, event_type):
         self.event_type = event_type
@@ -269,12 +325,17 @@ class EventFaceService:
 
 def _analyze_confirmed_event(tmp_path, event_type):
     alert_client = CapturingAlertClient()
+    config_client = (
+        EnabledDangerRuleConfigClient()
+        if event_type.startswith("danger_zone_")
+        else FakeConfigClient()
+    )
     service = AnalysisService(
         face_service=EventFaceService(event_type),
         zone_service=FakeZoneService(),
         behavior_service=FakeBehaviorService(),
         event_service=ConfirmingEventService(event_type),
-        config_client=FakeConfigClient(),
+        config_client=config_client,
         alert_client=alert_client,
         snapshot_root=tmp_path,
     )

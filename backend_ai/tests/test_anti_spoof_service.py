@@ -141,7 +141,33 @@ def test_status():
     assert status["loaded"] is True
     assert "active_tracks" in status
     assert "blink_threshold_seconds" in status
+    assert status["deepfake_enabled"] is False
     assert status["deepfake_detector"]["loaded"] is False
+
+
+def test_deepfake_disabled_does_not_invoke_detector_or_emit_event():
+    class FakeDeepfakeDetector:
+        loaded = True
+
+        def __init__(self):
+            self.calls = 0
+
+        def predict(self, face_roi):
+            self.calls += 1
+            return {"is_fake": True, "confidence": 0.99, "cnn_score": 0.99}
+
+        def status(self):
+            return {"loaded": True}
+
+    detector = FakeDeepfakeDetector()
+    service = AntiSpoofService(deepfake_enabled=False, deepfake_detector=detector)
+    frame = np.zeros((120, 160, 3), dtype=np.uint8)
+    face = _make_face("track_1", [10, 10, 100, 100])
+
+    detections = service.detect("stream_1", [face], frame)
+
+    assert detector.calls == 0
+    assert not any(item["event_type"] == "deepfake_detected" for item in detections)
 
 
 def test_status_includes_injected_deepfake_detector():

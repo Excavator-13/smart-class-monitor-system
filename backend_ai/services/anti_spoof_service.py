@@ -17,12 +17,14 @@ class AntiSpoofService:
         blink_threshold_seconds: float = 5.0,
         texture_variance_threshold: float = 8.0,
         deepfake_threshold: float = 0.35,
+        deepfake_enabled: bool = False,
         deepfake_detector: Any | None = None,
         landmark_skip: int = 3,
     ):
         self.blink_threshold_seconds = blink_threshold_seconds
         self.texture_variance_threshold = texture_variance_threshold
         self.deepfake_threshold = deepfake_threshold
+        self.deepfake_enabled = deepfake_enabled
         self.deepfake_detector = deepfake_detector  # DeepfakeDetector 实例
         self.landmark_skip = landmark_skip
         self._frame_count = 0
@@ -120,7 +122,7 @@ class AntiSpoofService:
                 )
 
             # --- 纹理分析 + CNN 换脸检测 ---
-            if frame is not None and bbox is not None and len(bbox) > 0:
+            if self.deepfake_enabled and frame is not None and bbox is not None and len(bbox) > 0:
                 x1, y1, x2, y2 = [int(v) for v in bbox]
                 x1, y1 = max(0, x1), max(0, y1)
                 x2, y2 = min(frame.shape[1], x2), min(frame.shape[0], y2)
@@ -266,6 +268,7 @@ class AntiSpoofService:
             "active_tracks": len(self._states),
             "blink_threshold_seconds": self.blink_threshold_seconds,
             "texture_variance_threshold": self.texture_variance_threshold,
+            "deepfake_enabled": self.deepfake_enabled,
             "deepfake_detector": deepfake_status,
         }
 

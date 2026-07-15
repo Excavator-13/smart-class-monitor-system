@@ -12,3 +12,5 @@ torch>=2.11.0
 torchvision>=0.26.0
 dingtalk-stream
 pytest
+# Audio capture requires the external FFmpeg CLI; the PyPI package named
+# "ffmpeg" does not provide the ffmpeg binary. See the repository README.

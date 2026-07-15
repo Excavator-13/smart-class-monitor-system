@@ -33,7 +33,7 @@ class FakeConfigClient:
         return []
 
     def get_rule(self, rule_type):
-        return {}
+        return self.cache.rules.get(rule_type, {})
 
 
 class LazyFakeConfigClient(FakeConfigClient):
@@ -75,6 +75,15 @@ class FakeStreamManager:
         return False
 
 
+class IncrementingFakeStreamManager(FakeStreamManager):
+    def __init__(self):
+        self.sequence = 0
+
+    def get_frame_with_sequence(self, stream_id):
+        self.sequence += 1
+        return self.get_frame(stream_id), self.sequence
+
+
 class FakeBehaviorService:
     model = None
     loaded = False
@@ -96,6 +105,15 @@ class FakeAlertClient:
         return {"code": 0}
 
 
+class FakeAudioService:
+    def __init__(self):
+        self.chunks = []
+
+    def process_audio(self, stream_id, audio_chunk):
+        self.chunks.append(audio_chunk)
+        return []
+
+
 def app_client():
     app = create_app(
         {
@@ -111,18 +129,18 @@ def app_client():
     return app.test_client()
 
 
-def app_client_with_config(config_client):
-    app = create_app(
-        {
-            "config_client": config_client,
-            "event_service": EventService(),
-            "face_service": FakeFaceService(),
-            "stream_manager": FakeStreamManager(),
-            "behavior_service": FakeBehaviorService(),
-            "zone_service": FakeZoneService(),
-            "alert_client": FakeAlertClient(),
-        }
-    )
+def app_client_with_config(config_client, **extra_overrides):
+    overrides = {
+        "config_client": config_client,
+        "event_service": EventService(),
+        "face_service": FakeFaceService(),
+        "stream_manager": FakeStreamManager(),
+        "behavior_service": FakeBehaviorService(),
+        "zone_service": FakeZoneService(),
+        "alert_client": FakeAlertClient(),
+    }
+    overrides.update(extra_overrides)
+    app = create_app(overrides)
     return app.test_client()
 
 
@@ -210,3 +228,75 @@ def test_video_feed_lazy_reloads_stream_config():
     assert config_client.reload_called
     assert response.status_code == 200
     assert first_chunk.startswith(b"--frame")
+
+
+def test_video_feed_does_not_start_audio_capture_when_rule_is_disabled(monkeypatch):
+    config_client = FakeConfigClient()
+    audio_service = FakeAudioService()
+
+    class UnexpectedAudioCapture:
+        def __init__(self, rtmp_url):
+            raise AssertionError("audio capture must not start while abnormal_sound is disabled")
+
+    monkeypatch.setattr("backend_ai.services.audio_capture.AudioCapture", UnexpectedAudioCapture)
+    client = app_client_with_config(
+        config_client,
+        audio_service=audio_service,
+        stream_manager=IncrementingFakeStreamManager(),
+    )
+
+    response = client.get("/video_feed/classroom_01", buffered=False)
+    first_chunk = next(response.response)
+    response.close()
+
+    assert first_chunk.startswith(b"--frame")
+    assert audio_service.chunks == []
+
+
+def test_video_feed_stops_audio_capture_after_rule_is_disabled(monkeypatch):
+    config_client = FakeConfigClient()
+    config_client.cache.rules["abnormal_sound"] = {"enabled": True}
+    audio_service = FakeAudioService()
+
+    class TrackingAudioCapture:
+        instances = []
+
+        def __init__(self, rtmp_url):
+            self.rtmp_url = rtmp_url
+            self.start_calls = 0
+            self.read_calls = 0
+            self.stop_calls = 0
+            self.__class__.instances.append(self)
+
+        def start(self):
+            self.start_calls += 1
+            return True
+
+        def read_chunk(self):
+            self.read_calls += 1
+            return np.zeros(16000, dtype=np.float32)
+
+        def stop(self):
+            self.stop_calls += 1
+
+    monkeypatch.setattr("backend_ai.services.audio_capture.AudioCapture", TrackingAudioCapture)
+    client = app_client_with_config(
+        config_client,
+        audio_service=audio_service,
+        stream_manager=IncrementingFakeStreamManager(),
+    )
+
+    response = client.get("/video_feed/classroom_01", buffered=False)
+    next(response.response)
+    capture = TrackingAudioCapture.instances[0]
+    assert capture.start_calls == 1
+    assert capture.read_calls == 1
+    assert len(audio_service.chunks) == 1
+
+    config_client.cache.rules.pop("abnormal_sound")
+    next(response.response)
+    response.close()
+
+    assert capture.stop_calls == 1
+    assert capture.read_calls == 1
+    assert len(audio_service.chunks) == 1

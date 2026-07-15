@@ -37,6 +37,7 @@ models:
     provider: rule
     blink_threshold_seconds: 5.0
     texture_variance_threshold: 8.0
+    deepfake_enabled: false
     deepfake_weights: models/mesonet/meso4_weights.pth
   audio:
     enabled: true
