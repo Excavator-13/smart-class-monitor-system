@@ -31,6 +31,16 @@ class FakeSession:
         return FakeResponse({})
 
 
+class RulesWithDisabledSession(FakeSession):
+    def get(self, url, params=None, headers=None, timeout=None):
+        if url.endswith("/rules"):
+            return FakeResponse({"data": [
+                {"rule_type": "danger_zone", "enabled": True},
+                {"rule_type": "deepfake_detected", "enabled": False},
+            ]})
+        return super().get(url, params=params, headers=headers, timeout=timeout)
+
+
 def test_reload_streams_zones_and_rules():
     client = ConfigClient(base_url="http://spring", session=FakeSession())
 
@@ -67,3 +77,12 @@ def test_internal_token_header_is_sent():
     client.load_streams()
 
     assert session.calls[0][3] == {"X-Internal-Token": "secret"}
+
+
+def test_disabled_rules_are_not_exposed_to_detection_services():
+    client = ConfigClient(base_url="http://spring", session=RulesWithDisabledSession())
+
+    client.load_rules()
+
+    assert client.get_rule("danger_zone")["enabled"] is True
+    assert client.get_rule("deepfake_detected") == {}

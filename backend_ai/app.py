@@ -177,8 +177,9 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
     if anti_spoof_service is None and anti_spoof_settings.get("enabled", False):
         try:
             deepfake_detector = None
+            deepfake_enabled = bool(anti_spoof_settings.get("deepfake_enabled", False))
             deepfake_weights = str(anti_spoof_settings.get("deepfake_weights") or "").strip()
-            if deepfake_weights:
+            if deepfake_enabled and deepfake_weights:
                 from backend_ai.services.deepfake_detector import DeepfakeDetector
 
                 weights_path = Path(deepfake_weights)
@@ -192,6 +193,7 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
             anti_spoof_service = AntiSpoofService(
                 blink_threshold_seconds=float(anti_spoof_settings.get("blink_threshold_seconds", 5.0)),
                 texture_variance_threshold=float(anti_spoof_settings.get("texture_variance_threshold", 8.0)),
+                deepfake_enabled=deepfake_enabled,
                 deepfake_detector=deepfake_detector,
             )
             print("[AntiSpoof] 活体检测模块已启用")

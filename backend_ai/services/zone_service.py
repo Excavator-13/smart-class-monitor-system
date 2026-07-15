@@ -13,7 +13,7 @@ from backend_ai.utils.geometry import (
 
 class ZoneService:
     def detect(self, stream_id: str, persons: list[dict[str, Any]], zones: list[dict[str, Any]], rule: dict[str, Any] | None = None, frame_size: tuple[int, int] = (1, 1)) -> list[dict[str, Any]]:
-        if not rule:
+        if not rule or not rule.get("enabled", False):
             return []
 
         danger_zones = [z for z in zones if z.get("zone_type") == "danger"]

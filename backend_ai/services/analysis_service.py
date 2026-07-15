@@ -35,7 +35,6 @@ class AnalysisService:
         "face_recognized",
         "phone_usage",
         "spoof_detected",
-        "deepfake_detected",
         "flame_detected",
         "danger_zone_intrusion",
         "danger_zone_stay",
@@ -49,7 +48,15 @@ class AnalysisService:
         "spoof_detected",
         "deepfake_detected",
         "abnormal_sound",
+        "danger_zone_intrusion",
+        "danger_zone_stay",
+        "danger_zone_approach",
     })
+    EVENT_RULE_TYPES = {
+        "danger_zone_intrusion": "danger_zone",
+        "danger_zone_stay": "danger_zone",
+        "danger_zone_approach": "danger_zone",
+    }
 
     def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, alert_cooldown_seconds: float = 10.0, alert_overlay_seconds: float = 2.0):
         self.face_service = face_service
@@ -116,7 +123,7 @@ class AnalysisService:
         if "zone" in enabled:
             started = time.perf_counter()
             self._draw_zones(frame, zones)
-            if not zones:
+            if not danger_zones:
                 self._draw_status(frame, "Danger zone not configured", color=(0, 220, 255))
             persons = [obj for obj in object_list if obj.get("class_name") in {"person", "student"}]
             zone_detections = self.zone_service.detect(
@@ -149,9 +156,10 @@ class AnalysisService:
 
         events = []
         for item in detected:
-            # 有对应规则但规则已禁用 → 跳过
-            rule = self.config_client.get_rule(item["event_type"])
-            if rule and not rule.get("enabled", True):
+            event_type = item["event_type"]
+            rule_type = self.EVENT_RULE_TYPES.get(event_type, event_type)
+            rule = self.config_client.get_rule(rule_type)
+            if event_type in self.RULE_GOVERNED_TYPES and not rule.get("enabled", False):
                 continue
             configured_level = self._event_level(
                 item["event_type"], item.get("level", "warning")

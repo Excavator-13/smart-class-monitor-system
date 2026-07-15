@@ -484,7 +484,7 @@ function isPhoneRelated(item = {}) {
   return /手机|phone/i.test(text);
 }
 
-const NOT_IMPLEMENTED_RULE_TYPES = new Set([]);
+const NOT_IMPLEMENTED_RULE_TYPES = new Set(["leave_seat", "deepfake_detected"]);
 function isRuleNotImplemented(rule) {
   return NOT_IMPLEMENTED_RULE_TYPES.has(rule?.rule_type);
 }
@@ -3197,7 +3197,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   >
                 </div>
                 <el-switch
-                  :model-value="rule.enabled"
+                  :model-value="isRuleNotImplemented(rule) ? false : rule.enabled"
                   :disabled="
                     isRuleNotImplemented(rule) ||
                     (!hasConfirmedForbiddenZone && isPhoneRelated(rule))
@@ -3876,7 +3876,7 @@ watch(targetRiskScore, (score) => animateRiskScore(score), { immediate: true });
                   </template>
                 </div>
                 <el-switch
-                  :model-value="rule.enabled"
+                  :model-value="isRuleNotImplemented(rule) ? false : rule.enabled"
                   :disabled="
                     isRuleNotImplemented(rule) ||
                     (!hasConfirmedForbiddenZone && isPhoneRelated(rule))

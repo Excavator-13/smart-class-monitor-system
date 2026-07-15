@@ -10,7 +10,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
 
@@ -63,10 +62,6 @@ public class RuleController {
     @Operation(summary = "切换规则开关", description = "仅切换 enabled 状态，teacher 可调用")
     public ApiResponse<Void> toggle(@PathVariable Long id, @RequestParam boolean enabled) {
         ruleService.toggleRule(id, enabled);
-        // 立即通知 Flask 刷新规则缓存
-        try {
-            new RestTemplate().postForObject("http://127.0.0.1:5001/config/reload", null, String.class);
-        } catch (Exception ignored) {}
         return ApiResponse.success();
     }
 }
