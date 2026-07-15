@@ -57,6 +57,35 @@ def test_high_energy_triggers_detection():
     assert dets[0]["confidence"] > 0
 
 
+def test_real_amplitude_jump_triggers_scream_detection():
+    """相同频率下的音量突增也必须被检测。
+
+    这覆盖真实采集中“普通背景声 -> 高音量尖叫”的基础场景，
+    防止每块峰值归一化把音量差异抹掉。
+    """
+    service = AudioService(sample_rate=16000, window_ms=100)
+    background = _make_tone(1000, 0.1, 16000, 0.01)
+    for _ in range(50):
+        service.process_audio("s1", background)
+
+    scream = _make_tone(2000, 0.1, 16000, 0.50)
+    dets = service.process_audio("s1", scream)
+
+    assert len(dets) == 1
+    assert dets[0]["event_type"] == "abnormal_sound"
+    assert dets[0]["target"]["sound_type"] == "scream"
+
+
+def test_tiny_noise_after_silent_baseline_does_not_trigger():
+    service = AudioService(sample_rate=16000, window_ms=100)
+    silence = np.zeros(1600, dtype=np.float32)
+    for _ in range(50):
+        service.process_audio("s1", silence)
+
+    tiny_noise = np.random.default_rng(42).normal(0, 0.0001, 1600).astype(np.float32)
+    assert service.process_audio("s1", tiny_noise) == []
+
+
 def test_cooldown_prevents_repeat():
     """冷却时间内不重复触发"""
     service = AudioService(sample_rate=16000, window_ms=100)
