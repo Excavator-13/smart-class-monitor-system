@@ -94,7 +94,7 @@ class ConfigClient:
         self.cache.rules = {
             str(item.get("rule_type")): item
             for item in items
-            if item.get("rule_type") and item.get("enabled", True)
+            if item.get("rule_type")
         }
         self.cache.updated_at = time.time()
         return len(self.cache.rules)

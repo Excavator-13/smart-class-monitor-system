@@ -147,7 +147,9 @@ class AnalysisService:
 
         events = []
         for item in detected:
-            if item["event_type"] in self.RULE_GOVERNED_TYPES and not self.config_client.get_rule(item["event_type"]):
+            # 有对应规则但规则已禁用 → 跳过
+            rule = self.config_client.get_rule(item["event_type"])
+            if rule and not rule.get("enabled", True):
                 continue
             configured_level = self._event_level(
                 item["event_type"], item.get("level", "warning")
