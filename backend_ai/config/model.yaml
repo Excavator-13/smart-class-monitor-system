@@ -1,0 +1,46 @@
+device: auto
+models:
+  face:
+    enabled: true
+    provider: insightface
+    name: buffalo_l
+    providers:
+      - CUDAExecutionProvider
+    ctx_id: 0
+    det_size: [640, 640]
+    feature_dim: 512
+    similarity_threshold: 0.45
+  behavior:
+    enabled: true
+    provider: ultralytics
+    name: yolov8n-coco
+    weights: models/yolo/yolov8n.pt
+    confidence_threshold: 0.6
+  zone:
+    enabled: true
+    provider: rule
+    safe_distance: 0.05
+  fire:
+    enabled: true
+    provider: ultralytics
+    weights: models/yolo/yolo_fire.pt
+    # YOLO 推理阶段最低阈值：用于保留低置信度原始框供诊断，不能直接触发告警。
+    inference_confidence_threshold: 0.01
+    # SpringBoot 规则不可用时的业务过滤兜底阈值；正常运行时以前端规则为准。
+    confidence_threshold: 0.25
+    max_detections: 20
+    min_bbox_area: 1000
+    allowed_classes: [fire, flame, 火, 火焰]
+    cooldown_seconds: 10
+  anti_spoof:
+    enabled: true
+    provider: rule
+    blink_threshold_seconds: 5.0
+    texture_variance_threshold: 8.0
+    deepfake_enabled: false
+    deepfake_weights: models/mesonet/meso4_weights.pth
+  audio:
+    enabled: true
+    provider: signal
+    sample_rate: 16000
+    window_ms: 1000

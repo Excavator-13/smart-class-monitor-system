@@ -1,0 +1,40 @@
+service:
+  host: 0.0.0.0
+  port: 5001
+  debug: false
+
+spring:
+  base_url: http://localhost:8080
+  timeout_seconds: 5
+
+stream:
+  reconnect_interval_seconds: 3
+  offline_after_seconds: 10
+  recovery_after_seconds: 3
+  default_width: 640
+  default_height: 360
+  frame_skip: 3
+
+cache:
+  streams_poll_seconds: 60
+  zones_poll_seconds: 120
+  rules_poll_seconds: 120
+  face_features_poll_seconds: 300
+
+events:
+  max_items: 500
+  default_limit: 20
+  default_cooldown_seconds: 10
+  alert_overlay_seconds: 5
+  continuity_gap_seconds: 2
+  default_threshold_seconds: 3
+  default_confidence_threshold: 0.6
+
+snapshot_remote:
+  host: ""
+  user: "root"
+  path: "/data/snapshots"
+
+recording:
+  segment_seconds: 30
+  segment_dir: "/records"

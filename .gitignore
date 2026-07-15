@@ -17,6 +17,15 @@ application-dev.yml
 # =========================
 # Python / Flask / AI
 # =========================
+# pytest
+.pytest_cache/
+
+# Ultralytics
+backend_ai/config/ultralytics/
+
+# AI models
+backend_ai/models/
+
 __pycache__/
 *.pyc
 *.pyo
@@ -46,6 +55,7 @@ dlib_face_recognition_resnet_model_v1.dat
 
 # 数据文件（人脸库/日志）
 backend-ai/data/
+data/
 *.json
 *.sqlite3
 *.db
@@ -56,6 +66,9 @@ backend-ai/data/
 node_modules/
 dist/
 dist-ssr/
+.npm-cache/
+!frontend/package.json
+!frontend/package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -88,6 +101,7 @@ Thumbs.db
 # Video / Media (非常关键)
 # =========================
 *.mp4
+!frontend/public/auth/login-background.mp4
 *.avi
 *.flv
 *.mkv
@@ -99,3 +113,26 @@ Thumbs.db
 # Docker（如果用）
 # =========================
 docker-compose.override.yml
+
+# =========================
+# Local runtime
+# =========================
+local-runtime/.env
+
+# Fire detection module backup (local only)
+fire_module_backup/
+snapshots/
+test_output/
+test_result.txt
+backup_fire.bat
+restore_fire.bat
+
+# =========================
+# .env files (keep .env.example)
+# =========================
+backend_system/.env
+backend_ai/.env
+mock_springboot/.env
+frontend/.env
+frontend/.env.production
+frontend/public/runtime-config.js

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>智慧教室实时行为分析与安全监测系统</title>
+    <style>
+      .boot-fallback {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        margin: 0;
+        padding: 24px;
+        background: #f4f7fa;
+        color: #1d2733;
+        font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      }
+
+      .boot-card {
+        width: min(520px, 100%);
+        padding: 22px;
+        border: 1px solid #dce4ec;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 8px 22px rgba(31, 47, 64, 0.06);
+      }
+
+      .boot-card h1 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+
+      .boot-card p {
+        margin: 6px 0;
+        color: #667789;
+        line-height: 1.6;
+      }
+
+      .boot-card code {
+        color: #0f789a;
+      }
+    </style>
+    <script>
+      function escapeBootMessage(value) {
+        return String(value || "未知错误")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      window.addEventListener("error", function (event) {
+        var app = document.getElementById("app");
+        if (!app) return;
+        app.innerHTML =
+          '<div class="boot-fallback"><div class="boot-card"><h1>页面加载遇到问题</h1><p>请在 VS Code 终端运行 <code>npm.cmd run dev:open</code>。</p><p>错误信息：' +
+          escapeBootMessage(event.message) +
+          "</p></div></div>";
+      });
+    </script>
+    <script src="./runtime-config.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div class="boot-fallback">
+        <div class="boot-card">
+          <h1>智慧教室系统正在加载</h1>
+          <p>如果长时间停留在这里，请在 VS Code 终端运行：</p>
+          <p><code>npm.cmd run dev:open</code></p>
+          <p>云端静态部署时，请同时部署 <code>runtime-config.js</code>。</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

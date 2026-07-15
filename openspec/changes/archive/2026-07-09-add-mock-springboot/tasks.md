@@ -1,0 +1,10 @@
+- [x] 在项目根目录下创建 mock_springboot/ 目录
+- [x] 创建 mock_springboot/mock_data.yaml，包含 streams、zones、rules 的 Mock 数据
+- [x] 创建 mock_springboot/app.py，实现 GET /streams 接口
+- [x] 实现 GET /zones 接口（按 stream_id 过滤）
+- [x] 实现 GET /rules 接口
+- [x] 实现 GET /students/face-features 接口（默认返回空列表）
+- [x] 实现 POST /alerts/ai 接口（终端打印告警内容）
+- [ ] 验证 AI 模块调用 config/reload 能正确加载 Mock 数据（需启动 Mock + AI 模块后用 Postman 测试）
+- [ ] 验证 AI 模块 video_feed 能拉取视频流并显示画面（需 OBS 推流到云媒体服务器）
+- [ ] 验证告警推送链路 Mock 服务器终端能打印告警（需 AI 模块检测到异常事件）
