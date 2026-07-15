@@ -8,6 +8,7 @@ import os
 import tempfile
 import threading
 import time
+from datetime import datetime
 from typing import Any
 
 import requests
@@ -179,20 +180,31 @@ _stopped: set[str] = set()
 _event_keys: dict[str, str] = {}
 
 
-def trigger_alert(msg: str, start: str | None = None, snapshot: str = ""):
-    if not APP_KEY or not APP_SECRET or not WEBHOOK:       # ← 我们的改动
+def _format_occurred_at(iso_str: str) -> str:
+    try:
+        return datetime.fromisoformat(iso_str).strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return iso_str
+
+
+def trigger_alert(msg: str, start: str | None = None, snapshot: str = "",
+                  event_id: str | None = None, occurred_at: str | None = None):
+    if not APP_KEY or not APP_SECRET or not WEBHOOK:
         logger.warning("钉钉配置不完整（APP_KEY/APP_SECRET/WEBHOOK），跳过通知")
         return
-    event_id = f"evt_{int(time.time())}_{threading.get_ident()}"  # ← dev 的改动
-    _event_keys[event_id] = msg                                     # ← dev 的改动
-    _step(msg, event_id, _get_chain(start or PRIMARY), 0, snapshot) # ← dev 的改动
+    if not event_id:
+        event_id = f"evt_{int(time.time())}_{threading.get_ident()}"
+    _event_keys[event_id] = msg
+    _step(msg, event_id, _get_chain(start or PRIMARY), 0, snapshot, occurred_at=occurred_at)
 
 
-def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
+def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = "",
+          occurred_at: str | None = None):
     if idx >= len(ch): return
     p = ch[idx]
     last = idx == len(ch) - 1
-    now = time.strftime("%Y-%m-%d %H:%M:%S")
+    alert_time = _format_occurred_at(occurred_at) if occurred_at else time.strftime("%Y-%m-%d %H:%M:%S")
+    report_time = time.strftime("%Y-%m-%d %H:%M:%S")
 
     media_id = _upload_image(snapshot) if snapshot else ""
 
@@ -200,7 +212,8 @@ def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
         content = (
             f"【紧急升级】已逐级上报，无人响应\n\n"
             f"告警内容：{msg}\n"
-            f"告警时间：{now}\n"
+            f"告警时间：{alert_time}\n"
+            f"上报时间：{report_time}\n"
             f"当前状态：未处理\n"
             f"操作建议：请立即响应\n\n"
             f"事件ID：{event_id}\n\n"
@@ -211,7 +224,7 @@ def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
         text_content = (
             f"【告警通知】检测到异常事件\n\n"
             f"告警内容：{msg}\n"
-            f"告警时间：{now}\n"
+            f"告警时间：{alert_time}\n"
             f"接收人：{p['name']}\n"
             f"回复「已处理」停止上报\n"
             f"超时处理：将自动上报至直属上级\n\n"
@@ -227,7 +240,8 @@ def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
         content = (
             f"【告警升级】{prev} 未在规定时间内响应\n\n"
             f"告警内容：{msg}\n"
-            f"告警时间：{now}\n"
+            f"告警时间：{alert_time}\n"
+            f"上报时间：{report_time}\n"
             f"原始接收人：{ch[0]['name']}\n"
             f"当前接收人：{p['name']}\n"
             f"请立即处理，回复「已处理」停止上报\n\n"
@@ -241,7 +255,7 @@ def _step(msg: str, event_id: str, ch: list, idx: int, snapshot: str = ""):
         if event_id in _stopped:
             logger.info("已停止上报: %s", msg)
             return
-        _step(msg, event_id, ch, idx + 1)
+        _step(msg, event_id, ch, idx + 1, occurred_at=occurred_at)
 
     t = threading.Timer(STEP_TIMEOUT, check)
     _timers[event_id] = t

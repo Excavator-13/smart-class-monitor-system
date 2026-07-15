@@ -110,7 +110,12 @@ class AlertClient:
                     snapshot = event.get("snapshot_path", "")
                     local_snapshot = self._resolve_local_snapshot(snapshot)
                     prefix = "【音视频联动】" if event.get("fusion") else ""
-                    self.dingtalk(f"{prefix}{alert_name} | 摄像头：{stream}", snapshot=local_snapshot)
+                    self.dingtalk(
+                        f"{prefix}{alert_name} | 摄像头：{stream}",
+                        snapshot=local_snapshot,
+                        event_id=event.get("event_id"),
+                        occurred_at=event.get("occurred_at"),
+                    )
             except Exception:
                 logger.exception("钉钉通知失败")
 

@@ -32,6 +32,9 @@ public class RuleVO {
     @Schema(description = "创建时间", example = "2026-07-08 10:00:00")
     private String createdAt;
 
+    @Schema(description = "告警等级", example = "high")
+    private String level;
+
     public Long getId() { return id; }
     public void setId(Long v) { this.id = v; }
     public String getRuleType() { return ruleType; }
@@ -50,4 +53,6 @@ public class RuleVO {
     public void setConfigJson(String v) { this.configJson = v; }
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String v) { this.createdAt = v; }
+    public String getLevel() { return level; }
+    public void setLevel(String v) { this.level = v; }
 }

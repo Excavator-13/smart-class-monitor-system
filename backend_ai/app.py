@@ -412,17 +412,24 @@ def create_app(overrides: dict[str, Any] | None = None) -> Flask:
                 audio_capture = None
 
         def generate():
+            cached_sequence = None
+            cached_frame = None
             while True:
                 frame, frame_sequence = stream_manager.get_frame_with_sequence(stream_id)
                 if frame is None:
                     if stream_manager.should_emit_offline_alert(stream_id):
                         analysis_service.observe_stream_offline(stream_id)
                     frame = blank_frame(text="stream offline")
+                    cached_sequence = None
+                    cached_frame = None
                 elif annotate:
-                    audio_chunk = audio_capture.read_chunk() if audio_capture else None
-                    analysis_service.analyze_frame(stream_id, frame, modules=modules, audio_chunk=audio_chunk)
-                elif annotate and stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
-                    analysis_service.analyze_frame(stream_id, frame, modules=modules)
+                    if frame_sequence == cached_sequence and cached_frame is not None:
+                        frame = cached_frame.copy()
+                    elif stream_manager.claim_frame_for_analysis(stream_id, frame_sequence):
+                        audio_chunk = audio_capture.read_chunk() if audio_capture else None
+                        analysis_service.analyze_frame(stream_id, frame, modules=modules, audio_chunk=audio_chunk)
+                        cached_sequence = frame_sequence
+                        cached_frame = frame.copy()
                 try:
                     payload = encode_jpeg(frame)
                 except ValueError:

@@ -42,6 +42,14 @@ class AnalysisService:
         "danger_zone_approach",
     }
     VISIBLE_OBJECT_CLASSES = {"person", "student"}
+    RULE_GOVERNED_TYPES = frozenset({
+        "stranger_detected",
+        "leave_seat",
+        "stream_offline",
+        "spoof_detected",
+        "deepfake_detected",
+        "abnormal_sound",
+    })
 
     def __init__(self, face_service: Any, zone_service: Any, behavior_service: Any, event_service: Any, config_client: Any, fire_service: Any | None = None, anti_spoof_service: Any | None = None, audio_service: Any | None = None, alert_client: Any | None = None, snapshot_root: Path | None = None, snapshot_pusher: Any | None = None, alert_cooldown_seconds: float = 10.0, alert_overlay_seconds: float = 2.0):
         self.face_service = face_service
@@ -139,6 +147,8 @@ class AnalysisService:
 
         events = []
         for item in detected:
+            if item["event_type"] in self.RULE_GOVERNED_TYPES and not self.config_client.get_rule(item["event_type"]):
+                continue
             configured_level = self._event_level(
                 item["event_type"], item.get("level", "warning")
             )
@@ -169,6 +179,8 @@ class AnalysisService:
         return events
 
     def observe_stream_offline(self, stream_id: str) -> dict[str, Any]:
+        if "stream_offline" in self.RULE_GOVERNED_TYPES and not self.config_client.get_rule("stream_offline"):
+            return {"event_id": "", "event_type": "stream_offline", "event_status": "skipped", "level": "high", "confidence": 1.0}
         event, should_confirm = self.event_service.observe(
             stream_id=stream_id,
             event_type="stream_offline",
